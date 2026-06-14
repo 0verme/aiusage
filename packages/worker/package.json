@@ -11,10 +11,10 @@
   "scripts": {
     "predeploy": "node scripts/build.mjs",
     "deploy": "wrangler deploy",
-    "postdeploy": "rm -rf ./public",
+    "postdeploy": "node -e \"require('node:fs').rmSync('./public',{recursive:true,force:true})\"",
     "predev": "node scripts/build.mjs",
     "dev": "wrangler dev",
-    "postdev": "rm -rf ./public",
+    "postdev": "node -e \"require('node:fs').rmSync('./public',{recursive:true,force:true})\"",
     "build": "node scripts/build.mjs",
     "lint": "tsc --noEmit",
     "types": "wrangler types",

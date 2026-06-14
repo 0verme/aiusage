@@ -5,6 +5,7 @@ import { readConfig, getConfigPath } from './config.js';
 import { fetchHealth } from './api.js';
 import { getScheduleStatus } from './schedule.js';
 import type { Lang } from './i18n.js';
+import { getCodexBaseDir } from './scanners/codex.js';
 
 export interface Check {
   group: string;
@@ -152,7 +153,7 @@ export async function runDoctor(lang: Lang = 'zh'): Promise<Check[]> {
   const home = homedir();
   const tools: ToolDef[] = [
     { dir: join(home, '.claude', 'projects'), label: 'Claude Code', exts: ['.jsonl'] },
-    { dir: join(home, '.codex'), label: 'Codex CLI', exts: ['.jsonl'] },
+    { dir: getCodexBaseDir(), label: 'Codex CLI', exts: ['.jsonl'] },
     { dir: join(home, 'Library', 'Application Support', 'Cursor', 'User', 'globalStorage'), label: 'Cursor', exts: ['.vscdb'] },
     { dir: join(home, '.copilot', 'session-state'), label: 'Copilot CLI', exts: ['.jsonl'] },
     { dir: join(home, 'Library', 'Application Support', 'Code', 'logs'), label: 'Copilot VS Code', exts: ['.log'] },

@@ -11,7 +11,7 @@ export default defineConfig({
   server: {
     proxy: {
       '/api': {
-        target: 'https://aiusage.yizhe.me',
+        target: 'https://token.overme.cn',
         changeOrigin: true,
       },
     },

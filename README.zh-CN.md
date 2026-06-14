@@ -17,7 +17,7 @@
 </p>
 
 <p align="center">
-  <a href="https://aiusage.yizhe.me"><strong>在线演示</strong></a>
+  <a href="https://token.overme.cn"><strong>在线演示</strong></a>
 </p>
 
 ---

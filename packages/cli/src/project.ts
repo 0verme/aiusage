@@ -1,6 +1,7 @@
 import { open, readdir, readFile } from 'node:fs/promises';
 import { basename, join } from 'node:path';
 import { homedir } from 'node:os';
+import { getCodexBaseDir } from './scanners/codex.js';
 
 export interface DiscoveredProject {
   /** 原始项目名（目录 basename） */
@@ -91,7 +92,7 @@ async function discoverClaudeProjects(): Promise<string[]> {
 
 /** 从 Codex session 文件中提取所有不同的项目名 */
 async function discoverCodexProjects(): Promise<string[]> {
-  const sessionsDir = join(homedir(), '.codex', 'sessions');
+  const sessionsDir = join(getCodexBaseDir(), 'sessions');
   const files = await walkJsonlFiles(sessionsDir);
   const projects = new Set<string>();
 

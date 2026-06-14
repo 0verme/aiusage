@@ -11,11 +11,17 @@ const dashboardDistDir = path.resolve(workerDir, '../dashboard/dist');
 const workerPublicDir = path.resolve(workerDir, 'public');
 
 function run(command, args, cwd) {
-  const result = spawnSync(command, args, {
+  const isWindowsPnpm = process.platform === 'win32' && command === 'pnpm';
+  const bin = isWindowsPnpm ? 'pnpm.cmd' : command;
+  const result = spawnSync(bin, args, {
     cwd,
     stdio: 'inherit',
-    shell: false,
+    shell: isWindowsPnpm,
   });
+  if (result.error) {
+    console.error(result.error);
+    process.exit(1);
+  }
   if (result.status !== 0) {
     process.exit(result.status ?? 1);
   }

@@ -13,7 +13,8 @@
   "d1_databases": [
     {
       "binding": "DB",
-      "database_name": "aiusage-db"
+      "database_name": "aiusage-db",
+      "database_id": "9afb8ff2-a46b-4edb-ac9e-ea5471f19eb7"
     }
   ],
   "ratelimits": [

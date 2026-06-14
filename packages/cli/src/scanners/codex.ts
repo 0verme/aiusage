@@ -30,6 +30,15 @@ interface TokenUsage {
   total_tokens?: number;
 }
 
+export function getCodexBaseDir(codexDir?: string): string {
+  if (codexDir) return codexDir;
+
+  const envDir = process.env.CODEX_HOME?.trim() || process.env.CODEX_CONFIG_DIR?.trim();
+  if (envDir) return envDir;
+
+  return join(homedir(), '.codex');
+}
+
 export async function scanCodex(
   targetDate: string,
   codexDir?: string,
@@ -48,7 +57,7 @@ export async function scanCodexDates(
   const groupedByDate = new Map<string, Map<string, IngestBreakdown>>();
   for (const targetDate of targetDateSet) groupedByDate.set(targetDate, new Map());
 
-  const baseDir = codexDir ?? join(homedir(), '.codex');
+  const baseDir = getCodexBaseDir(codexDir);
 
   const sessionFiles = await collectSessionFiles(baseDir);
   if (sessionFiles.length === 0) {

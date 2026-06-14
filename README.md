@@ -17,7 +17,7 @@
 </p>
 
 <p align="center">
-  <a href="https://aiusage.yizhe.me"><strong>Live Demo</strong></a>
+  <a href="https://token.overme.cn"><strong>Live Demo</strong></a>
 </p>
 
 ---

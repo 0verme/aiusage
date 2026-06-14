@@ -4,6 +4,7 @@ import { basename, join } from 'node:path';
 import type { IngestBreakdown } from '@aiusage/shared';
 import { calculateCost } from '@aiusage/shared';
 import { scanDates } from './scan.js';
+import { getCodexBaseDir } from './scanners/codex.js';
 
 export type ReportRange = '7d' | '1m' | '3m' | 'all' | 'today';
 
@@ -407,7 +408,7 @@ async function discoverClaudeDates(dates: Set<string>): Promise<void> {
 }
 
 async function discoverCodexDates(dates: Set<string>): Promise<void> {
-  const baseDir = join(homedir(), '.codex');
+  const baseDir = getCodexBaseDir();
   const files = await collectCodexSessionFiles(baseDir);
 
   for (const filePath of files) {

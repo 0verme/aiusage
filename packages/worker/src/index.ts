@@ -34,10 +34,6 @@ export default {
     }
 
     try {
-      if (pathname === '/favicon.ico') {
-        return new Response(null, { status: 204 });
-      }
-
       // ── 设备接口 ──
       if (pathname === '/api/v1/health' && request.method === 'GET') {
         return handleHealth(env);
