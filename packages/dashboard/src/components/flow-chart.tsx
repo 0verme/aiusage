@@ -1,6 +1,7 @@
 import { Sankey, ResponsiveContainer, Tooltip } from 'recharts';
 import type { SankeyGraph } from '@aiusage/shared';
 import { formatCompact } from '../utils/format';
+import type { DashboardSankeyLink, DashboardSankeyNode } from '../utils/data';
 import { transformSankey } from '../utils/data';
 import { EmptyState } from './chart-helpers';
 
@@ -8,12 +9,12 @@ function SankeyNode({
   x, y, width, height, payload,
 }: {
   x: number; y: number; width: number; height: number;
-  payload: { name: string };
+  payload: DashboardSankeyNode;
 }) {
   const isLeft = x < 200;
   return (
     <g>
-      <rect x={x} y={y} width={width} height={height} rx={2} fill="var(--accent)" />
+      <rect x={x} y={y} width={width} height={height} rx={2} fill={payload.color} />
       <text
         x={isLeft ? x + width + 8 : x - 8}
         y={y + height / 2}
@@ -26,6 +27,39 @@ function SankeyNode({
         {payload.name}
       </text>
     </g>
+  );
+}
+
+function SankeyLink({
+  sourceX,
+  sourceY,
+  sourceControlX,
+  targetX,
+  targetY,
+  targetControlX,
+  linkWidth,
+  payload,
+}: {
+  sourceX: number;
+  sourceY: number;
+  sourceControlX: number;
+  targetX: number;
+  targetY: number;
+  targetControlX: number;
+  linkWidth: number;
+  payload: DashboardSankeyLink;
+}) {
+  return (
+    <path
+      d={`
+        M${sourceX},${sourceY}
+        C${sourceControlX},${sourceY} ${targetControlX},${targetY} ${targetX},${targetY}
+      `}
+      fill="none"
+      stroke={payload.color}
+      strokeOpacity={0.28}
+      strokeWidth={linkWidth}
+    />
   );
 }
 
@@ -42,8 +76,23 @@ export function FlowChart({ data }: { data?: SankeyGraph }) {
           nodePadding={28}
           nodeWidth={8}
           margin={{ left: 0, right: 0, top: 4, bottom: 4 }}
-          link={{ stroke: 'var(--accent)', strokeOpacity: 0.25, fill: 'none' }}
-          node={<SankeyNode x={0} y={0} width={0} height={0} payload={{ name: '' }} />}
+          link={(props: DashboardSankeyLink & {
+            sourceX: number;
+            sourceY: number;
+            sourceControlX: number;
+            targetX: number;
+            targetY: number;
+            targetControlX: number;
+            linkWidth: number;
+            payload: DashboardSankeyLink;
+          }) => <SankeyLink {...props} />}
+          node={(props: {
+            x: number;
+            y: number;
+            width: number;
+            height: number;
+            payload: DashboardSankeyNode;
+          }) => <SankeyNode {...props} />}
         >
           <Tooltip
             cursor={false}

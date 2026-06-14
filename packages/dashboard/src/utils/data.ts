@@ -2,6 +2,34 @@ import type { SankeyGraph } from '@aiusage/shared';
 import type { OverviewPayload, FiltersState } from '../hooks/use-overview';
 import { arrSum } from './format';
 
+const SANKEY_SOURCE_COLORS = [
+  '#22d3ee',
+  '#fb923c',
+  '#60a5fa',
+  '#a78bfa',
+  '#34d399',
+  '#f472b6',
+  '#fbbf24',
+  '#f87171',
+] as const;
+
+export interface DashboardSankeyNode {
+  name: string;
+  color: string;
+}
+
+export interface DashboardSankeyLink {
+  source: number;
+  target: number;
+  value: number;
+  color: string;
+}
+
+export interface DashboardSankeyData {
+  nodes: DashboardSankeyNode[];
+  links: DashboardSankeyLink[];
+}
+
 /** Get all YYYY-MM-DD dates for the current month (1st to last day). */
 export function currentMonthDates(): string[] {
   const now = new Date();
@@ -89,7 +117,7 @@ export function buildQuery(f: FiltersState): string {
   return p.toString();
 }
 
-export function transformSankey(input?: SankeyGraph) {
+export function transformSankey(input?: SankeyGraph): DashboardSankeyData | null {
   if (!input?.nodes.length || !input?.links.length) return null;
 
   // Fold small target nodes into "Other" if too many
@@ -123,13 +151,21 @@ export function transformSankey(input?: SankeyGraph) {
     );
   }
 
+  const sourceColorMap = new Map<string, string>();
+  nodes
+    .filter((node) => node.layer === 0)
+    .forEach((node, index) => {
+      sourceColorMap.set(node.id, SANKEY_SOURCE_COLORS[index % SANKEY_SOURCE_COLORS.length]);
+    });
+
   const nodeList = nodes.map((n) => ({
     name: n.label || n.id,
+    color: sourceColorMap.get(n.id) ?? 'rgba(186, 199, 219, 0.92)',
   }));
   const idToIdx = new Map(nodes.map((n, i) => [n.id, i]));
 
   // Merge duplicate links (same source→target after folding)
-  const merged = new Map<string, { source: number; target: number; value: number }>();
+  const merged = new Map<string, DashboardSankeyLink>();
   for (const l of links) {
     const si = idToIdx.get(l.source);
     const ti = idToIdx.get(l.target);
@@ -137,7 +173,14 @@ export function transformSankey(input?: SankeyGraph) {
     const key = `${si}-${ti}`;
     const prev = merged.get(key);
     if (prev) prev.value += Number(l.value);
-    else merged.set(key, { source: si, target: ti, value: Number(l.value) });
+    else {
+      merged.set(key, {
+        source: si,
+        target: ti,
+        value: Number(l.value),
+        color: sourceColorMap.get(l.source) ?? 'rgba(34, 211, 238, 0.35)',
+      });
+    }
   }
 
   const finalLinks = [...merged.values()];
