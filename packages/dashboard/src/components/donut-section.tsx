@@ -52,7 +52,10 @@ export function DonutSection({
 
     return (
         <div>
-            <h3 className="mb-4 text-[13px] font-semibold text-slate-900 dark:text-slate-300">{title}</h3>
+            <div className="mb-3.5 flex items-center gap-2.5">
+                <span className="section-bar" aria-hidden="true" />
+                <h3 className="m-0 text-[16px] font-bold" style={{ color: 'var(--fg)' }}>{title}</h3>
+            </div>
             <div className="grid grid-cols-[2fr_3fr] items-center gap-3">
                 {/* Ring */}
                 <div
@@ -90,31 +93,32 @@ export function DonutSection({
                         </ResponsiveContainer>
                     </ChartContainer>
                     <div className="pointer-events-none absolute inset-0 flex items-center justify-center">
-                        <span className="text-[13px] font-semibold tabular-nums text-slate-900 dark:text-slate-300">{centerLabel}</span>
+                        <span className="font-mono text-[14px] font-bold tabular-nums" style={{ color: 'var(--fg)' }}>{centerLabel}</span>
                     </div>
 
                     {/* Tooltip 跟随鼠标 */}
                     {tip && (
                         <div
-                            className="pointer-events-none absolute z-10 whitespace-nowrap rounded-2xl border border-slate-200/90 bg-white/96 px-3.5 py-3 shadow-[0_20px_50px_rgba(15,23,42,0.12)] backdrop-blur dark:border-white/10 dark:bg-[#1a1a1a]/96 dark:shadow-[0_20px_50px_rgba(0,0,0,0.5)]"
-                            style={{ left: tip.x, top: tip.y }}
+                            className="pointer-events-none absolute z-10 whitespace-nowrap rounded-lg border px-3.5 py-3 font-mono shadow-lg"
+                            style={{ left: tip.x, top: tip.y, background: 'var(--panel)', borderColor: 'var(--border)' }}
                         >
-                            <div className="text-[11px] text-slate-500 dark:text-slate-400">{tip.label}</div>
-                            <div className="mt-1 text-[11px] font-semibold tabular-nums text-slate-950 dark:text-slate-300">{formatUsdFull(tip.value)}</div>
+                            <div className="text-[11px]" style={{ color: 'var(--fg2)' }}>{tip.label}</div>
+                            <div className="mt-1 text-[11px] font-semibold tabular-nums" style={{ color: 'var(--fg)' }}>{formatUsdFull(tip.value)}</div>
                         </div>
                     )}
                 </div>
 
                 {/* Legend */}
-                <div className="grid min-w-0 gap-y-2 text-[11px]" style={{ gridTemplateColumns: "minmax(0,1fr) 10px auto auto", columnGap: "10px" }}>
+                <div className="grid min-w-0 gap-y-2 font-mono text-[12px]" style={{ gridTemplateColumns: "10px minmax(0,1fr) auto auto", columnGap: "10px" }}>
                     {folded.map((item, i) => {
                         const pct = total > 0 ? (item.estimatedCostUsd / total) * 100 : 0;
+                        const c = colors[i % colors.length];
                         return (
                             <div key={item.value} className="col-span-4 grid grid-cols-subgrid items-center">
-                                <span className="truncate text-right text-slate-500 dark:text-slate-400">{item.label}</span>
-                                <span className="h-[7px] w-[7px] rounded-full" style={{ backgroundColor: colors[i % colors.length] }} />
-                                <span className="text-right tabular-nums text-slate-400 dark:text-slate-500">{pct.toFixed(1)}%</span>
-                                <span className="text-right font-medium tabular-nums text-slate-900 dark:text-slate-300">{formatUsd(item.estimatedCostUsd)}</span>
+                                <span className="h-[9px] w-[9px] rounded-[2px]" style={{ backgroundColor: c, boxShadow: `0 0 7px ${c}` }} />
+                                <span className="truncate" style={{ color: 'var(--fg)' }}>{item.label}</span>
+                                <span className="text-right tabular-nums" style={{ color: 'var(--fg2)' }}>{pct.toFixed(1)}%</span>
+                                <span className="text-right font-semibold tabular-nums" style={{ color: 'var(--fg)' }}>{formatUsd(item.estimatedCostUsd)}</span>
                             </div>
                         );
                     })}

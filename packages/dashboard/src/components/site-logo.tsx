@@ -1,14 +1,11 @@
 import { useEffect, useState } from 'react';
+import { SITE_TITLE, SITE_TAGLINE } from '../site-config';
 
-const DEFAULT_ICON = (
-  <svg viewBox="0 0 200 160" fill="none" className="h-full w-full" aria-hidden="true">
-    <path
-      d="M22 112 C30 112 38 90 44 82 C50 74 54 78 58 88 C62 98 64 116 70 120 C76 124 80 108 86 84 C92 60 96 22 104 16 C112 10 116 36 120 64 C124 92 126 138 134 140 C142 142 146 108 152 72 C158 36 162 14 168 16 C174 18 178 50 182 68"
-      stroke="currentColor"
-      strokeWidth="20"
-      strokeLinecap="round"
-      strokeLinejoin="round"
-    />
+/** Up-trend chart glyph used inside the gradient brand square. */
+const MARK_GLYPH = (
+  <svg width="52%" height="52%" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+    <path d="M3 16 L9 9 L13 13.5 L21 4.5" stroke="#04121a" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" />
+    <circle cx="21" cy="4.5" r="2.3" fill="#04121a" />
   </svg>
 );
 
@@ -79,31 +76,60 @@ export function useFaviconFromLogo() {
   }, [hasLogo]);
 }
 
+// ── Brand mark: gradient rounded square with chart glyph (or custom logo.png) ──
+
+function BrandMark({ size, radius }: { size: number; radius: number }) {
+  const hasLogo = useHasLogo();
+  if (hasLogo) {
+    return (
+      <img
+        src="/logo.png"
+        alt="Logo"
+        className="shrink-0 object-contain"
+        style={{ width: size, height: size, borderRadius: radius }}
+      />
+    );
+  }
+  return (
+    <div
+      className="flex shrink-0 items-center justify-center"
+      style={{
+        width: size,
+        height: size,
+        borderRadius: radius,
+        background: 'linear-gradient(135deg, var(--accent), var(--accent2))',
+        boxShadow: '0 0 24px var(--glow-strong)',
+      }}
+      aria-hidden="true"
+    >
+      {MARK_GLYPH}
+    </div>
+  );
+}
+
 // ── Public components ──
 
-/** Header logo (28px round). */
+/** Full header brand lockup: square mark + wordmark + tagline. */
 export function HeaderLogo() {
-  const hasLogo = useHasLogo();
-  if (hasLogo === null || !hasLogo) return <span className="h-7 w-7">{DEFAULT_ICON}</span>;
-  return <SimpleLogo size={28} />;
-}
-
-/** Footer logo (14px round). */
-export function FooterLogo() {
-  const hasLogo = useHasLogo();
-  if (hasLogo === null || !hasLogo) return <span className="h-3.5 w-3.5">{DEFAULT_ICON}</span>;
-  return <SimpleLogo size={14} />;
-}
-
-// ── Simple circular logo (single image) ──
-
-function SimpleLogo({ size }: { size: number }) {
   return (
-    <img
-      src="/logo.png"
-      alt="Logo"
-      className="shrink-0 object-contain"
-      style={{ width: size, height: size }}
-    />
+    <span className="flex items-center gap-3">
+      <BrandMark size={40} radius={12} />
+      <span className="flex flex-col leading-none">
+        <span className="font-display text-[20px] sm:text-[22px] font-bold tracking-tight" style={{ color: 'var(--fg)' }}>
+          {SITE_TITLE}
+        </span>
+        <span
+          className="font-mono mt-[3px] text-[10px] uppercase"
+          style={{ letterSpacing: '0.22em', color: 'var(--accent)' }}
+        >
+          {SITE_TAGLINE}
+        </span>
+      </span>
+    </span>
   );
+}
+
+/** Footer logo (small square mark). */
+export function FooterLogo() {
+  return <BrandMark size={22} radius={7} />;
 }

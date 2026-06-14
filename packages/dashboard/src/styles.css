@@ -3,15 +3,67 @@
 @custom-variant dark (&:where(.dark, .dark *));
 
 @theme {
-  --font-sans: "DM Sans", system-ui, -apple-system, sans-serif;
+  --font-sans: "Noto Sans SC", "Space Grotesk", system-ui, -apple-system, sans-serif;
+  --font-display: "Space Grotesk", "Noto Sans SC", system-ui, sans-serif;
+  --font-mono: "JetBrains Mono", ui-monospace, "SF Mono", Menlo, monospace;
 }
 
+/* ────────────────────────────────────────
+   Design tokens — "Usage Analytics" theme
+   Light (:root) and dark (.dark) variants.
+   ──────────────────────────────────────── */
 :root {
   color-scheme: light;
+  --bg: #eef1f7;
+  --bg2: #e6eaf2;
+  --panel: #ffffff;
+  --panel-soft: #f6f8fc;
+  --border: #e3e8f1;
+  --fg: #0b1220;
+  --fg2: #5b6678;
+  --fg3: #9aa4b6;
+  --accent: #0a9fc4;
+  --accent2: #2f6bff;
+  --green: #0a9d68;
+  --orange: #ef6f1a;
+  --violet: #7c5cff;
+  --grid: rgba(12, 22, 44, 0.07);
+  --cell: #e7ebf1;
+  --hm1: #0a9fc455;
+  --hm2: #0a9fc488;
+  --hm3: #0a9fc4bb;
+  --hm4: #0a9fc4;
+  --track: #eef1f7;
+  --glow: rgba(10, 159, 196, 0.18);
+  --glow-strong: rgba(10, 159, 196, 0.30);
+  --green-glow: rgba(10, 157, 104, 0.16);
 }
 
 .dark {
   color-scheme: dark;
+  --bg: #06090f;
+  --bg2: #0a0e17;
+  --panel: #0d121c;
+  --panel-soft: #10172300;
+  --border: rgba(125, 145, 180, 0.13);
+  --fg: #eaf0f8;
+  --fg2: #9aa6b8;
+  --fg3: #5c6678;
+  --accent: #1fe0ff;
+  --accent2: #5b9bff;
+  --green: #2fe6a0;
+  --orange: #ff8a4c;
+  --violet: #a98bff;
+  --grid: rgba(255, 255, 255, 0.06);
+  --cell: #121826;
+  --hm1: #1fe0ff33;
+  --hm2: #1fe0ff66;
+  --hm3: #1fe0ffaa;
+  --hm4: #1fe0ff;
+  --track: #0a0e17;
+  --glow: rgba(31, 224, 255, 0.16);
+  --glow-strong: rgba(31, 224, 255, 0.45);
+  --green-glow: rgba(47, 230, 160, 0.18);
 }
 
 html, body, #root {
@@ -29,18 +81,34 @@ html.theme-transition *::after {
 
 body {
   margin: 0;
-  background: #fafafa;
-  color: #0f172a;
+  background: var(--bg);
+  color: var(--fg);
   font-family: var(--font-sans);
-  font-feature-settings: "ss01" on, "cv11" on;
   -webkit-font-smoothing: antialiased;
   text-rendering: optimizeLegibility;
   overflow-x: hidden;
 }
 
-.dark body {
-  background: #0a0a0a;
-  color: #a1a1a1;
+/* Ambient radial glows behind everything */
+body::before {
+  content: "";
+  position: fixed;
+  inset: 0;
+  pointer-events: none;
+  z-index: 0;
+  background:
+    radial-gradient(1000px 520px at 82% -10%, var(--glow), transparent 60%),
+    radial-gradient(760px 420px at -5% -2%, rgba(91, 155, 255, 0.10), transparent 55%);
+}
+.dark body::before {
+  background:
+    radial-gradient(1000px 520px at 82% -10%, rgba(31, 224, 255, 0.10), transparent 60%),
+    radial-gradient(760px 420px at -5% -2%, rgba(91, 155, 255, 0.09), transparent 55%);
+}
+
+#root {
+  position: relative;
+  z-index: 1;
 }
 
 * {
@@ -49,24 +117,24 @@ body {
 }
 
 ::selection {
-  background: rgba(15, 23, 42, 0.06);
+  background: rgba(31, 224, 255, 0.18);
 }
-
 .dark ::selection {
-  background: rgba(255, 255, 255, 0.15);
+  background: rgba(31, 224, 255, 0.28);
 }
 
-/* Card */
+/* ── Fonts utilities ── */
+.font-mono { font-family: var(--font-mono); }
+.font-display { font-family: var(--font-display); }
+
+/* ────────────────────────────────────────
+   Cards / panels
+   ──────────────────────────────────────── */
 .card {
-  background: #ffffff;
-  border: 1px solid rgba(226, 232, 240, 0.7);
-  border-radius: 12px;
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-radius: 20px;
   overflow: clip;
-}
-
-.dark .card {
-  background: #111111;
-  border-color: rgba(255, 255, 255, 0.08);
 }
 
 /* Charts need visible overflow for tooltips, min-w-0 prevents grid blowout */
@@ -74,6 +142,73 @@ body {
   overflow: visible;
   min-width: 0;
 }
+
+/* KPI tile */
+.kpi {
+  position: relative;
+  overflow: hidden;
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-radius: 16px;
+}
+.kpi::after {
+  content: "";
+  position: absolute;
+  left: 0;
+  bottom: 0;
+  height: 2px;
+  width: 100%;
+  background: linear-gradient(90deg, var(--accent), transparent);
+  opacity: 0.45;
+}
+.kpi-cost {
+  background: linear-gradient(180deg, var(--green-glow), var(--panel));
+  border-color: var(--green);
+  box-shadow: 0 0 28px var(--green-glow);
+}
+.kpi-cost::after {
+  background: linear-gradient(90deg, var(--green), transparent);
+  opacity: 1;
+}
+
+/* ── Section title accent bar ── */
+.section-bar {
+  width: 4px;
+  height: 18px;
+  border-radius: 2px;
+  background: var(--accent);
+  box-shadow: 0 0 10px var(--accent);
+  flex: 0 0 auto;
+}
+
+/* ── Pill controls ── */
+.pill-group {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 4px;
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-radius: 999px;
+}
+.pill {
+  border: none;
+  background: transparent;
+  color: var(--fg2);
+  font-weight: 600;
+  cursor: pointer;
+  white-space: nowrap;
+  border-radius: 999px;
+  transition: all 0.15s;
+}
+.pill:hover { color: var(--fg); }
+.pill-active {
+  background: var(--accent);
+  color: #04121a;
+  font-weight: 700;
+  box-shadow: 0 0 16px var(--glow-strong);
+}
+.pill-active:hover { color: #04121a; }
 
 /* Entrance animation — uses `translate` (not `transform`) so it doesn't
    override scroll-morph's `transform: scale(--morph-scale)` on .card elements */
@@ -104,8 +239,8 @@ body {
 
 /* Scrollbar */
 ::-webkit-scrollbar {
-  width: 5px;
-  height: 5px;
+  width: 8px;
+  height: 8px;
 }
 
 ::-webkit-scrollbar-track {
@@ -113,20 +248,12 @@ body {
 }
 
 ::-webkit-scrollbar-thumb {
-  background: #e2e8f0;
-  border-radius: 3px;
+  background: rgba(125, 145, 180, 0.3);
+  border-radius: 8px;
 }
 
 ::-webkit-scrollbar-thumb:hover {
-  background: #cbd5e1;
-}
-
-.dark ::-webkit-scrollbar-thumb {
-  background: #333333;
-}
-
-.dark ::-webkit-scrollbar-thumb:hover {
-  background: #444444;
+  background: rgba(125, 145, 180, 0.5);
 }
 
 /* Embed mode */
@@ -141,25 +268,21 @@ body.embed-transparent .card {
 }
 
 body.embed-transparent .card {
-  border-color: rgba(148, 163, 184, 0.15);
-}
-
-.dark body.embed-transparent .card {
-  border-color: rgba(255, 255, 255, 0.06);
+  border-color: var(--border);
 }
 
 /* ── Card hover lift (PC only) ── */
 @media (hover: hover) and (min-width: 640px) {
-  .card {
-    transition: transform 0.2s ease-out;
+  .card, .kpi {
+    transition: transform 0.2s ease-out, box-shadow 0.2s ease-out;
   }
-  .card:hover {
-    transform: scale(1.012);
+  .card:hover, .kpi:hover {
+    transform: translateY(-2px);
   }
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .card {
+  .card, .kpi {
     transition: none !important;
     transform: none !important;
   }
@@ -177,10 +300,25 @@ body.embed-transparent .card {
   }
 }
 
-/* Dark-mode Recharts tooltip override */
-.dark .recharts-tooltip-wrapper .recharts-default-tooltip,
-.dark [class*="ChartTooltipContent"] {
-  background: #1a1a1a !important;
-  border-color: rgba(255, 255, 255, 0.1) !important;
-  color: #a1a1a1 !important;
+/* Recharts tooltip override */
+.recharts-tooltip-wrapper .recharts-default-tooltip,
+[class*="ChartTooltipContent"] {
+  background: var(--panel) !important;
+  border-color: var(--border) !important;
+  color: var(--fg2) !important;
+}
+
+/* ── Recharts theming: grid, axis text, glow ── */
+.recharts-cartesian-grid line {
+  stroke: var(--grid) !important;
+}
+.recharts-cartesian-axis-tick text {
+  fill: var(--fg3) !important;
+  font-family: var(--font-mono);
+}
+.recharts-bar-rectangles {
+  filter: drop-shadow(0 0 4px var(--glow));
+}
+.recharts-area-area {
+  filter: drop-shadow(0 0 3px var(--glow));
 }

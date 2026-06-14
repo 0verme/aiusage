@@ -37,6 +37,8 @@ const msgs = {
     schedule: 'Schedule',
     scheduleEvery: 'every',
     scheduleEnabled: 'Enabled',
+    scheduleClosedOnly: 'closed-day only',
+    scheduleIncludeToday: 'includes today',
     scheduleOff: 'Not enabled, run aiusage schedule on',
   },
   zh: {
@@ -61,6 +63,8 @@ const msgs = {
     schedule: '定时同步',
     scheduleEvery: '每',
     scheduleEnabled: '已启用',
+    scheduleClosedOnly: '仅上传前一天',
+    scheduleIncludeToday: '含今日',
     scheduleOff: '未启用，可执行 aiusage schedule on',
   },
 } as const;
@@ -190,7 +194,9 @@ export async function runDoctor(lang: Lang = 'zh'): Promise<Check[]> {
       group: g4,
       name: s.schedule,
       status: 'ok',
-      message: schedule.intervalLabel ? `${s.scheduleEvery} ${schedule.intervalLabel}` : s.scheduleEnabled,
+      message: schedule.intervalLabel
+        ? `${s.scheduleEvery} ${schedule.intervalLabel} · ${schedule.includeToday === false ? s.scheduleClosedOnly : s.scheduleIncludeToday}`
+        : s.scheduleEnabled,
     });
   } else {
     checks.push({ group: g4, name: s.schedule, status: 'warn', message: s.scheduleOff });

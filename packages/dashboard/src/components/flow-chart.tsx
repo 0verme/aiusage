@@ -4,7 +4,7 @@ import { formatCompact } from '../utils/format';
 import { transformSankey } from '../utils/data';
 import { EmptyState } from './chart-helpers';
 
-function SankeyNodeLabel({
+function SankeyNode({
   x, y, width, height, payload,
 }: {
   x: number; y: number; width: number; height: number;
@@ -12,15 +12,20 @@ function SankeyNodeLabel({
 }) {
   const isLeft = x < 200;
   return (
-    <text
-      x={isLeft ? x + width + 8 : x - 8}
-      y={y + height / 2}
-      textAnchor={isLeft ? 'start' : 'end'}
-      dominantBaseline="central"
-      className="fill-slate-600 dark:fill-slate-400 text-[11px]"
-    >
-      {payload.name}
-    </text>
+    <g>
+      <rect x={x} y={y} width={width} height={height} rx={2} fill="var(--accent)" />
+      <text
+        x={isLeft ? x + width + 8 : x - 8}
+        y={y + height / 2}
+        textAnchor={isLeft ? 'start' : 'end'}
+        dominantBaseline="central"
+        fill="var(--fg2)"
+        fontFamily="'JetBrains Mono', monospace"
+        className="text-[11px]"
+      >
+        {payload.name}
+      </text>
+    </g>
   );
 }
 
@@ -37,8 +42,8 @@ export function FlowChart({ data }: { data?: SankeyGraph }) {
           nodePadding={28}
           nodeWidth={8}
           margin={{ left: 0, right: 0, top: 4, bottom: 4 }}
-          link={{ stroke: '#94a3b8', strokeOpacity: 0.3, fill: 'none' }}
-          node={<SankeyNodeLabel x={0} y={0} width={0} height={0} payload={{ name: '' }} />}
+          link={{ stroke: 'var(--accent)', strokeOpacity: 0.25, fill: 'none' }}
+          node={<SankeyNode x={0} y={0} width={0} height={0} payload={{ name: '' }} />}
         >
           <Tooltip
             cursor={false}
@@ -56,17 +61,17 @@ export function FlowChart({ data }: { data?: SankeyGraph }) {
               const val = Number(d.value ?? 0);
               if (srcNode?.name && tgtNode?.name) {
                 return (
-                  <div className="rounded-lg border border-slate-200/90 bg-white/96 px-3 py-2 text-[12px] shadow-lg backdrop-blur dark:border-white/10 dark:bg-[#1a1a1a]/96">
-                    <div className="font-medium text-slate-700 dark:text-slate-200">{srcNode.name} → {tgtNode.name}</div>
-                    <div className="mt-0.5 tabular-nums text-slate-500 dark:text-slate-400">{formatCompact(val)} tokens</div>
+                  <div className="rounded-lg border px-3 py-2 font-mono text-[12px] shadow-lg" style={{ background: 'var(--panel)', borderColor: 'var(--border)' }}>
+                    <div className="font-semibold" style={{ color: 'var(--fg)' }}>{srcNode.name} → {tgtNode.name}</div>
+                    <div className="mt-0.5 tabular-nums" style={{ color: 'var(--fg2)' }}>{formatCompact(val)} tokens</div>
                   </div>
                 );
               }
               if (nodeName) {
                 return (
-                  <div className="rounded-lg border border-slate-200/90 bg-white/96 px-3 py-2 text-[12px] shadow-lg backdrop-blur dark:border-white/10 dark:bg-[#1a1a1a]/96">
-                    <div className="font-medium text-slate-700 dark:text-slate-200">{nodeName}</div>
-                    {val > 0 && <div className="mt-0.5 tabular-nums text-slate-500 dark:text-slate-400">{formatCompact(val)} tokens</div>}
+                  <div className="rounded-lg border px-3 py-2 font-mono text-[12px] shadow-lg" style={{ background: 'var(--panel)', borderColor: 'var(--border)' }}>
+                    <div className="font-semibold" style={{ color: 'var(--fg)' }}>{nodeName}</div>
+                    {val > 0 && <div className="mt-0.5 tabular-nums" style={{ color: 'var(--fg2)' }}>{formatCompact(val)} tokens</div>}
                   </div>
                 );
               }

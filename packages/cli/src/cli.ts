@@ -102,10 +102,10 @@ try {
     await runImport(parsed.flags, parsed.positionals);
   } else if (command === 'setup') {
     console.log('To deploy the server, clone the repo and run the setup wizard:\n');
-    console.log('  git clone https://github.com/ennann/aiusage.git');
+    console.log('  git clone https://github.com/0verme/aiusage.git');
     console.log('  cd aiusage && pnpm install');
     console.log('  pnpm setup\n');
-    console.log('See: https://github.com/ennann/aiusage#deploy-your-own-server');
+    console.log('See: https://github.com/0verme/aiusage#deploy-your-own-server');
   } else if (command === '--help' || command === '-h' || command === 'help') {
     const zh = (await readConfig()).lang === 'zh';
     printHelp(zh);
@@ -520,9 +520,10 @@ async function runInit(flags: Record<string, string | boolean>) {
 async function runSchedule(sub: string | undefined, flags: Record<string, string | boolean>) {
   if (sub === 'on') {
     const every = typeof flags.every === 'string' ? flags.every : '5m';
+    const includeToday = flags.yesterday === true ? false : true;
     const { seconds } = parseInterval(every);
-    const status = await enableSchedule(seconds);
-    console.log(`定时同步已启用，每 ${status.intervalLabel} 执行一次（含今日数据）。`);
+    const status = await enableSchedule(seconds, { includeToday });
+    console.log(`定时同步已启用，每 ${status.intervalLabel} 执行一次（${includeToday ? '含今日数据' : '仅上传前一天数据'}）。`);
     if (status.path) console.log(`配置: ${status.path}`);
     console.log(`日志: ~/.aiusage/sync.log`);
   } else if (sub === 'off') {
@@ -533,7 +534,7 @@ async function runSchedule(sub: string | undefined, flags: Record<string, string
     if (status.enabled) {
       console.log(`状态: 已启用`);
       if (status.intervalLabel) console.log(`间隔: 每 ${status.intervalLabel}`);
-      console.log(`含今日: ${status.includeToday ? '是' : '否'}`);
+      console.log(`模式: ${status.includeToday === false ? '仅上传前一天' : '含今日'}`);
       if (status.command) console.log(`命令: ${status.command}`);
       if (status.path) console.log(`配置: ${status.path}`);
       if (status.logPath) console.log(`日志: ${status.logPath}`);
@@ -675,10 +676,10 @@ function printHelp(zh = false) {
   const cmds = zh ? [
     ['scan [--date YYYY-MM-DD|--today|--range 7d|1m|3m] [--json]', '扫描用量明细'],
     ['report [--today] [--range 7d|1m|3m|all] [--detail] [--json]', '本地用量报告'],
-    ['sync [--today] [--range 7d|1m|3m]',                         '上传用量到服务端'],
+    ['sync [--today|--yesterday] [--range 7d|1m|3m]',             '上传用量到服务端'],
     ['scan/report/sync --from YYYY-MM-DD [--to YYYY-MM-DD]',      '指定日期范围（--start/--end 同义）'],
     ['project [list|alias]',                                  '项目管理与别名设置'],
-    ['schedule [on|off|status] [--every 5m]',                '定时同步管理'],
+    ['schedule [on|off|status] [--every 5m] [--yesterday]',  '定时同步管理'],
     ['doctor',                                               '诊断检查'],
     ['config set <key> <value>',                             '修改配置'],
     ['init [--device-id ID] [--device-name NAME]',           '初始化本地配置'],
@@ -687,10 +688,10 @@ function printHelp(zh = false) {
   ] : [
     ['scan [--date YYYY-MM-DD|--today|--range 7d|1m|3m] [--json]', 'Scan usage breakdown'],
     ['report [--today] [--range 7d|1m|3m|all] [--detail] [--json]', 'Local usage report'],
-    ['sync [--today] [--range 7d|1m|3m]',                         'Upload usage to server'],
+    ['sync [--today|--yesterday] [--range 7d|1m|3m]',             'Upload usage to server'],
     ['scan/report/sync --from YYYY-MM-DD [--to YYYY-MM-DD]',      'Date range (--start/--end aliases)'],
     ['project [list|alias]',                                 'Project management & aliases'],
-    ['schedule [on|off|status] [--every 5m]',                'Scheduled sync management'],
+    ['schedule [on|off|status] [--every 5m] [--yesterday]',  'Scheduled sync management'],
     ['doctor',                                               'Run diagnostics'],
     ['config set <key> <value>',                             'Update config'],
     ['init [--device-id ID] [--device-name NAME]',           'Initialize local config'],
@@ -714,17 +715,17 @@ function printUsageHint(zh = false) {
   const cmds = zh ? [
     ['scan [--date YYYY-MM-DD|--range 1m]',   '扫描用量明细'],
     ['report [--today] [--range 7d|1m|3m|all]', '本地用量报告'],
-    ['sync [--today] [--range 7d|1m|3m]',     '上传用量到服务端'],
+    ['sync [--today|--yesterday] [--range 7d|1m|3m]', '上传用量到服务端'],
     ['project [list|alias]',                  '项目管理与别名设置'],
-    ['schedule [on|off|status]',              '定时同步管理'],
+    ['schedule [on|off|status] [--yesterday]', '定时同步管理'],
     ['doctor',                                '诊断检查'],
     ['config set <key> <value>',              '修改配置'],
   ] : [
     ['scan [--date YYYY-MM-DD|--range 1m]',   'Scan usage breakdown'],
     ['report [--today] [--range 7d|1m|3m|all]', 'Local usage report'],
-    ['sync [--today] [--range 7d|1m|3m]',     'Upload usage to server'],
+    ['sync [--today|--yesterday] [--range 7d|1m|3m]', 'Upload usage to server'],
     ['project [list|alias]',                  'Project management & aliases'],
-    ['schedule [on|off|status]',              'Scheduled sync management'],
+    ['schedule [on|off|status] [--yesterday]', 'Scheduled sync management'],
     ['doctor',                                'Run diagnostics'],
     ['config set <key> <value>',              'Update config'],
   ];
@@ -823,6 +824,9 @@ function resolveDateParams(flags: Record<string, string | boolean>, config: { lo
   if (flags.today === true) {
     return { dates: [getTodayDate()], range: 'today' };
   }
+  if (flags.yesterday === true) {
+    return { dates: [getYesterdayDate()], range: 'today' };
+  }
   // --range 优先（report 惯用）
   const rangeFlag = flags.range;
   if (typeof rangeFlag === 'string') {
@@ -860,6 +864,7 @@ function resolveScanDates(flags: Record<string, string | boolean>, config: { loo
 function hasDateSelection(flags: Record<string, string | boolean>): boolean {
   return typeof flags.date === 'string'
     || flags.today === true
+    || flags.yesterday === true
     || typeof flags.from === 'string'
     || typeof flags.start === 'string'
     || typeof flags.to === 'string'

@@ -1,31 +1,29 @@
 import type { ChartConfig } from './components/ui/chart';
+import { LIGHT_PALETTE, DARK_PALETTE, getSeriesColors } from './palette';
 
+// Token composition series — input(cyan) cached(blue) cacheWrite(violet) output(green) reasoning(grey)
 export const TOKEN_SERIES = [
-  { key: 'inputTokens' as const, label: 'Input', color: '#0f172a', darkColor: '#888888' },
-  { key: 'cachedInputTokens' as const, label: 'Cached', color: '#334155', darkColor: '#6e6e6e' },
-  { key: 'cacheWriteTokens' as const, label: 'Cache Write', color: '#64748b', darkColor: '#555555' },
-  { key: 'outputTokens' as const, label: 'Output', color: '#94a3b8', darkColor: '#444444' },
-  { key: 'reasoningOutputTokens' as const, label: 'Reasoning', color: '#cbd5e1', darkColor: '#2a2a2a' },
+  { key: 'inputTokens' as const, label: 'Input', color: LIGHT_PALETTE.accent, darkColor: DARK_PALETTE.accent },
+  { key: 'cachedInputTokens' as const, label: 'Cached', color: LIGHT_PALETTE.accent2, darkColor: DARK_PALETTE.accent2 },
+  { key: 'cacheWriteTokens' as const, label: 'Cache Write', color: LIGHT_PALETTE.violet, darkColor: DARK_PALETTE.violet },
+  { key: 'outputTokens' as const, label: 'Output', color: LIGHT_PALETTE.green, darkColor: DARK_PALETTE.green },
+  { key: 'reasoningOutputTokens' as const, label: 'Reasoning', color: LIGHT_PALETTE.fg3, darkColor: DARK_PALETTE.fg3 },
 ];
 
-export const CHART_COLORS = [
-  '#0f172a', '#334155', '#475569', '#64748b', '#94a3b8', '#cbd5e1', '#e2e8f0',
-];
+export const CHART_COLORS = getSeriesColors(false);
 
-export const CHART_COLORS_DARK = [
-  '#888888', '#6e6e6e', '#555555', '#444444', '#363636', '#2a2a2a', '#1f1f1f',
-];
+export const CHART_COLORS_DARK = getSeriesColors(true);
 
 export const PROVIDER_COLORS: Record<string, string> = {
-  anthropic: '#0f172a',
-  openai: '#1e293b',
-  google: '#334155',
-  github: '#475569',
-  sourcegraph: '#64748b',
-  moonshot: '#94a3b8',
-  alibaba: '#cbd5e1',
-  droid: '#e2e8f0',
-  opencode: '#f1f5f9',
+  openai: DARK_PALETTE.accent,
+  anthropic: DARK_PALETTE.orange,
+  google: DARK_PALETTE.accent2,
+  github: DARK_PALETTE.violet,
+  sourcegraph: DARK_PALETTE.green,
+  moonshot: '#ff5c8a',
+  alibaba: '#ffc04d',
+  droid: DARK_PALETTE.fg2,
+  opencode: DARK_PALETTE.fg3,
 };
 
 export const PROVIDER_LABELS: Record<string, string> = {

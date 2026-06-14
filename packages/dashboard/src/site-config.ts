@@ -5,3 +5,6 @@
 
 /** Displayed in header, footer, and browser tab title. */
 export const SITE_TITLE = "Token Usage";
+
+/** Small uppercase tagline shown under the wordmark in the header. */
+export const SITE_TAGLINE = "Usage Analytics";

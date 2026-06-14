@@ -45,10 +45,11 @@ export function formatInterval(seconds: number): string {
   return `${seconds}s`;
 }
 
-export async function enableSchedule(intervalSeconds: number): Promise<ScheduleStatus> {
+export async function enableSchedule(intervalSeconds: number, options: { includeToday?: boolean } = {}): Promise<ScheduleStatus> {
+  const includeToday = options.includeToday ?? true;
   return platform() === 'darwin'
-    ? enableLaunchd(intervalSeconds)
-    : enableCron(intervalSeconds);
+    ? enableLaunchd(intervalSeconds, includeToday)
+    : enableCron(intervalSeconds, includeToday);
 }
 
 export async function disableSchedule(): Promise<void> {
@@ -73,9 +74,10 @@ function resolveCommandPaths(): { nodePath: string; scriptPath: string } {
 
 // ── macOS launchd ──
 
-async function enableLaunchd(intervalSeconds: number): Promise<ScheduleStatus> {
+async function enableLaunchd(intervalSeconds: number, includeToday: boolean): Promise<ScheduleStatus> {
   const { nodePath, scriptPath } = resolveCommandPaths();
   await mkdir(join(homedir(), '.aiusage'), { recursive: true });
+  const syncDateArg = includeToday ? '--today' : '--yesterday';
 
   const plist = [
     '<?xml version="1.0" encoding="UTF-8"?>',
@@ -89,7 +91,7 @@ async function enableLaunchd(intervalSeconds: number): Promise<ScheduleStatus> {
     `    <string>${escapeXml(nodePath)}</string>`,
     `    <string>${escapeXml(scriptPath)}</string>`,
     '    <string>sync</string>',
-    '    <string>--today</string>',
+    `    <string>${syncDateArg}</string>`,
     '  </array>',
     '  <key>StartInterval</key>',
     `  <integer>${intervalSeconds}</integer>`,
@@ -111,6 +113,7 @@ async function enableLaunchd(intervalSeconds: number): Promise<ScheduleStatus> {
     interval: intervalSeconds,
     intervalLabel: formatInterval(intervalSeconds),
     path: PLIST_PATH,
+    includeToday,
   };
 }
 
@@ -132,7 +135,11 @@ async function getLaunchdStatus(): Promise<ScheduleStatus> {
     // 提取 ProgramArguments 中的命令
     const argMatches = [...content.matchAll(/<string>([^<]+)<\/string>/g)].map(m => m[1]);
     const command = argMatches.length > 0 ? argMatches.join(' ') : undefined;
-    const includeToday = content.includes('--today');
+    const includeToday = content.includes('--today')
+      ? true
+      : content.includes('--yesterday')
+        ? false
+        : undefined;
     // 提取日志路径
     const logMatch = content.match(/<key>StandardOutPath<\/key>\s*<string>([^<]+)<\/string>/);
     const logPath = logMatch?.[1];
@@ -152,11 +159,12 @@ async function getLaunchdStatus(): Promise<ScheduleStatus> {
 
 // ── Linux cron ──
 
-async function enableCron(intervalSeconds: number): Promise<ScheduleStatus> {
+async function enableCron(intervalSeconds: number, includeToday: boolean): Promise<ScheduleStatus> {
   const { nodePath, scriptPath } = resolveCommandPaths();
   const cronExpr = secondsToCron(intervalSeconds);
   const logPath = join(homedir(), '.aiusage', 'sync.log');
-  const cronLine = `${cronExpr} ${nodePath} ${scriptPath} sync --today >> ${logPath} 2>&1 ${CRON_MARKER}`;
+  const syncDateArg = includeToday ? '--today' : '--yesterday';
+  const cronLine = `${cronExpr} ${nodePath} ${scriptPath} sync ${syncDateArg} >> ${logPath} 2>&1 ${CRON_MARKER}`;
 
   await mkdir(join(homedir(), '.aiusage'), { recursive: true });
 
@@ -179,6 +187,7 @@ async function enableCron(intervalSeconds: number): Promise<ScheduleStatus> {
     enabled: true,
     interval: intervalSeconds,
     intervalLabel: formatInterval(intervalSeconds),
+    includeToday,
   };
 }
 
@@ -208,7 +217,11 @@ async function getCronStatus(): Promise<ScheduleStatus> {
     const line = stdout.split('\n').find((l) => l.includes(CRON_MARKER));
     if (!line) return { enabled: false };
     const interval = cronToSeconds(line);
-    const includeToday = line.includes('--today');
+    const includeToday = line.includes('--today')
+      ? true
+      : line.includes('--yesterday')
+        ? false
+        : undefined;
     // cron 行格式: */5 * * * * /path/to/node /path/to/aiusage sync --today >> /log 2>&1 # marker
     const logMatch = line.match(/>>\s*(\S+)/);
     const logPath = logMatch?.[1];

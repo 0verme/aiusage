@@ -70,7 +70,7 @@ function migrateConfig(config: AIUsageConfig): AIUsageConfig {
 export async function readConfig(): Promise<AIUsageConfig> {
   try {
     const raw = await readFile(CONFIG_PATH, 'utf-8');
-    return migrateConfig(JSON.parse(raw) as AIUsageConfig);
+    return migrateConfig(JSON.parse(stripBom(raw)) as AIUsageConfig);
   } catch {
     return {};
   }
@@ -83,6 +83,10 @@ export async function writeConfig(config: AIUsageConfig): Promise<void> {
 
 export function normalizeServerUrl(value: string): string {
   return value.trim().replace(/\/+$/, '');
+}
+
+function stripBom(value: string): string {
+  return value.charCodeAt(0) === 0xFEFF ? value.slice(1) : value;
 }
 
 export function detectDeviceId(): string {

@@ -6,7 +6,7 @@ import {
   ChartContainer, ChartTooltip, ChartTooltipContent, type ChartConfig,
 } from './ui/chart';
 import type { OverviewPayload } from '../hooks/use-overview';
-import { getChartColors, providerLabel } from '../constants';
+import { getChartColors, providerLabel, PROVIDER_COLORS } from '../constants';
 import { formatUsd, formatUsdFull, shortDate, longDate } from '../utils/format';
 import { pivotProviderTrend } from '../utils/data';
 import { EmptyState, ChartLegend } from './chart-helpers';
@@ -28,10 +28,11 @@ export function CostTrendChart({
   );
 
   const barW = data.length <= 7 ? 94 : data.length <= 30 ? 47 : 20;
-  const colors = getChartColors(isDark);
+  const fallback = getChartColors(isDark);
+  const colorFor = (p: string, i: number) => PROVIDER_COLORS[p] ?? fallback[i % fallback.length];
 
   const config = Object.fromEntries(
-    providers.map((p, i) => [p, { label: providerLabel(p), color: colors[i % colors.length] }]),
+    providers.map((p, i) => [p, { label: providerLabel(p), color: colorFor(p, i) }]),
   ) satisfies ChartConfig;
 
   return (
@@ -63,7 +64,7 @@ export function CostTrendChart({
                 key={p}
                 dataKey={p}
                 stackId="cost"
-                fill={colors[i % colors.length]}
+                fill={colorFor(p, i)}
                 radius={i === providers.length - 1 ? [3, 3, 0, 0] : [0, 0, 0, 0]}
               />
             ))}
@@ -74,7 +75,7 @@ export function CostTrendChart({
         <ChartLegend
           items={providers.map((p, i) => ({
             label: providerLabel(p),
-            color: colors[i % colors.length],
+            color: colorFor(p, i),
           }))}
         />
       )}

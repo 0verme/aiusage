@@ -35,6 +35,7 @@ function getRanges(t: T) {
     { value: '7d', label: t.range7d },
     { value: '30d', label: t.range30d },
     { value: '90d', label: t.range90d },
+    { value: 'month', label: t.thisMonth },
   ] as const;
 }
 
@@ -56,18 +57,14 @@ const THEME_LABELS: Record<ThemeMode, { en: string; zh: string }> = {
 
 function ThemeToggle({ value, onChange, locale }: { value: ThemeMode; onChange: (v: ThemeMode) => void; locale: Locale }) {
   return (
-    <div className="inline-flex items-center rounded-md bg-slate-100/80 p-0.5 dark:bg-[#1a1a1a]/80">
+    <div className="pill-group">
       {THEME_OPTIONS.map((o) => {
         const Icon = o.icon;
         return (
           <button
             key={o.value}
             onClick={() => onChange(o.value)}
-            className={`inline-flex items-center gap-1 rounded px-2 py-1 text-[11px] font-medium transition-all duration-150 ${
-              value === o.value
-                ? 'bg-white text-slate-900 shadow-sm dark:bg-[#222222] dark:text-slate-300'
-                : 'text-slate-400 hover:text-slate-600 dark:text-slate-500 dark:hover:text-slate-300'
-            }`}
+            className={`pill inline-flex items-center gap-1 px-2.5 py-1.5 text-[12px] ${value === o.value ? 'pill-active' : ''}`}
             aria-label={o.value}
           >
             <Icon className="h-3.5 w-3.5" />
@@ -81,16 +78,12 @@ function ThemeToggle({ value, onChange, locale }: { value: ThemeMode; onChange: 
 
 function LangToggle({ value, onChange }: { value: Locale; onChange: (v: Locale) => void }) {
   return (
-    <div className="inline-flex items-center rounded-md bg-slate-100/80 p-0.5 dark:bg-[#1a1a1a]/80">
+    <div className="pill-group">
       {(['en', 'zh'] as const).map((l) => (
         <button
           key={l}
           onClick={() => onChange(l)}
-          className={`rounded px-2 py-1 text-[11px] font-medium transition-all duration-150 ${
-            value === l
-              ? 'bg-white text-slate-900 shadow-sm dark:bg-[#222222] dark:text-slate-300'
-              : 'text-slate-400 hover:text-slate-600 dark:text-slate-500 dark:hover:text-slate-300'
-          }`}
+          className={`pill px-3 py-1.5 text-[12px] ${value === l ? 'pill-active' : ''}`}
         >
           {l === 'en' ? 'EN' : '中'}
         </button>
@@ -113,18 +106,14 @@ function SegmentedControl({
   onChange: (v: string) => void;
 }) {
   return (
-    <div className="inline-flex items-center rounded-lg bg-slate-100/80 p-0.5 dark:bg-[#1a1a1a]/80" role="radiogroup">
+    <div className="pill-group" role="radiogroup">
       {options.map((o) => (
         <button
           key={o.value}
           role="radio"
           aria-checked={value === o.value}
           onClick={() => onChange(o.value)}
-          className={`rounded-md px-3 py-1.5 text-[13px] font-medium transition-all duration-150 ${
-            value === o.value
-              ? 'bg-white text-slate-900 shadow-sm dark:bg-[#222222] dark:text-slate-300'
-              : 'text-slate-400 hover:text-slate-600 dark:text-slate-500 dark:hover:text-slate-300'
-          }`}
+          className={`pill px-3.5 py-1.5 text-[13px] ${value === o.value ? 'pill-active' : ''}`}
         >
           {o.label}
         </button>
@@ -147,15 +136,11 @@ function FilterTabs({
   tooltips?: Record<string, string>;
 }) {
   if (!options.length) return null;
-  const activeClass = 'bg-white text-slate-900 shadow-sm dark:bg-[#222222] dark:text-slate-300';
-  const inactiveClass = 'text-slate-400 hover:text-slate-600 dark:text-slate-500 dark:hover:text-slate-300';
   return (
-    <div className="inline-flex items-center rounded-lg bg-slate-100/80 p-0.5 dark:bg-[#1a1a1a]/80 flex-nowrap">
+    <div className="pill-group flex-nowrap">
       <button
         onClick={() => onChange('')}
-        className={`shrink-0 rounded-md px-2.5 py-1.5 text-[12px] font-medium whitespace-nowrap transition-all duration-150 ${
-          !value ? activeClass : inactiveClass
-        }`}
+        className={`pill shrink-0 px-3.5 py-1.5 text-[13px] ${!value ? 'pill-active' : ''}`}
       >
         {allLabel}
       </button>
@@ -165,9 +150,7 @@ function FilterTabs({
           <span key={o.value} className={tip ? 'group relative' : ''}>
             <button
               onClick={() => onChange(o.value === value ? '' : o.value)}
-              className={`shrink-0 rounded-md px-2.5 py-1.5 text-[12px] font-medium whitespace-nowrap transition-all duration-150 ${
-                value === o.value ? activeClass : inactiveClass
-              }`}
+              className={`pill shrink-0 px-3.5 py-1.5 text-[13px] ${value === o.value ? 'pill-active' : ''}`}
             >
               {formatProductLabel(o.label)}
             </button>
@@ -199,20 +182,16 @@ function FilterChips({
   tooltips?: Record<string, string>;
 }) {
   if (!options.length) return null;
-  const active = 'bg-slate-900 text-white dark:bg-slate-200 dark:text-slate-900';
-  const inactive = 'bg-white text-slate-500 border border-slate-200 dark:bg-[#1a1a1a] dark:text-slate-400 dark:border-white/10';
   return (
     <div className="flex items-center gap-2 min-w-0">
-      {label && <span className="shrink-0 text-[12px] font-medium text-slate-400 dark:text-slate-500">{label}</span>}
+      {label && <span className="shrink-0 text-[12px] font-medium" style={{ color: 'var(--fg3)' }}>{label}</span>}
       <div className="relative min-w-0 flex-1">
         <div className="overflow-x-auto scrollbar-hide">
-          <div className="flex gap-1.5 w-max pr-4">
+          <div className="pill-group w-max flex-nowrap">
             {allLabel && (
               <button
                 onClick={() => onChange('')}
-                className={`shrink-0 rounded-full px-3 py-1 text-[12px] font-medium whitespace-nowrap transition-all duration-150 ${
-                  !value ? active : inactive
-                }`}
+                className={`pill shrink-0 px-3 py-1 text-[12px] ${!value ? 'pill-active' : ''}`}
               >
                 {allLabel}
               </button>
@@ -223,9 +202,7 @@ function FilterChips({
                 <span key={o.value} className={tip ? 'group relative' : ''}>
                   <button
                     onClick={() => onChange(o.value === value ? '' : o.value)}
-                    className={`shrink-0 rounded-full px-3 py-1 text-[12px] font-medium whitespace-nowrap transition-all duration-150 ${
-                      value === o.value ? active : inactive
-                    }`}
+                    className={`pill shrink-0 px-3 py-1 text-[12px] ${value === o.value ? 'pill-active' : ''}`}
                   >
                     {formatProductLabel(o.label)}
                   </button>
@@ -239,7 +216,6 @@ function FilterChips({
             })}
           </div>
         </div>
-        <div className="pointer-events-none absolute inset-y-0 right-0 w-6 bg-gradient-to-l from-[#fafafa] dark:from-[#0a0a0a]" />
       </div>
     </div>
   );
@@ -298,6 +274,7 @@ export function App() {
     try { localStorage.setItem('aiusage-locale', l); } catch {}
   }, []);
   const t: T = I18N[locale];
+  const rangeSub = getRanges(t).find((r) => r.value === filters.range)?.label;
   // Sync document title
   useEffect(() => {
     document.title = SITE_TITLE;
@@ -326,24 +303,24 @@ export function App() {
   }), [overview, unavailable]);
 
   return (
-    <main className="mx-auto w-full max-w-[1200px] px-4 pb-16 sm:px-6 lg:px-8">
+    <main className="mx-auto w-full max-w-[1340px] px-4 pb-16 sm:px-6 lg:px-8">
 
       {/* ── Header ── */}
       <header className="fade-up relative z-20 py-6 sm:py-8">
-        <div className="flex flex-wrap items-center justify-between gap-y-2">
-          <h1 className="flex items-center gap-2 text-[18px] sm:text-[22px] font-semibold tracking-tight text-slate-900 dark:text-slate-300">
+        <div className="flex flex-wrap items-center justify-between gap-y-3">
+          <h1 className="m-0">
             <HeaderLogo />
-            {SITE_TITLE}
           </h1>
-          <div className="flex items-center gap-1.5 sm:gap-2 ml-auto">
+          <div className="flex items-center gap-2 ml-auto">
             <ThemeToggle value={theme} onChange={setTheme} locale={locale} />
             <LangToggle value={locale} onChange={setLocale} />
             <button
               onClick={refresh}
-              className="hidden sm:inline-flex items-center justify-center rounded-md bg-slate-100/80 p-1.5 text-slate-400 transition-colors hover:text-slate-600 dark:bg-[#1a1a1a]/80 dark:text-slate-500 dark:hover:text-slate-300"
+              className="hidden sm:inline-flex h-[34px] w-[34px] items-center justify-center rounded-[10px] border transition-colors"
+              style={{ background: 'var(--panel)', borderColor: 'var(--border)', color: 'var(--fg2)' }}
               aria-label="Refresh"
             >
-              <RotateCw className={`h-3.5 w-3.5 ${loading ? 'animate-spin' : ''}`} />
+              <RotateCw className={`h-4 w-4 ${loading ? 'animate-spin' : ''}`} />
             </button>
           </div>
         </div>
@@ -361,46 +338,28 @@ export function App() {
       )}
 
         {/* ── Range + Filters (desktop) ── */}
-        <div className="mt-2 mb-6 hidden sm:flex sm:flex-wrap sm:items-center sm:gap-x-4 sm:gap-y-2">
-          <div className="flex items-center gap-2">
-            <SegmentedControl
-              value={filters.range === 'month' ? '' : filters.range}
-              options={getRanges(t)}
-              onChange={(v) => setFilters((f) => ({ ...f, range: v }))}
-            />
-            <button
-              onClick={() => setFilters((f) => ({ ...f, range: 'month' }))}
-              className={`shrink-0 rounded-lg px-3 py-1.5 text-[13px] font-medium transition-all duration-150 ${
-                filters.range === 'month'
-                  ? 'bg-white text-slate-900 shadow-sm dark:bg-[#222222] dark:text-slate-300'
-                  : 'bg-slate-100/80 text-slate-400 hover:text-slate-600 dark:bg-[#1a1a1a]/80 dark:text-slate-500 dark:hover:text-slate-300'
-              }`}
-            >
-              {t.thisMonth}
-            </button>
-          </div>
+        <div className="mt-2 mb-6 hidden sm:flex sm:flex-wrap sm:items-center sm:gap-2.5">
+          <SegmentedControl
+            value={filters.range}
+            options={getRanges(t)}
+            onChange={(v) => setFilters((f) => ({ ...f, range: v }))}
+          />
           {overview && fOpts.products.length > 1 && (
-            <>
-              <div className="h-5 w-px bg-slate-200 dark:bg-[#222222]" />
-              <FilterTabs
-                value={filters.product}
-                options={fOpts.products}
-                allLabel={t.all}
-                onChange={(v) => setFilters((f) => ({ ...f, product: v }))}
-                tooltips={{ 'claude-code': t.claudeCodeDataNotice }}
-              />
-            </>
+            <FilterTabs
+              value={filters.product}
+              options={fOpts.products}
+              allLabel={t.all}
+              onChange={(v) => setFilters((f) => ({ ...f, product: v }))}
+              tooltips={{ 'claude-code': t.claudeCodeDataNotice }}
+            />
           )}
           {overview && fOpts.devices.length >= 1 && (
-            <>
-              <div className="h-5 w-px bg-slate-200 dark:bg-[#222222]" />
-              <FilterTabs
-                value={filters.deviceId}
-                options={fOpts.devices}
-                allLabel={t.all}
-                onChange={(v) => setFilters((f) => ({ ...f, deviceId: v }))}
-              />
-            </>
+            <FilterTabs
+              value={filters.deviceId}
+              options={fOpts.devices}
+              allLabel={t.all}
+              onChange={(v) => setFilters((f) => ({ ...f, deviceId: v }))}
+            />
           )}
         </div>
 
@@ -409,7 +368,7 @@ export function App() {
           <FilterChips
             label=""
             value={filters.range}
-            options={[...getRanges(t), { value: 'month', label: t.thisMonth }].map((r) => ({ value: r.value, label: r.label, eventCount: 0, estimatedCostUsd: 0 }))}
+            options={getRanges(t).map((r) => ({ value: r.value, label: r.label, eventCount: 0, estimatedCostUsd: 0 }))}
             allLabel=""
             onChange={(v) => setFilters((f) => ({ ...f, range: v || '30d' }))}
           />
@@ -469,23 +428,24 @@ export function App() {
             className="fade-up grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-5"
             style={{ animationDelay: '50ms' }}
           >
-            <div className="card col-span-2 sm:col-span-1">
+            <div className="kpi kpi-cost col-span-2 sm:col-span-1">
               <CostKpiCard
                 label={t.estimatedCost}
                 value={unavailable ? t.unavailable : formatUsd(overview?.totalCostUsd ?? 0)}
+                sub={rangeSub}
               />
             </div>
-            <div className="card">
-              <KpiCard label={t.totalTokens} value={unavailable ? t.unavailable : formatCompact(kpis?.totalTokens ?? 0, locale)} />
+            <div className="kpi">
+              <KpiCard label={t.totalTokens} value={unavailable ? t.unavailable : formatCompact(kpis?.totalTokens ?? 0, locale)} sub={locale === 'zh' ? '累计消耗' : 'Cumulative'} />
             </div>
-            <div className="card">
-              <KpiCard label={t.inputTokens} value={unavailable ? t.unavailable : formatCompact(kpis?.inputTokens ?? 0, locale)} />
+            <div className="kpi">
+              <KpiCard label={t.inputTokens} value={unavailable ? t.unavailable : formatCompact(kpis?.inputTokens ?? 0, locale)} sub="Prompt" />
             </div>
-            <div className="card">
-              <KpiCard label={t.outputTokens} value={unavailable ? t.unavailable : formatCompact(kpis?.outputTokens ?? 0, locale)} />
+            <div className="kpi">
+              <KpiCard label={t.outputTokens} value={unavailable ? t.unavailable : formatCompact(kpis?.outputTokens ?? 0, locale)} sub="Completion" />
             </div>
-            <div className="card">
-              <KpiCard label={t.cachedTokens} value={unavailable ? t.unavailable : formatCompact(kpis?.cachedTokens ?? 0, locale)} />
+            <div className="kpi">
+              <KpiCard label={t.cachedTokens} value={unavailable ? t.unavailable : formatCompact(kpis?.cachedTokens ?? 0, locale)} sub="Cached" />
             </div>
           </div>
 
@@ -494,28 +454,30 @@ export function App() {
             className="fade-up grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-5"
             style={{ animationDelay: '100ms' }}
           >
-            <div className="card col-span-2 sm:col-span-1">
+            <div className="kpi col-span-2 sm:col-span-1">
               <KpiCard
                 label={t.activeDays}
                 value={String(overview?.activeDays ?? 0)}
                 suffix={` / ${overview?.totalDays ?? 0}`}
+                sub={locale === 'zh' ? '区间内' : 'In range'}
               />
             </div>
-            <div className="card">
+            <div className="kpi">
               <KpiCard
                 label={t.sessions}
                 value={formatNumber((overview?.totalSessions ?? 0) > 0 ? overview!.totalSessions : (overview?.totalEvents ?? 0))}
                 suffix={(overview?.totalSessions ?? 0) > 0 && overview!.totalSessions !== overview!.totalEvents ? ` / ${formatNumber(overview!.totalEvents)}` : undefined}
+                sub={locale === 'zh' ? '对话 / 消息' : 'Sessions / Msgs'}
               />
             </div>
-            <div className="card">
-              <KpiCard label={t.costPerSession} value={unavailable ? t.unavailable : formatUsd(kpis?.costPerSession ?? 0)} />
+            <div className="kpi">
+              <KpiCard label={t.costPerSession} value={unavailable ? t.unavailable : formatUsd(kpis?.costPerSession ?? 0)} sub={locale === 'zh' ? '每会话' : 'Per session'} />
             </div>
-            <div className="card">
-              <KpiCard label={t.avgDailyCost} value={unavailable ? t.unavailable : formatUsd(overview?.averageDailyCostUsd ?? 0)} />
+            <div className="kpi">
+              <KpiCard label={t.avgDailyCost} value={unavailable ? t.unavailable : formatUsd(overview?.averageDailyCostUsd ?? 0)} sub={locale === 'zh' ? '平均' : 'Average'} />
             </div>
-            <div className="card">
-              <KpiCard label={t.cacheHitRate} value={unavailable ? t.unavailable : formatPercent(kpis?.cacheHitRate ?? 0)} />
+            <div className="kpi">
+              <KpiCard label={t.cacheHitRate} value={unavailable ? t.unavailable : formatPercent(kpis?.cacheHitRate ?? 0)} sub={locale === 'zh' ? '高效复用' : 'Reuse'} />
             </div>
           </div>
 
@@ -533,7 +495,7 @@ export function App() {
 
           {/* ── Cost Trend ── */}
           <div className="card fade-up p-6" style={{ animationDelay: '150ms' }}>
-            <SectionHeader title={t.costTrend} stat={unavailable ? t.unavailable : formatUsd(overview?.totalCostUsd ?? 0)} />
+            <SectionHeader title={t.costTrend} stat={unavailable ? t.unavailable : formatUsd(overview?.totalCostUsd ?? 0)} statTone="green" />
             {unavailable ? (
               <EmptyState label={t.costUnavailable} />
             ) : (
@@ -605,14 +567,14 @@ export function App() {
                       colors={getChartColors(isDark)}
                       centerLabel={formatUsd(overview?.totalCostUsd ?? 0)}
                     />
-                    <div className="my-5 border-t border-slate-100 dark:border-white/[0.08]" />
+                    <div className="my-5 border-t" style={{ borderColor: 'var(--border)' }} />
                     <DonutSection
                       title={t.modelShare}
                       data={(overview?.modelCostShare ?? []).map((m) => ({ ...m, label: formatModelName(m.label, isMobile) }))}
                       colors={getChartColors(isDark)}
                       centerLabel={formatUsd(overview?.totalCostUsd ?? 0)}
                     />
-                    <div className="my-5 border-t border-slate-100 dark:border-white/[0.08]" />
+                    <div className="my-5 border-t" style={{ borderColor: 'var(--border)' }} />
                     <DonutSection
                       title={t.deviceShare}
                       data={(overview?.filters.options.devices ?? []).map((d) => ({
@@ -634,50 +596,43 @@ export function App() {
       )}
 
       {/* ── Footer ── */}
-      <footer className="fade-up mt-16 border-t border-slate-100 dark:border-white/[0.08] pb-10 pt-8">
+      <footer className="fade-up mt-16 border-t pb-10 pt-8" style={{ borderColor: 'var(--border)' }}>
         <div className="flex flex-col items-center gap-4">
-          <div className="flex items-center gap-3 text-[12px] text-slate-400 dark:text-slate-500">
-            <span className="flex items-center gap-1.5 font-medium text-slate-500 dark:text-slate-400">
+          <div className="flex items-center gap-3">
+            <span className="flex items-center gap-2 font-display text-[14px] font-semibold" style={{ color: 'var(--fg)' }}>
               <FooterLogo />
               {SITE_TITLE}
             </span>
             {health?.version && (
-              <span className="rounded-full bg-slate-100 dark:bg-[#1a1a1a] px-2 py-0.5 text-[10px] font-medium text-slate-400 dark:text-slate-500">
+              <span
+                className="font-mono rounded-full px-2 py-0.5 text-[10px] font-medium"
+                style={{ background: 'var(--cell)', color: 'var(--fg3)' }}
+              >
                 v{health.version}
               </span>
             )}
           </div>
-          <div className="flex flex-wrap justify-center gap-x-4 gap-y-2 text-[11px] text-slate-300 dark:text-slate-600">
-            <div className="flex items-center gap-4">
-              <a
-                href="/pricing"
-                className="text-slate-400 transition-colors hover:text-slate-600 dark:text-slate-500 dark:hover:text-slate-300"
-              >
-                {t.pricing}
-              </a>
-              <span className="h-3 w-px bg-slate-200 dark:bg-[#222222]" />
-              <a
-                href="/embed/docs"
-                className="text-slate-400 transition-colors hover:text-slate-600 dark:text-slate-500 dark:hover:text-slate-300"
-              >
-                {t.embedWidgets}
-              </a>
-            </div>
-            <div className="flex items-center gap-4">
-              <a
-                href="https://token.overme.cn"
-                target="_blank"
-                rel="noopener noreferrer"
-                className="flex items-center gap-1.5 text-slate-400 transition-colors hover:text-slate-600 dark:text-slate-500 dark:hover:text-slate-300"
-              >
-                <Globe className="h-3.5 w-3.5" />
-                <span>token.overme.cn</span>
-              </a>
-              <span className="h-3 w-px bg-slate-200 dark:bg-[#222222]" />
-              <span className="text-slate-400 dark:text-slate-500">
-                Powered by Overme
-              </span>
-            </div>
+          <div className="flex flex-wrap items-center justify-center gap-x-3 gap-y-2 font-mono text-[12px]" style={{ color: 'var(--fg3)' }}>
+            <a href="/pricing" className="transition-colors hover:opacity-80" style={{ color: 'var(--fg2)' }}>
+              {t.pricing}
+            </a>
+            <span style={{ opacity: 0.4 }}>·</span>
+            <a href="/embed/docs" className="transition-colors hover:opacity-80" style={{ color: 'var(--fg2)' }}>
+              {t.embedWidgets}
+            </a>
+            <span style={{ opacity: 0.4 }}>·</span>
+            <a
+              href="https://token.overme.cn"
+              target="_blank"
+              rel="noopener noreferrer"
+              className="flex items-center gap-1.5 transition-colors hover:opacity-80"
+              style={{ color: 'var(--accent)' }}
+            >
+              <Globe className="h-3.5 w-3.5" />
+              <span>token.overme.cn</span>
+            </a>
+            <span style={{ opacity: 0.4 }}>·</span>
+            <span style={{ color: 'var(--fg2)' }}>Powered by Overme</span>
           </div>
         </div>
       </footer>

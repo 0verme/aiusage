@@ -1,5 +1,4 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { useIsDark } from '../hooks/use-dark';
 import type { ActivityHeatmapDay } from '../utils/activity-heatmap-data';
 
 // ── 常量 ──
@@ -16,16 +15,16 @@ const LEGEND_ROW = 30;
 const LEGEND_W = 22 + GAP + 5 * STEP - GAP + GAP + 26;
 
 // ── 颜色配置 ──
+// CSS variables auto-switch between light/dark, so a single level array suffices.
 
-const LIGHT_LEVELS = ['#ebedf0', '#fdba74', '#f97316', '#c2410c', '#7c2d12'];
-const DARK_LEVELS  = ['#161b22', '#431407', '#c2410c', '#f97316', '#fed7aa'];
+const LEVELS = ['var(--cell)', 'var(--hm1)', 'var(--hm2)', 'var(--hm3)', 'var(--hm4)'];
+const LABEL_FILL = 'var(--fg3)';
 
-function colorForValue(value: number, max: number, isDark: boolean): string {
-  const levels = isDark ? DARK_LEVELS : LIGHT_LEVELS;
-  if (value <= 0 || max <= 0) return levels[0];
+function colorForValue(value: number, max: number): string {
+  if (value <= 0 || max <= 0) return LEVELS[0];
   const ratio = Math.pow(value / max, GAMMA);
   const idx = Math.max(1, Math.min(4, Math.ceil(ratio * 4)));
-  return levels[idx];
+  return LEVELS[idx];
 }
 
 // ── 日期工具 ──
@@ -74,7 +73,6 @@ export function ActivityHeatmap({ days, metricLabel = 'tokens', className = '' }
   metricLabel?: 'tokens' | 'sessions';
   className?: string;
 }) {
-  const isDark = useIsDark();
   const containerRef = useRef<HTMLDivElement>(null);
   const containerWidth = useContainerWidth(containerRef);
 
@@ -144,15 +142,15 @@ export function ActivityHeatmap({ days, metricLabel = 'tokens', className = '' }
   return (
     <div className={`flex flex-col gap-3 ${className}`}>
       {/* 统计摘要 */}
-      <div className="flex items-center gap-4 text-xs text-slate-500 dark:text-slate-400">
+      <div className="flex flex-wrap items-center gap-5 font-mono text-[12px]" style={{ color: 'var(--fg)' }}>
         <span>
-          <span className="font-semibold text-slate-700 dark:text-slate-200">{activeDays}</span> active days
+          <span className="font-bold" style={{ color: 'var(--accent)' }}>{activeDays}</span> active days
         </span>
         <span>
-          <span className="font-semibold text-slate-700 dark:text-slate-200">{streak}</span> day streak
+          <span className="font-bold" style={{ color: 'var(--accent)' }}>{streak}</span> day streak
         </span>
         <span>
-          <span className="font-semibold text-slate-700 dark:text-slate-200">{fmtCompact(totalActivity)}</span> {metricLabel} total
+          <span className="font-bold" style={{ color: 'var(--accent)' }}>{fmtCompact(totalActivity)}</span> {metricLabel} total
         </span>
       </div>
 
@@ -174,8 +172,8 @@ export function ActivityHeatmap({ days, metricLabel = 'tokens', className = '' }
                   x={weekIdx * STEP}
                   y={MONTH_ROW - 4}
                   fontSize={9}
-                  fill={isDark ? '#8b949e' : '#57606a'}
-                  fontFamily="system-ui, sans-serif"
+                  fill={LABEL_FILL}
+                  fontFamily="'JetBrains Mono', monospace"
                 >
                   {label}
                 </text>
@@ -187,7 +185,7 @@ export function ActivityHeatmap({ days, metricLabel = 'tokens', className = '' }
                   col.map(({ dateStr, data }, di) => {
                     const activityValue = data?.activityValue ?? 0;
                     const cost = data?.estimatedCostUsd ?? 0;
-                    const fill = colorForValue(activityValue, maxActivity, isDark);
+                    const fill = colorForValue(activityValue, maxActivity);
                     const x = wi * STEP;
                     const y = di * STEP;
                     return (
@@ -219,22 +217,19 @@ export function ActivityHeatmap({ days, metricLabel = 'tokens', className = '' }
 
             {/* 图例：居中，与热力图保持间距 */}
             <g transform={`translate(${(containerWidth - LEGEND_W) / 2}, ${totalH - LEGEND_ROW + 10})`}>
-              <text x={0} y={9} fontSize={9} fill={isDark ? '#8b949e' : '#57606a'} fontFamily="system-ui, sans-serif">Less</text>
-              {[0, 1, 2, 3, 4].map((lvl) => {
-                const levels = isDark ? DARK_LEVELS : LIGHT_LEVELS;
-                return (
-                  <rect
-                    key={lvl}
-                    x={24 + lvl * STEP}
-                    y={0}
-                    width={CELL}
-                    height={CELL}
-                    rx={2}
-                    fill={levels[lvl]}
-                  />
-                );
-              })}
-              <text x={24 + 5 * STEP} y={9} fontSize={9} fill={isDark ? '#8b949e' : '#57606a'} fontFamily="system-ui, sans-serif">More</text>
+              <text x={0} y={9} fontSize={9} fill={LABEL_FILL} fontFamily="'JetBrains Mono', monospace">Less</text>
+              {[0, 1, 2, 3, 4].map((lvl) => (
+                <rect
+                  key={lvl}
+                  x={24 + lvl * STEP}
+                  y={0}
+                  width={CELL}
+                  height={CELL}
+                  rx={2}
+                  fill={LEVELS[lvl]}
+                />
+              ))}
+              <text x={24 + 5 * STEP} y={9} fontSize={9} fill={LABEL_FILL} fontFamily="'JetBrains Mono', monospace">More</text>
             </g>
           </svg>
         )}
@@ -242,22 +237,24 @@ export function ActivityHeatmap({ days, metricLabel = 'tokens', className = '' }
         {/* Tooltip */}
         {tooltip && (
           <div
-            className="pointer-events-none absolute z-10 rounded-md border border-slate-200 bg-white px-2.5 py-1.5 text-xs shadow-md dark:border-slate-700 dark:bg-[#1a1a1a]"
+            className="pointer-events-none absolute z-10 rounded-lg border px-2.5 py-1.5 font-mono text-xs shadow-lg"
             style={{
               left: Math.min(tooltip.x, containerWidth - 130),
               top: tooltip.y - 52,
+              background: 'var(--panel)',
+              borderColor: 'var(--border)',
             }}
           >
-            <div className="font-medium text-slate-700 dark:text-slate-200">{tooltip.date}</div>
+            <div className="font-semibold" style={{ color: 'var(--fg)' }}>{tooltip.date}</div>
             {tooltip.activityValue > 0 ? (
               <>
-                <div className="text-slate-500 dark:text-slate-400">{fmtCompact(tooltip.activityValue)} {metricLabel}</div>
+                <div style={{ color: 'var(--fg2)' }}>{fmtCompact(tooltip.activityValue)} {metricLabel}</div>
                 {metricLabel === 'tokens' && (
-                  <div className="text-slate-500 dark:text-slate-400">${tooltip.cost.toFixed(4)}</div>
+                  <div style={{ color: 'var(--fg2)' }}>${tooltip.cost.toFixed(4)}</div>
                 )}
               </>
             ) : (
-              <div className="text-slate-400 dark:text-slate-500">No activity</div>
+              <div style={{ color: 'var(--fg3)' }}>No activity</div>
             )}
           </div>
         )}
@@ -265,7 +262,7 @@ export function ActivityHeatmap({ days, metricLabel = 'tokens', className = '' }
 
       {/* 空状态 */}
       {days.length === 0 && (
-        <p className="text-xs text-slate-400 dark:text-slate-500">No activity data in the past year.</p>
+        <p className="font-mono text-xs" style={{ color: 'var(--fg3)' }}>No activity data in the past year.</p>
       )}
     </div>
   );

@@ -7,7 +7,7 @@ This guide explains how to keep your AIUsage deployment up to date with the late
 AIUsage uses a **fork-based update model**: you fork the repository to your own GitHub account, connect it to Cloudflare Workers via Git integration, and then pull upstream updates whenever a new version is released. Once set up, updates flow automatically — no manual re-deployment needed.
 
 ```
-ennann/aiusage (upstream)
+0verme/aiusage (upstream)
      │
      │  fork
      ▼
@@ -22,7 +22,7 @@ Cloudflare Worker (auto-deploy on push)
 
 ### Step 1: Fork the repository
 
-Go to [github.com/ennann/aiusage](https://github.com/ennann/aiusage) and click **Fork** to create a copy under your GitHub account.
+Go to [github.com/0verme/aiusage](https://github.com/0verme/aiusage) and click **Fork** to create a copy under your GitHub account.
 
 ### Step 2: Connect to Cloudflare Workers
 
@@ -59,7 +59,7 @@ Make sure your `wrangler.jsonc` has the correct `database_id`.
 
 ## Pulling Upstream Updates
 
-When the upstream repository (`ennann/aiusage`) releases new features or fixes, sync them to your fork:
+When the upstream repository (`0verme/aiusage`) releases new features or fixes, sync them to your fork:
 
 ### Option A: Via GitHub Web UI (Easiest)
 
@@ -72,7 +72,7 @@ When the upstream repository (`ennann/aiusage`) releases new features or fixes, 
 
 ```bash
 # Add upstream remote (one-time)
-git remote add upstream https://github.com/ennann/aiusage.git
+git remote add upstream https://github.com/0verme/aiusage.git
 
 # Fetch and merge upstream changes
 git fetch upstream
@@ -101,7 +101,7 @@ jobs:
       - uses: actions/checkout@v4
       - name: Sync upstream
         run: |
-          git remote add upstream https://github.com/ennann/aiusage.git
+          git remote add upstream https://github.com/0verme/aiusage.git
           git fetch upstream
           git merge upstream/main --no-edit
           git push
