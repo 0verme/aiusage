@@ -104,6 +104,13 @@ export async function handleIngest(request: Request, env: Env): Promise<Response
       )
       .run();
 
+    // Replace all breakdowns for this device/day so project renames (e.g. home → Other)
+    // do not leave orphan rows that still appear in Sankey.
+    await env.DB.prepare(`
+      DELETE FROM daily_usage_breakdown
+      WHERE device_id = ? AND usage_date = ?
+    `).bind(tokenPayload.deviceId, day.usageDate).run();
+
     for (const { breakdown: b, cost, cacheWrite5mTokens, cacheWrite1hTokens } of breakdownsWithCost) {
       const rawProject = b.project || 'unknown';
       const isFullPath = rawProject.startsWith('/') || /^[A-Z]:\\/i.test(rawProject);

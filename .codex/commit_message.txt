@@ -1,6 +1,6 @@
-feat(usage): 扩展 Grok Build 扫描与统一计价
+fix(usage): 规范 Grok 主目录项目归类
 
-- 新增 Grok Build 扫描器、项目发现、日期识别及测试
-- 增加 xAI/GPT-5.6 定价与推理 token 计费支持
-- 优化 Worker API 缓存、HEAD 请求及无缓存响应策略
-- 更新部署与定价文档、Workspace 配置
+- 将用户主目录会话归类为 `Other`
+- 清理设备日期下的旧 breakdown，避免项目改名产生孤立数据
+- 保留 `Other`、`Unknown`、`Hidden` 等公共隐私标签
+- 增加 Grok 主目录归类测试

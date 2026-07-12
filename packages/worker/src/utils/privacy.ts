@@ -11,6 +11,12 @@ export async function toPublicProjectName(project: string, env: Env): Promise<st
     return project;
   }
 
+  // Public sentinel labels (home-dir / unknown buckets) stay readable in Sankey.
+  const normalized = project.trim().toLowerCase();
+  if (normalized === 'other') return 'Other';
+  if (normalized === 'unknown') return 'Unknown';
+  if (normalized === 'hidden') return 'Hidden';
+
   return maskProject(project, env.PROJECT_NAME_SALT);
 }
 

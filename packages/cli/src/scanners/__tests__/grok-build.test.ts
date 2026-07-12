@@ -97,6 +97,28 @@ describe('Grok Build scanner', () => {
     expect(result.inputTokens).toBeLessThan(3881);
   });
 
+  it('maps user home directory sessions to Other', async () => {
+    await session({
+      'summary.json': JSON.stringify({
+        info: { cwd: 'C:\\Users\\sakur' },
+        current_model_id: 'grok-4.5',
+        created_at: `${day}T09:00:00Z`,
+      }),
+      'events.jsonl': JSON.stringify({ ts: `${day}T09:00:01Z`, type: 'turn_started', model_id: 'grok-4.5' }),
+      'chat_history.jsonl': [
+        JSON.stringify({ type: 'user', content: [{ type: 'text', text: 'hi' }] }),
+        JSON.stringify({ type: 'assistant', content: 'hello' }),
+      ].join('\n'),
+    }, 'C:\\Users\\sakur', 'home-session');
+
+    const [result] = (await scanGrokBuildDates([day], root)).get(day)!;
+    expect(result).toMatchObject({
+      project: 'other',
+      projectDisplay: 'Other',
+      model: 'grok-4.5',
+    });
+  });
+
   it('parses array content and type-as-role without double-counting updates chunks', async () => {
     const userText = 'please fix the scanner';
     const assistantText = 'done fixing';

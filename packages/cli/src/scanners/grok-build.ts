@@ -73,7 +73,8 @@ async function scanSession(
   if (records.length === 0) return;
 
   const cwd = records.map(({ record }) => findString(record, ['cwd', 'working_directory', 'workingDirectory'])).find(Boolean) ?? decodeCwd(encodedCwd);
-  const fields = resolveProjectFields(cwd, aliases);
+  // Home-directory sessions are not a real project; map to Other so Sankey has a clear target.
+  const fields = resolveGrokProjectFields(cwd, aliases);
   const model = records.map(({ record }) => findString(record, [
     'model_id', 'modelId', 'current_model_id', 'currentModelId', 'primaryModelId', 'primary_model_id',
   ])).find(Boolean) ?? 'grok-4.5';
@@ -451,6 +452,44 @@ function walk(value: unknown, visit: (obj: Json) => void): void {
 
 function decodeCwd(value: string): string {
   try { return decodeURIComponent(value); } catch { return basename(value) || 'unknown'; }
+}
+
+/**
+ * Map user home directory (and empty/unknown cwd) to Other.
+ * Grok Build often starts in ~ which is not a project; without this, Sankey shows a
+ * masked "Project XXXXXX" bucket that looks disconnected when volume is tiny.
+ */
+function resolveGrokProjectFields(
+  cwd: string,
+  aliases?: Record<string, string>,
+): ReturnType<typeof resolveProjectFields> {
+  const fields = resolveProjectFields(cwd, aliases);
+  if (fields.projectAlias) return fields;
+  if (isHomeOrNonProjectCwd(cwd)) {
+    return { project: 'other', projectDisplay: 'Other' };
+  }
+  return fields;
+}
+
+function isHomeOrNonProjectCwd(cwd: string): boolean {
+  const cleaned = cwd.trim();
+  if (!cleaned || cleaned === 'unknown' || cleaned === '.' || cleaned === '~') return true;
+
+  const normalize = (p: string) =>
+    p.replace(/[/\\]+$/g, '').replace(/\\/g, '/').toLowerCase();
+
+  try {
+    if (normalize(cleaned) === normalize(homedir())) return true;
+  } catch {
+    /* homedir unavailable */
+  }
+
+  // Typical bare home layouts: /Users/name, /home/name, C:/Users/name
+  const parts = cleaned.split(/[/\\]/).filter(Boolean);
+  if (parts.length === 2 && /^(users|home)$/i.test(parts[0])) return true;
+  if (parts.length === 3 && /^[a-z]:$/i.test(parts[0]) && /^users$/i.test(parts[1])) return true;
+
+  return false;
 }
 
 async function safeRead(path: string): Promise<string | undefined> {
