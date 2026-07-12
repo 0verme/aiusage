@@ -11,7 +11,7 @@ import { sourcegraph } from './data/sourcegraph.js';
 import { inflection, cursor, droid, opencode } from './data/placeholders.js';
 import { xai } from './data/xai.js';
 
-export const PRICING_VERSION = '2026-07-12-gpt56-xai-tier-v1';
+export const PRICING_VERSION = '2026-07-12-p0-gpt56-tier-v1';
 
 /**
  * 模型别名（精确匹配优先于前缀回退）。
@@ -24,6 +24,8 @@ const aliases: Record<string, string> = {
   'claude-haiku-4-5-20251001': 'claude-haiku-4-5',
   'claude-sonnet-4.6': 'claude-sonnet-4-6',
   'codex-auto-review': 'gpt-5.4',
+  // GPT-5.6 bare name → Sol（上游默认旗舰档）
+  'gpt-5.6': 'gpt-5.6-sol',
   'grok-4.5-latest': 'grok-4.5',
   // Historical / alternate SKUs for Grok Code / Build
   'grok-code-fast-1': 'grok-build-0.1',

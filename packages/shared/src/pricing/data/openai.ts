@@ -3,66 +3,147 @@ import type { ProductPricing } from '../types.js';
 /**
  * OpenAI（Codex / GPT 系列）。
  * 单价 USD / 1M tokens。来源：https://developers.openai.com/api/docs/pricing
- * 最近核对：2026-06-22
+ * 最近核对：2026-07-10（GPT-5.6 长上下文分档 + cache write）
  *
  * 注意：deep-research 与 computer-use 此前在 worker/cli 表里写高了 2 倍，本次已校正。
+ * GPT-5.6：单次 prompt input > 272K 时整单按长上下文档计费；cache write = 未缓存 input × 1.25。
  */
 export const openai: Record<string, ProductPricing> = {
   codex: {
     models: {
       // ── GPT-5.6 系列 ──
-      // 长上下文（input + cached input + cache write > 272K）价格由 tiers 表达。
-      // cache write = 未缓存 input 的 1.25 倍。
-      'gpt-5.6': {
-        currency: 'USD',
-        notes: 'GPT-5.6 alias routes to GPT-5.6 Sol',
-        tiers: [
-          { threshold: 272_000, input_per_million: 5, cached_input_per_million: 0.5, output_per_million: 30, cache_write_5m_per_million: 6.25 },
-          { input_per_million: 10, cached_input_per_million: 1, output_per_million: 45, cache_write_5m_per_million: 12.5 },
-        ],
-      },
       'gpt-5.6-sol': {
         currency: 'USD',
+        notes: 'prompts over 272K input tokens bill the full request at long-context rates',
+        input_per_million: 5,
+        cached_input_per_million: 0.5,
+        cache_write_per_million: 6.25,
+        output_per_million: 30,
         tiers: [
-          { threshold: 272_000, input_per_million: 5, cached_input_per_million: 0.5, output_per_million: 30, cache_write_5m_per_million: 6.25 },
-          { input_per_million: 10, cached_input_per_million: 1, output_per_million: 45, cache_write_5m_per_million: 12.5 },
+          {
+            threshold: 272_000,
+            input_per_million: 5,
+            cached_input_per_million: 0.5,
+            cache_write_per_million: 6.25,
+            output_per_million: 30,
+          },
+          {
+            input_per_million: 10,
+            cached_input_per_million: 1,
+            cache_write_per_million: 12.5,
+            output_per_million: 45,
+          },
         ],
       },
       'gpt-5.6-terra': {
         currency: 'USD',
+        notes: 'prompts over 272K input tokens bill the full request at long-context rates',
+        input_per_million: 2.5,
+        cached_input_per_million: 0.25,
+        cache_write_per_million: 3.125,
+        output_per_million: 15,
         tiers: [
-          { threshold: 272_000, input_per_million: 2.5, cached_input_per_million: 0.25, output_per_million: 15, cache_write_5m_per_million: 3.125 },
-          { input_per_million: 5, cached_input_per_million: 0.5, output_per_million: 22.5, cache_write_5m_per_million: 6.25 },
+          {
+            threshold: 272_000,
+            input_per_million: 2.5,
+            cached_input_per_million: 0.25,
+            cache_write_per_million: 3.125,
+            output_per_million: 15,
+          },
+          {
+            input_per_million: 5,
+            cached_input_per_million: 0.5,
+            cache_write_per_million: 6.25,
+            output_per_million: 22.5,
+          },
         ],
       },
       'gpt-5.6-luna': {
         currency: 'USD',
+        notes: 'prompts over 272K input tokens bill the full request at long-context rates',
+        input_per_million: 1,
+        cached_input_per_million: 0.1,
+        cache_write_per_million: 1.25,
+        output_per_million: 6,
         tiers: [
-          { threshold: 272_000, input_per_million: 1, cached_input_per_million: 0.1, output_per_million: 6, cache_write_5m_per_million: 1.25 },
-          { input_per_million: 2, cached_input_per_million: 0.2, output_per_million: 9, cache_write_5m_per_million: 2.5 },
+          {
+            threshold: 272_000,
+            input_per_million: 1,
+            cached_input_per_million: 0.1,
+            cache_write_per_million: 1.25,
+            output_per_million: 6,
+          },
+          {
+            input_per_million: 2,
+            cached_input_per_million: 0.2,
+            cache_write_per_million: 2.5,
+            output_per_million: 9,
+          },
         ],
       },
 
       // ── GPT-5.5 系列 ──
       'gpt-5.5': {
         currency: 'USD',
+        notes: 'prompts over 272K input tokens bill the full request at long-context rates',
         input_per_million: 5,
         cached_input_per_million: 0.5,
         output_per_million: 30,
+        tiers: [
+          {
+            threshold: 272_000,
+            input_per_million: 5,
+            cached_input_per_million: 0.5,
+            output_per_million: 30,
+          },
+          {
+            input_per_million: 10,
+            cached_input_per_million: 1,
+            output_per_million: 45,
+          },
+        ],
       },
       'gpt-5.5-pro': {
         currency: 'USD',
+        notes: 'prompts over 272K input tokens bill the full request at long-context rates',
         input_per_million: 30,
         cached_input_per_million: null,
         output_per_million: 180,
+        tiers: [
+          {
+            threshold: 272_000,
+            input_per_million: 30,
+            cached_input_per_million: null,
+            output_per_million: 180,
+          },
+          {
+            input_per_million: 60,
+            cached_input_per_million: null,
+            output_per_million: 270,
+          },
+        ],
       },
 
       // ── GPT-5.4 系列 ──
       'gpt-5.4': {
         currency: 'USD',
+        notes: 'prompts over 272K input tokens bill the full request at long-context rates',
         input_per_million: 2.5,
         cached_input_per_million: 0.25,
         output_per_million: 15,
+        tiers: [
+          {
+            threshold: 272_000,
+            input_per_million: 2.5,
+            cached_input_per_million: 0.25,
+            output_per_million: 15,
+          },
+          {
+            input_per_million: 5,
+            cached_input_per_million: 0.5,
+            output_per_million: 22.5,
+          },
+        ],
       },
       'gpt-5.4-mini': {
         currency: 'USD',
@@ -78,9 +159,23 @@ export const openai: Record<string, ProductPricing> = {
       },
       'gpt-5.4-pro': {
         currency: 'USD',
+        notes: 'prompts over 272K input tokens bill the full request at long-context rates',
         input_per_million: 30,
         cached_input_per_million: null,
         output_per_million: 180,
+        tiers: [
+          {
+            threshold: 272_000,
+            input_per_million: 30,
+            cached_input_per_million: null,
+            output_per_million: 180,
+          },
+          {
+            input_per_million: 60,
+            cached_input_per_million: null,
+            output_per_million: 270,
+          },
+        ],
       },
 
       // ── GPT-5.3 / 5.2 / Codex 变体 ──

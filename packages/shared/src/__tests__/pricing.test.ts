@@ -45,11 +45,11 @@ describe('calculateCost — 关键模型', () => {
     ['anthropic', 'claude-code', 'claude-opus-4-8', 30], // 5 + 25
     ['anthropic', 'claude-code', 'claude-opus-4-7', 30], // 5 + 25
     ['anthropic', 'claude-code', 'claude-sonnet-4-6', 18],
-    ['openai', 'codex', 'gpt-5.4', 17.5], // 2.5 + 15
-    ['openai', 'codex', 'gpt-5.6', 55], // long context: 10 + 45 (GPT-5.6 Sol alias)
-    ['openai', 'codex', 'gpt-5.6-terra', 27.5], // long context: 5 + 22.5
-    ['openai', 'codex', 'gpt-5.6-luna', 11], // long context: 2 + 9
-    ['openai', 'codex', 'gpt-5.5-pro', 210], // 30 + 180
+    ['openai', 'codex', 'gpt-5.4', 27.5], // 1M input → 长上下文档 5 + 22.5
+    ['openai', 'codex', 'gpt-5.6', 55], // alias → sol 长上下文档 10 + 45
+    ['openai', 'codex', 'gpt-5.6-terra', 27.5], // 长上下文档 5 + 22.5
+    ['openai', 'codex', 'gpt-5.6-luna', 11], // 长上下文档 2 + 9
+    ['openai', 'codex', 'gpt-5.5-pro', 330], // 长上下文档 60 + 270
     ['openai', 'codex', 'o3-deep-research', 25], // 5 + 20，修正后
     ['openai', 'codex', 'computer-use-preview', 7.5], // 1.5 + 6，修正后
     ['google', 'gemini-cli', 'gemini-2.5-flash', 2.8], // 0.30 + 2.50，修正后
@@ -290,6 +290,48 @@ describe('阶梯定价', () => {
     expect(r.matchedTierIndex).toBe(1);
     // 0.3M * $10 + 1M * $45 = $48
     expect(r.estimatedCostUsd).toBeCloseTo(48, 4);
+  });
+
+  it('多事件汇总阶梯按平均 input 估档并标 estimated', () => {
+    // 2 次短请求：各 100K，汇总 200K；平均 100K ≤ 272K → 短档；但 requestCount>1 → estimated
+    const r = calculateCost(
+      'openai',
+      'codex',
+      'gpt-5.6-sol',
+      {
+        inputTokens: 200_000,
+        cachedInputTokens: 0,
+        cacheWriteTokens: 0,
+        outputTokens: 20_000,
+      },
+      { requestCount: 2 },
+    );
+    expect(r.matchedTierIndex).toBe(0);
+    expect(r.costStatus).toBe('estimated');
+    // 0.2M * $5 + 0.02M * $30 = $1 + $0.6 = $1.6
+    expect(r.estimatedCostUsd).toBeCloseTo(1.6, 4);
+  });
+
+  it('GPT-5.5 的短请求继续使用短上下文价格', () => {
+    const r = calculateCost('openai', 'codex', 'gpt-5.5', {
+      inputTokens: 100_000,
+      cachedInputTokens: 0,
+      cacheWriteTokens: 0,
+      outputTokens: 10_000,
+    });
+    expect(r.matchedTierIndex).toBe(0);
+    expect(r.estimatedCostUsd).toBeCloseTo(0.8, 4);
+  });
+
+  it('GPT-5.4 超过 272K input 后使用长上下文价格', () => {
+    const r = calculateCost('openai', 'codex', 'gpt-5.4', {
+      inputTokens: 300_000,
+      cachedInputTokens: 0,
+      cacheWriteTokens: 0,
+      outputTokens: 100_000,
+    });
+    expect(r.matchedTierIndex).toBe(1);
+    expect(r.estimatedCostUsd).toBeCloseTo(3.75, 4);
   });
 
   it('Qwen3-coder-plus ≤32K 命中第 0 档', () => {

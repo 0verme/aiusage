@@ -1,7 +1,7 @@
 import type { IngestPayload, CostStatus } from '@aiusage/shared';
 import { jsonNoStore, jsonError } from '../utils/response.js';
 import { verifyDeviceToken } from '../utils/token.js';
-import { calculateCost, getWorstCostStatus } from '../utils/pricing.js';
+import { calculateIngestBreakdownCost, getWorstCostStatus } from '../utils/pricing.js';
 import type { Env } from '../types.js';
 
 export async function handleIngest(request: Request, env: Env): Promise<Response> {
@@ -51,15 +51,8 @@ export async function handleIngest(request: Request, env: Env): Promise<Response
     for (const b of day.breakdowns) {
       const cacheWrite5mTokens = b.cacheWrite5mTokens ?? b.cacheWriteTokens;
       const cacheWrite1hTokens = b.cacheWrite1hTokens ?? 0;
-      const cost = calculateCost(b.provider, b.product, b.model, {
-        inputTokens: b.inputTokens,
-        cachedInputTokens: b.cachedInputTokens,
-        cacheWriteTokens: b.cacheWriteTokens,
-        cacheWrite5mTokens,
-        cacheWrite1hTokens,
-        outputTokens: b.outputTokens,
-        reasoningOutputTokens: b.reasoningOutputTokens,
-      });
+      // 优先采用 scanner 侧按 event 精确累计的 costUSD（GPT-5.6 长上下文档）
+      const cost = calculateIngestBreakdownCost(b);
 
       costStatuses.push(cost.costStatus);
       dayTotalCost += cost.estimatedCostUsd;

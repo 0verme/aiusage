@@ -47,28 +47,28 @@ describe('calculateCost: 基本计费', () => {
   });
 
   it('Codex gpt-5.4 基本 input/output 计费', () => {
-    // gpt-5.4: input=$2.5/M, output=$15/M
+    // 2M input > 272K → 长上下文档: input=$5/M, output=$22.5/M
     const result = calculateCost('openai', 'codex', 'gpt-5.4', {
       inputTokens: 2_000_000,
       cachedInputTokens: 0,
       cacheWriteTokens: 0,
       outputTokens: 500_000,
     });
-    // 2*2.5 + 0.5*15 = 5 + 7.5 = $12.5
-    expect(result.estimatedCostUsd).toBe(12.5);
+    // 2*5 + 0.5*22.5 = 10 + 11.25 = $21.25
+    expect(result.estimatedCostUsd).toBe(21.25);
     expect(result.costStatus).toBe('exact');
   });
 
   it('Codex gpt-5.5 基本 input/output 计费', () => {
-    // gpt-5.5: input=$5/M, cached input=$0.50/M, output=$30/M
+    // 2M 总 input → 长上下文档: input=$10/M, cached=$1/M, output=$45/M
     const result = calculateCost('openai', 'codex', 'gpt-5.5', {
       inputTokens: 1_000_000,
       cachedInputTokens: 1_000_000,
       cacheWriteTokens: 0,
       outputTokens: 500_000,
     });
-    // 1*5 + 1*0.5 + 0.5*30 = $20.5
-    expect(result.estimatedCostUsd).toBe(20.5);
+    // 1*10 + 1*1 + 0.5*45 = $33.5
+    expect(result.estimatedCostUsd).toBe(33.5);
     expect(result.costStatus).toBe('exact');
   });
 
@@ -91,8 +91,8 @@ describe('calculateCost: 基本计费', () => {
       cacheWriteTokens: 0,
       outputTokens: 1_000_000,
     });
-    // gpt-5.4: 1*2.5 + 1*0.25 + 1*15 = $17.75
-    expect(result.estimatedCostUsd).toBe(17.75);
+    // gpt-5.4 长上下文档: 1*5 + 1*0.5 + 1*22.5 = $28
+    expect(result.estimatedCostUsd).toBe(28);
     // codex-auto-review 是 catalog 里的显式 alias → gpt-5.4，按 exact 处理
     expect(result.costStatus).toBe('exact');
   });

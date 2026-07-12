@@ -158,6 +158,51 @@ describe('Codex service tier', () => {
     expect(results).toHaveLength(1);
     expect(results[0].model).toBe('codex-auto-review');
   });
+
+  it('adds priority suffix for GPT-5.6 terra', async () => {
+    const day = '2026-07-10';
+    await writeFile(join(tmpDir, 'config.toml'), 'service_tier = "priority"\n');
+    const sessionDir = join(tmpDir, 'sessions', '2026', '07', '10');
+    const events = tokenCountEvent(
+      `${day}T10:00:00.000Z`,
+      { input: 10000, cached: 0, output: 500 },
+      { input: 10000, cached: 0, output: 500 },
+      'gpt-5.6-terra',
+    );
+    await writeSession(sessionDir, 'rollout-test.jsonl', events);
+
+    const results = await scanCodex(day, tmpDir);
+    expect(results[0].model).toBe('gpt-5.6-terra-priority');
+  });
+});
+
+describe('Codex per-event costUSD (long-context tiers)', () => {
+  it('accumulates exact costUSD for short GPT-5.6-terra requests', async () => {
+    const day = '2026-07-10';
+    const sessionDir = join(tmpDir, 'sessions', '2026', '07', '10');
+    // two short events: 10k input each, 1k output each
+    const e1 = tokenCountEvent(
+      `${day}T10:00:00.000Z`,
+      { input: 10_000, cached: 0, output: 1_000 },
+      { input: 10_000, cached: 0, output: 1_000 },
+      'gpt-5.6-terra',
+    );
+    const e2 = tokenCountEvent(
+      `${day}T10:01:00.000Z`,
+      { input: 10_000, cached: 0, output: 1_000 },
+      { input: 20_000, cached: 0, output: 2_000 },
+      'gpt-5.6-terra',
+    );
+    await writeSession(sessionDir, 'rollout-test.jsonl', [...e1, ...e2]);
+
+    const results = await scanCodex(day, tmpDir);
+    expect(results).toHaveLength(1);
+    expect(results[0].eventCount).toBe(2);
+    expect(results[0].costUSD).toBeGreaterThan(0);
+    expect(results[0].pricingVersion).toBeTruthy();
+    // each event: 10k * $2.5/M + 1k * $15/M = 0.025 + 0.015 = 0.04 → total 0.08
+    expect(results[0].costUSD).toBeCloseTo(0.08, 4);
+  });
 });
 
 // ─── Fix 2: deduplicate events with identical total_token_usage ───

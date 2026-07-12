@@ -2,6 +2,42 @@
  * Worker 侧定价入口 —— 转发到 @aiusage/shared 的统一定价目录。
  * 历史 ModelPricing / PricingCatalog 类型保留 re-export 以兼容现有调用。
  */
+import { calculateCost as calculateSharedCost } from '@aiusage/shared';
+import type { CostCalcResult, IngestBreakdown } from '@aiusage/shared';
+
+/**
+ * 优先使用 scanner 按单次请求累计的 costUSD（exact）；
+ * 否则回退到共享 calculateCost（阶梯模型可传 requestCount 做平均估档）。
+ */
+export function calculateIngestBreakdownCost(breakdown: IngestBreakdown): CostCalcResult {
+  const calculated = calculateSharedCost(
+    breakdown.provider,
+    breakdown.product,
+    breakdown.model,
+    {
+      inputTokens: breakdown.inputTokens,
+      cachedInputTokens: breakdown.cachedInputTokens,
+      cacheWriteTokens: breakdown.cacheWriteTokens,
+      cacheWrite5mTokens: breakdown.cacheWrite5mTokens ?? breakdown.cacheWriteTokens,
+      cacheWrite1hTokens: breakdown.cacheWrite1hTokens ?? 0,
+      outputTokens: breakdown.outputTokens,
+      reasoningOutputTokens: breakdown.reasoningOutputTokens,
+    },
+    { requestCount: breakdown.eventCount },
+  );
+
+  if (
+    breakdown.costUSD == null ||
+    !Number.isFinite(breakdown.costUSD) ||
+    breakdown.costUSD <= 0 ||
+    breakdown.pricingVersion !== calculated.pricingVersion
+  ) {
+    return calculated;
+  }
+
+  return { ...calculated, estimatedCostUsd: breakdown.costUSD, costStatus: 'exact' };
+}
+
 export {
   calculateCost,
   getWorstCostStatus,

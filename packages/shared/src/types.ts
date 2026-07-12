@@ -47,7 +47,10 @@ export interface IngestBreakdown {
   cacheWrite1hTokens?: number;
   outputTokens: number;
   reasoningOutputTokens: number;
+  /** 扫描端按单次请求精确算出的费用（如 GPT-5.6 长上下文分档）；Worker 优先采用 */
   costUSD?: number;
+  /** 与 costUSD 配套的定价版本；版本不一致时 Worker 会回退重算 */
+  pricingVersion?: string;
 }
 
 // ── API 响应 ──
