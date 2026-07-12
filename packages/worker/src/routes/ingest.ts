@@ -1,5 +1,5 @@
 import type { IngestPayload, CostStatus } from '@aiusage/shared';
-import { jsonOk, jsonError } from '../utils/response.js';
+import { jsonNoStore, jsonError } from '../utils/response.js';
 import { verifyDeviceToken } from '../utils/token.js';
 import { calculateCost, getWorstCostStatus } from '../utils/pricing.js';
 import type { Env } from '../types.js';
@@ -58,6 +58,7 @@ export async function handleIngest(request: Request, env: Env): Promise<Response
         cacheWrite5mTokens,
         cacheWrite1hTokens,
         outputTokens: b.outputTokens,
+        reasoningOutputTokens: b.reasoningOutputTokens,
       });
 
       costStatuses.push(cost.costStatus);
@@ -202,5 +203,5 @@ export async function handleIngest(request: Request, env: Env): Promise<Response
     .bind(now, body.device.appVersion, body.device.deviceAlias ?? null, tokenPayload.deviceId)
     .run();
 
-  return jsonOk({ daysProcessed: body.days.length, costSummary });
+  return jsonNoStore({ daysProcessed: body.days.length, costSummary });
 }

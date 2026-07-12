@@ -4,7 +4,23 @@ import type { IngestBreakdown } from '@aiusage/shared';
 
 export function parseTs(value?: string | number): Date | null {
   if (value == null) return null;
-  const d = new Date(value);
+  if (typeof value === 'number') {
+    // Heuristic: values below 1e12 are unix seconds (Grok updates.jsonl), else ms.
+    const ms = value > 0 && value < 1e12 ? value * 1000 : value;
+    const d = new Date(ms);
+    return isNaN(d.getTime()) ? null : d;
+  }
+  const trimmed = value.trim();
+  if (!trimmed) return null;
+  // Numeric strings (unix seconds or ms)
+  if (/^\d+(\.\d+)?$/.test(trimmed)) {
+    const n = Number(trimmed);
+    if (!Number.isFinite(n)) return null;
+    const ms = n > 0 && n < 1e12 ? n * 1000 : n;
+    const d = new Date(ms);
+    return isNaN(d.getTime()) ? null : d;
+  }
+  const d = new Date(trimmed);
   return isNaN(d.getTime()) ? null : d;
 }
 
@@ -12,8 +28,13 @@ export function dateKey(date: Date): string {
   return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`;
 }
 
+/** Split path on `/` or `\` so Windows cwd displays correctly. */
+function pathParts(raw: string): string[] {
+  return raw.split(/[/\\]/).filter(Boolean);
+}
+
 export function projectFromPath(raw: string, aliases?: Record<string, string>): string {
-  const parts = raw.split('/').filter(Boolean);
+  const parts = pathParts(raw);
   const name = parts[parts.length - 1] || 'unknown';
   return aliases?.[raw] ?? aliases?.[name] ?? name;
 }
@@ -28,7 +49,7 @@ export function resolveProjectFields(
   rawPath: string,
   aliases?: Record<string, string>,
 ): ProjectFields {
-  const parts = rawPath.split('/').filter(Boolean);
+  const parts = pathParts(rawPath);
   const display = parts[parts.length - 1] || 'unknown';
   const alias = aliases?.[rawPath] ?? aliases?.[display];
   return {

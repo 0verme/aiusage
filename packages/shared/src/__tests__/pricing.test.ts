@@ -24,6 +24,7 @@ describe('catalog 结构', () => {
       ['cursor', 'cursor'],
       ['droid', 'droid'],
       ['opencode', 'opencode'],
+      ['xai', 'grok-build'],
     ];
     const missing = required.filter(([p, pr]) => !catalog.providers[p]?.[pr]);
     expect(missing).toEqual([]);
@@ -45,6 +46,9 @@ describe('calculateCost — 关键模型', () => {
     ['anthropic', 'claude-code', 'claude-opus-4-7', 30], // 5 + 25
     ['anthropic', 'claude-code', 'claude-sonnet-4-6', 18],
     ['openai', 'codex', 'gpt-5.4', 17.5], // 2.5 + 15
+    ['openai', 'codex', 'gpt-5.6', 55], // long context: 10 + 45 (GPT-5.6 Sol alias)
+    ['openai', 'codex', 'gpt-5.6-terra', 27.5], // long context: 5 + 22.5
+    ['openai', 'codex', 'gpt-5.6-luna', 11], // long context: 2 + 9
     ['openai', 'codex', 'gpt-5.5-pro', 210], // 30 + 180
     ['openai', 'codex', 'o3-deep-research', 25], // 5 + 20，修正后
     ['openai', 'codex', 'computer-use-preview', 7.5], // 1.5 + 6，修正后
@@ -59,6 +63,56 @@ describe('calculateCost — 关键模型', () => {
     const r = calculateCost('anthropic', 'claude-code', 'totally-unknown', tokens);
     expect(r.costStatus).toBe('unavailable');
     expect(r.estimatedCostUsd).toBe(0);
+  });
+
+  it('calculates Grok Build with estimated status', () => {
+    const r = calculateCost('xai', 'grok-build', 'grok-4.5-latest', tokens);
+    expect(r.resolvedModel).toBe('grok-4.5');
+    expect(r.estimatedCostUsd).toBeCloseTo(8, 4);
+    expect(r.costStatus).toBe('estimated');
+  });
+
+  it('keeps zero-token Grok Build usage estimated', () => {
+    const r = calculateCost('xai', 'grok-build', 'grok-4.5', { ...tokens, inputTokens: 0, outputTokens: 0 });
+    expect(r.costStatus).toBe('estimated');
+  });
+
+  it('applies Grok cached input rate', () => {
+    const r = calculateCost('xai', 'grok-build', 'grok-4.5', {
+      inputTokens: 500_000,
+      cachedInputTokens: 500_000,
+      cacheWriteTokens: 0,
+      outputTokens: 0,
+    });
+    // 0.5M * $2 + 0.5M * $0.5 = $1 + $0.25 = $1.25
+    expect(r.estimatedCostUsd).toBeCloseTo(1.25, 4);
+    expect(r.costStatus).toBe('estimated');
+  });
+
+  it('resolves grok-code-fast-1 alias to grok-build-0.1', () => {
+    const r = calculateCost('xai', 'grok-build', 'grok-code-fast-1', tokens);
+    expect(r.resolvedModel).toBe('grok-build-0.1');
+    // $1 + $2 = $3
+    expect(r.estimatedCostUsd).toBeCloseTo(3, 4);
+  });
+
+  it('prices grok-4.3 list rates', () => {
+    const r = calculateCost('xai', 'grok-build', 'grok-4.3', tokens);
+    // $1.25 + $2.50 = $3.75
+    expect(r.estimatedCostUsd).toBeCloseTo(3.75, 4);
+    expect(r.costStatus).toBe('estimated');
+  });
+
+  it('bills reasoning tokens at output rate', () => {
+    const r = calculateCost('xai', 'grok-build', 'grok-4.5', {
+      inputTokens: 0,
+      cachedInputTokens: 0,
+      cacheWriteTokens: 0,
+      outputTokens: 500_000,
+      reasoningOutputTokens: 500_000,
+    });
+    // (0.5 + 0.5) * $6 = $6
+    expect(r.estimatedCostUsd).toBeCloseTo(6, 4);
   });
 
   it('版本后缀别名（alias）解析为 exact', () => {
@@ -196,6 +250,30 @@ describe('多币种折算', () => {
 // ─── 阶梯定价 ───
 
 describe('阶梯定价', () => {
+  it('GPT-5.6 Sol 在 272K input 内使用标准价格', () => {
+    const r = calculateCost('openai', 'codex', 'gpt-5.6-sol', {
+      inputTokens: 100_000,
+      cachedInputTokens: 100_000,
+      cacheWriteTokens: 0,
+      outputTokens: 100_000,
+    });
+    expect(r.matchedTierIndex).toBe(0);
+    // 0.1M * $5 + 0.1M * $0.5 + 0.1M * $30 = $3.55
+    expect(r.estimatedCostUsd).toBeCloseTo(3.55, 4);
+  });
+
+  it('GPT-5.6 Sol 超过 272K input 时使用长上下文价格', () => {
+    const r = calculateCost('openai', 'codex', 'gpt-5.6-sol', {
+      inputTokens: 300_000,
+      cachedInputTokens: 0,
+      cacheWriteTokens: 0,
+      outputTokens: 1_000_000,
+    });
+    expect(r.matchedTierIndex).toBe(1);
+    // 0.3M * $10 + 1M * $45 = $48
+    expect(r.estimatedCostUsd).toBeCloseTo(48, 4);
+  });
+
   it('Qwen3-coder-plus ≤32K 命中第 0 档', () => {
     const r = calculateCost('alibaba', 'qwen-code', 'qwen3-coder-plus', {
       inputTokens: 10_000,

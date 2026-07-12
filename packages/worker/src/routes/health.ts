@@ -1,9 +1,9 @@
 import { SERVICE_NAME, SCHEMA_VERSION } from '@aiusage/shared';
-import { jsonOk } from '../utils/response.js';
+import { jsonNoStore } from '../utils/response.js';
 import type { Env } from '../types.js';
 
 export function handleHealth(env: Env): Response {
-  return jsonOk({
+  return jsonNoStore({
     siteId: env.SITE_ID,
     service: SERVICE_NAME,
     schemaVersion: SCHEMA_VERSION,

@@ -1,4 +1,4 @@
-import { jsonError, jsonOk } from '../utils/response.js';
+import { CACHE_PRESETS, jsonCached, jsonError } from '../utils/response.js';
 import { toPublicProjectName } from '../utils/privacy.js';
 import type { Env } from '../types.js';
 
@@ -204,7 +204,7 @@ export async function handleOverview(url: URL, env: Env): Promise<Response> {
   const costBearingEvents = Number(summary?.cost_bearing_events ?? 0);
   const totalCostUsd = roundUsd(summary?.total_cost_usd ?? 0);
 
-  return jsonOk({
+  return jsonCached({
     totalDays: activeDays,
     activeDays,
     totalEvents,
@@ -273,7 +273,7 @@ export async function handleOverview(url: URL, env: Env): Promise<Response> {
         projects,
       },
     },
-  }, true);
+  }, CACHE_PRESETS.dashboard, true);
 }
 
 function parseFilters(url: URL): DashboardFilters | null {

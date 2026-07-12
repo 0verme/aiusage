@@ -220,6 +220,8 @@ Configure at two levels:
 
 ## Supported Tools
 
+Grok Build (xAI) is supported from `~/.grok/sessions/` (or `GROK_HOME`). The scanner never reads `auth.json` and never uploads chat content. When no billable usage fields are present, it estimates tokens only from de-duplicated user and assistant text, always reports the cost as estimated, and never treats `signals.json` `contextTokensUsed` as billed input.
+
 The controller automatically detects and scans all installed tools:
 
 | Tool | Provider | Log Location |

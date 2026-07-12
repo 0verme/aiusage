@@ -95,14 +95,22 @@ export function calculateCost(
 ): CostCalcResult {
   const cat = options.catalog ?? defaultCatalog;
 
+  const reasoningTokens = tokens.reasoningOutputTokens ?? 0;
   const totalTokens =
     tokens.inputTokens +
     tokens.cachedInputTokens +
     tokens.cacheWriteTokens +
-    tokens.outputTokens;
+    tokens.outputTokens +
+    reasoningTokens;
 
   if (totalTokens === 0) {
-    return { estimatedCostUsd: 0, costStatus: 'exact', pricingVersion: cat.version };
+    const resolved = resolveModelPricing(cat, provider, product, model);
+    return {
+      estimatedCostUsd: 0,
+      costStatus: resolved?.pricing.force_estimated ? 'estimated' : 'exact',
+      pricingVersion: cat.version,
+      resolvedModel: resolved?.resolvedModel,
+    };
   }
 
   const isFast = model.endsWith('-fast');
@@ -114,7 +122,7 @@ export function calculateCost(
   }
 
   const { resolvedModel, pricing, normalized } = resolved;
-  let costStatus: CostStatus = normalized ? 'estimated' : 'exact';
+  let costStatus: CostStatus = normalized || pricing.force_estimated ? 'estimated' : 'exact';
 
   // 阶梯：按总 input（含 cached/cw）命中档位
   let unit: PricingTier;
@@ -139,12 +147,15 @@ export function calculateCost(
   const cw1hRate = unit.cache_write_1h_per_million ?? pricing.cache_write_1h_per_million ?? 0;
   const cachedRate = unit.cached_input_per_million ?? pricing.cached_input_per_million ?? 0;
 
+  const outputRate = unit.output_per_million ?? 0;
   let raw =
     (tokens.inputTokens / 1_000_000) * (unit.input_per_million ?? 0) +
     (tokens.cachedInputTokens / 1_000_000) * (cachedRate ?? 0) +
     ((tokens.cacheWrite5mTokens ?? tokens.cacheWriteTokens) / 1_000_000) * cw5Rate +
     ((tokens.cacheWrite1hTokens ?? 0) / 1_000_000) * cw1hRate +
-    (tokens.outputTokens / 1_000_000) * (unit.output_per_million ?? 0);
+    (tokens.outputTokens / 1_000_000) * outputRate +
+    // Reasoning / thought tokens are billed at the output rate (xAI, o-series style).
+    (reasoningTokens / 1_000_000) * outputRate;
 
   // 折算 currency → USD
   raw = toUsd(raw, pricing.currency, cat);

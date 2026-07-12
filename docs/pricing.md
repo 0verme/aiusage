@@ -18,6 +18,7 @@ packages/shared/src/pricing/
     ├── zhipu.ts         (GLM)
     ├── github.ts        (Copilot — 影子价)
     ├── sourcegraph.ts   (Amp — 影子价)
+    ├── xai.ts           (Grok Build — 影子价 / force_estimated)
     └── placeholders.ts  (inflection / cursor / droid / opencode — 空表)
 ```
 

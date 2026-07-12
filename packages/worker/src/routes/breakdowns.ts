@@ -1,5 +1,5 @@
 import { DEFAULT_BREAKDOWN_LIMIT, MAX_BREAKDOWN_LIMIT } from '@aiusage/shared';
-import { jsonError, jsonOk } from '../utils/response.js';
+import { CACHE_PRESETS, jsonCached, jsonError } from '../utils/response.js';
 import { toPublicProjectName } from '../utils/privacy.js';
 import type { Env } from '../types.js';
 
@@ -140,7 +140,7 @@ export async function handleBreakdowns(url: URL, env: Env): Promise<Response> {
 
   const total = Number(countResult?.total ?? 0);
 
-  return jsonOk({
+  return jsonCached({
     data,
     pagination: {
       total,
@@ -150,7 +150,7 @@ export async function handleBreakdowns(url: URL, env: Env): Promise<Response> {
     },
     sort,
     order,
-  }, true);
+  }, CACHE_PRESETS.trend, true);
 }
 
 function readTextParam(url: URL, key: string): string | null {

@@ -10,6 +10,39 @@ import type { ProductPricing } from '../types.js';
 export const openai: Record<string, ProductPricing> = {
   codex: {
     models: {
+      // ── GPT-5.6 系列 ──
+      // 长上下文（input + cached input + cache write > 272K）价格由 tiers 表达。
+      // cache write = 未缓存 input 的 1.25 倍。
+      'gpt-5.6': {
+        currency: 'USD',
+        notes: 'GPT-5.6 alias routes to GPT-5.6 Sol',
+        tiers: [
+          { threshold: 272_000, input_per_million: 5, cached_input_per_million: 0.5, output_per_million: 30, cache_write_5m_per_million: 6.25 },
+          { input_per_million: 10, cached_input_per_million: 1, output_per_million: 45, cache_write_5m_per_million: 12.5 },
+        ],
+      },
+      'gpt-5.6-sol': {
+        currency: 'USD',
+        tiers: [
+          { threshold: 272_000, input_per_million: 5, cached_input_per_million: 0.5, output_per_million: 30, cache_write_5m_per_million: 6.25 },
+          { input_per_million: 10, cached_input_per_million: 1, output_per_million: 45, cache_write_5m_per_million: 12.5 },
+        ],
+      },
+      'gpt-5.6-terra': {
+        currency: 'USD',
+        tiers: [
+          { threshold: 272_000, input_per_million: 2.5, cached_input_per_million: 0.25, output_per_million: 15, cache_write_5m_per_million: 3.125 },
+          { input_per_million: 5, cached_input_per_million: 0.5, output_per_million: 22.5, cache_write_5m_per_million: 6.25 },
+        ],
+      },
+      'gpt-5.6-luna': {
+        currency: 'USD',
+        tiers: [
+          { threshold: 272_000, input_per_million: 1, cached_input_per_million: 0.1, output_per_million: 6, cache_write_5m_per_million: 1.25 },
+          { input_per_million: 2, cached_input_per_million: 0.2, output_per_million: 9, cache_write_5m_per_million: 2.5 },
+        ],
+      },
+
       // ── GPT-5.5 系列 ──
       'gpt-5.5': {
         currency: 'USD',

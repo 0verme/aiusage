@@ -72,6 +72,18 @@ describe('calculateCost: 基本计费', () => {
     expect(result.costStatus).toBe('exact');
   });
 
+  it('Codex gpt-5.6 alias 按 Sol 的价格计费', () => {
+    const result = calculateCost('openai', 'codex', 'gpt-5.6', {
+      inputTokens: 1_000_000,
+      cachedInputTokens: 1_000_000,
+      cacheWriteTokens: 0,
+      outputTokens: 500_000,
+    });
+    // 长上下文：1*$10 + 1*$1 + 0.5*$45 = $33.5
+    expect(result.estimatedCostUsd).toBe(33.5);
+    expect(result.costStatus).toBe('exact');
+  });
+
   it('Codex auto-review 按 gpt-5.4 估算', () => {
     const result = calculateCost('openai', 'codex', 'codex-auto-review', {
       inputTokens: 1_000_000,

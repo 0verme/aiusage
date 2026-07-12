@@ -173,6 +173,7 @@ async function discoverAllDates(): Promise<string[]> {
     discoverGenericJsonlDates(join(home, '.factory', 'sessions'), dates),
     discoverGenericJsonDates(join(home, '.local', 'share', 'opencode'), dates),
     discoverGenericJsonlDates(join(home, '.pi', 'agent', 'sessions'), dates),
+    discoverGenericJsonlDates(join(process.env.GROK_HOME?.trim() ?? join(home, '.grok'), 'sessions'), dates),
   ]);
   return [...dates].sort();
 }
@@ -186,9 +187,9 @@ async function discoverGenericJsonlDates(baseDir: string, dates: Set<string>): P
     if (!content) continue;
     for (const line of content.split('\n')) {
       if (!line.trim()) continue;
-      let record: { timestamp?: string | number };
+      let record: { timestamp?: string | number; created_at?: string | number; createdAt?: string | number; started_at?: string | number; startedAt?: string | number };
       try { record = JSON.parse(line); } catch { continue; }
-      const ts = parseTimestamp(record.timestamp as string | undefined);
+      const ts = parseTimestamp(record.timestamp ?? record.created_at ?? record.createdAt ?? record.started_at ?? record.startedAt);
       if (ts) dates.add(toDateKey(ts));
     }
   }

@@ -37,6 +37,8 @@ export interface ModelPricing {
   effective_to?: string;
   /** 备注（如：促销、即将下线、需要 batch 模式等） */
   notes?: string;
+  /** Usage is derived rather than a provider-issued billable total. */
+  force_estimated?: boolean;
 
   // 非阶梯字段（无 tiers 时使用；有 tiers 时作为缓存/cache_write 兜底）
   input_per_million?: number;
@@ -73,6 +75,8 @@ export interface CostCalcInput {
   cacheWrite5mTokens?: number;
   cacheWrite1hTokens?: number;
   outputTokens: number;
+  /** Billed at output rate when present (xAI reasoning / similar). */
+  reasoningOutputTokens?: number;
 }
 
 export interface CostCalcResult {

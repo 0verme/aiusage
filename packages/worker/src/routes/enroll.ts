@@ -1,4 +1,4 @@
-import { jsonOk, jsonError } from '../utils/response.js';
+import { jsonNoStore, jsonError } from '../utils/response.js';
 import { signDeviceToken } from '../utils/token.js';
 import type { Env } from '../types.js';
 
@@ -68,7 +68,7 @@ export async function handleEnroll(request: Request, env: Env): Promise<Response
     env.DEVICE_TOKEN_SECRET,
   );
 
-  return jsonOk({
+  return jsonNoStore({
     siteId: env.SITE_ID,
     deviceId: body.deviceId,
     deviceToken,

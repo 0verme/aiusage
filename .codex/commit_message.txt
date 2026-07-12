@@ -1,0 +1,6 @@
+feat(usage): 扩展 Grok Build 扫描与统一计价
+
+- 新增 Grok Build 扫描器、项目发现、日期识别及测试
+- 增加 xAI/GPT-5.6 定价与推理 token 计费支持
+- 优化 Worker API 缓存、HEAD 请求及无缓存响应策略
+- 更新部署与定价文档、Workspace 配置
