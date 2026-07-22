@@ -69,15 +69,11 @@ function getServiceTierMultiplier(
  * 这样可确保未来出现 `claude-opus-4-8` 等新版本被显式登记前，会返回 unavailable
  * 而不是默默按旧版本计算（旧版本可能贵 3 倍）。
  */
-function resolveModelPricing(
+function resolveModelInProduct(
   catalog: PricingCatalog,
-  provider: string,
-  product: string,
+  models: Record<string, ModelPricing>,
   model: string,
 ): { resolvedModel: string; pricing: ModelPricing; normalized: boolean } | null {
-  const models = catalog.providers[provider]?.[product]?.models;
-  if (!models) return null;
-
   const aliasResolved = catalog.aliases[model];
   if (aliasResolved && models[aliasResolved]) {
     // Alias 是 catalog 显式声明的等价名（如 claude-opus-4-7-20260201 → claude-opus-4-7），
@@ -102,6 +98,52 @@ function resolveModelPricing(
   }
 
   return null;
+}
+
+function resolveModelPricing(
+  catalog: PricingCatalog,
+  provider: string,
+  product: string,
+  model: string,
+): { resolvedModel: string; pricing: ModelPricing; normalized: boolean } | null {
+  const products = catalog.providers[provider];
+  if (!products) return null;
+
+  const directModels = products[product]?.models;
+  if (directModels) {
+    const direct = resolveModelInProduct(catalog, directModels, model);
+    if (direct) return direct;
+  }
+
+  // The product identifies the client entry point and may differ from the billing product.
+  const matches = Object.entries(products)
+    .filter(([name]) => name !== product)
+    .map(([, value]) => resolveModelInProduct(catalog, value.models, model))
+    .filter((value): value is NonNullable<typeof value> => value !== null);
+
+  return matches.length === 1 ? matches[0] : null;
+}
+
+/** 根据模型在定价目录中的唯一归属识别真实厂商。 */
+export function resolveProviderForModel(
+  model: string,
+  fallbackProvider: string,
+  catalog: PricingCatalog = defaultCatalog,
+): string {
+  // A configured third-party endpoint is authoritative: gateways may expose
+  // Anthropic-compatible model aliases while applying their own billing.
+  if (fallbackProvider !== 'anthropic' && fallbackProvider !== 'custom') {
+    return fallbackProvider;
+  }
+
+  const { baseModel } = splitServiceTierSuffix(model);
+  const providers = Object.entries(catalog.providers)
+    .filter(([, products]) => Object.values(products).some(
+      product => resolveModelInProduct(catalog, product.models, baseModel) !== null,
+    ))
+    .map(([provider]) => provider);
+
+  return providers.length === 1 ? providers[0] : fallbackProvider;
 }
 
 /** 选阶梯：按总 input（含 cached + cache_write）命中。 */

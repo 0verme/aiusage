@@ -96,6 +96,45 @@ describe('JSONL scanning', () => {
     expect(b.cacheWriteTokens).toBe(3000);
   });
 
+  it('按模型定价归属识别 Claude Code 使用的真实厂商', async () => {
+    const projectDir = join(tmpDir, 'projects', '-Users-test-project');
+    await writeJsonl(projectDir, 'session.jsonl', [
+      claudeRecord({
+        timestamp: '2026-01-15T10:00:00.000Z',
+        requestId: 'req_deepseek',
+        model: 'deepseek-v4-pro',
+        inputTokens: 1000,
+        outputTokens: 200,
+      }),
+    ]);
+
+    const result = await scanClaudeDates(['2026-01-15'], join(tmpDir, 'projects'));
+    expect(result.get('2026-01-15')![0]).toMatchObject({
+      provider: 'deepseek',
+      product: 'claude-code',
+      model: 'deepseek-v4-pro',
+    });
+  });
+
+  it('第三方端点优先于兼容的 Anthropic 模型名称', async () => {
+    await writeFile(join(tmpDir, 'settings.json'), JSON.stringify({
+      env: { ANTHROPIC_BASE_URL: 'https://api.futurevendor.com/anthropic' },
+    }));
+    const projectDir = join(tmpDir, 'projects', '-Users-test-project');
+    await writeJsonl(projectDir, 'session.jsonl', [
+      claudeRecord({
+        timestamp: '2026-01-15T10:00:00.000Z',
+        requestId: 'req_custom',
+        model: 'claude-opus-4-8',
+        inputTokens: 1000,
+        outputTokens: 200,
+      }),
+    ]);
+
+    const result = await scanClaudeDates(['2026-01-15'], join(tmpDir, 'projects'));
+    expect(result.get('2026-01-15')![0].provider).toBe('futurevendor');
+  });
+
   it('deduplicates repeated records with the same messageId+requestId (first-seen wins)', async () => {
     const projectDir = join(tmpDir, 'projects', '-Users-test-project');
     // Same messageId+requestId in 3 files (session replay pattern): identical token counts

@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { calculateCost, catalog } from '../pricing/index.js';
+import { calculateCost, catalog, resolveProviderForModel } from '../pricing/index.js';
 
 // ─── 结构完整性 ───
 
@@ -262,6 +262,24 @@ describe('多币种折算', () => {
     });
     // 0.14 + 0.28 = 0.42
     expect(r.estimatedCostUsd).toBeCloseTo(0.42, 4);
+  });
+
+  it('调用入口与计费产品不同时按 provider 内的唯一模型定价', () => {
+    const r = calculateCost('deepseek', 'claude-code', 'deepseek-v4-flash', {
+      inputTokens: 1_000_000,
+      cachedInputTokens: 0,
+      cacheWriteTokens: 0,
+      outputTokens: 1_000_000,
+    });
+    expect(r.estimatedCostUsd).toBeCloseTo(0.42, 4);
+    expect(r.costStatus).toBe('exact');
+  });
+
+  it('按定价目录中的唯一模型归属识别 provider', () => {
+    expect(resolveProviderForModel('deepseek-v4-pro', 'anthropic')).toBe('deepseek');
+    expect(resolveProviderForModel('claude-opus-4-8', 'custom')).toBe('anthropic');
+    expect(resolveProviderForModel('vendor-new-model', 'openrouter')).toBe('openrouter');
+    expect(resolveProviderForModel('claude-opus-4-8', 'deepseek')).toBe('deepseek');
   });
 });
 

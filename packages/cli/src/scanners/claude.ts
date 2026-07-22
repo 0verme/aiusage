@@ -2,7 +2,7 @@ import { readdir, open, readFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { homedir } from 'node:os';
 import { createInterface } from 'node:readline';
-import type { IngestBreakdown } from '@aiusage/shared';
+import { resolveProviderForModel, type IngestBreakdown } from '@aiusage/shared';
 import { normalizeModelName, runWithConcurrency, type ProjectFields } from './utils.js';
 
 const FILE_CONCURRENCY = 16;
@@ -61,6 +61,53 @@ function getClaudeProjectDirs(claudeDir?: string): string[] {
   ];
 }
 
+interface ClaudeSource {
+  projectsDir: string;
+  fallbackProvider: string;
+}
+
+async function getClaudeSources(claudeDir?: string): Promise<ClaudeSource[]> {
+  return Promise.all(getClaudeProjectDirs(claudeDir).map(async projectsDir => ({
+    projectsDir,
+    fallbackProvider: await readEndpointProvider(projectsDir),
+  })));
+}
+
+async function readEndpointProvider(projectsDir: string): Promise<string> {
+  try {
+    const raw = await readFile(join(projectsDir, '..', 'settings.json'), 'utf-8');
+    const settings = JSON.parse(raw) as { env?: { ANTHROPIC_BASE_URL?: string } };
+    return providerFromBaseUrl(settings.env?.ANTHROPIC_BASE_URL ?? process.env.ANTHROPIC_BASE_URL) ?? 'anthropic';
+  } catch {
+    return providerFromBaseUrl(process.env.ANTHROPIC_BASE_URL) ?? 'anthropic';
+  }
+}
+
+function providerFromBaseUrl(value?: string): string | undefined {
+  if (!value) return undefined;
+
+  try {
+    const hostname = new URL(value).hostname.toLowerCase();
+    if (!hostname || hostname === 'localhost' || /^\d+(?:\.\d+){3}$/.test(hostname)) {
+      return 'custom';
+    }
+
+    const knownProviders = [
+      'anthropic', 'openai', 'google', 'deepseek', 'moonshot', 'alibaba',
+      'zhipu', 'github', 'sourcegraph', 'xai', 'openrouter', 'siliconflow',
+    ];
+    const known = knownProviders.find(provider => hostname.split('.').includes(provider));
+    if (known) return known;
+
+    const labels = hostname.split('.').filter(Boolean);
+    if (labels.length < 2) return labels[0] || 'custom';
+    const compoundSuffix = labels.length >= 3 && ['com', 'net', 'org', 'co'].includes(labels.at(-2) ?? '');
+    return labels[compoundSuffix ? labels.length - 3 : labels.length - 2] ?? 'custom';
+  } catch {
+    return 'custom';
+  }
+}
+
 export async function scanClaude(
   targetDate: string,
   claudeDir?: string,
@@ -79,7 +126,7 @@ export async function scanClaudeDates(
   const groupedByDate = new Map<string, Map<string, IngestBreakdown>>();
   for (const targetDate of targetDateSet) groupedByDate.set(targetDate, new Map());
 
-  const baseDirs = getClaudeProjectDirs(claudeDir);
+  const sources = await getClaudeSources(claudeDir);
 
   // Global dedup set: compound key messageId:requestId (slopmeter approach).
   // Only deduplicates when both IDs are present; entries missing either ID are
@@ -92,9 +139,9 @@ export async function scanClaudeDates(
   const sessionSets = new Map<string, Set<string>>();
 
   // 收集所有 { filePath, projectFields } 对
-  const fileJobs: { filePath: string; projectFields: ProjectFields }[] = [];
+  const fileJobs: { filePath: string; projectFields: ProjectFields; fallbackProvider: string }[] = [];
 
-  for (const baseDir of baseDirs) {
+  for (const { projectsDir: baseDir, fallbackProvider } of sources) {
     let projectDirs: string[];
     try {
       projectDirs = await readdir(baseDir);
@@ -114,14 +161,14 @@ export async function scanClaudeDates(
       }
 
       for (const filePath of jsonlFiles) {
-        fileJobs.push({ filePath, projectFields: fields });
+        fileJobs.push({ filePath, projectFields: fields, fallbackProvider });
       }
     }
   }
 
   // 并发流式处理文件，直接聚合到 groupedByDate
   await runWithConcurrency(fileJobs, FILE_CONCURRENCY, async (job) => {
-    await processJsonlFile(job.filePath, job.projectFields, targetDateSet, projectAliases, groupedByDate, processedHashes, sessionSets);
+    await processJsonlFile(job.filePath, job.projectFields, job.fallbackProvider, targetDateSet, projectAliases, groupedByDate, processedHashes, sessionSets);
   });
 
 
@@ -130,10 +177,10 @@ export async function scanClaudeDates(
   const missingDates = [...targetDateSet].filter(d => groupedByDate.get(d)?.size === 0);
   if (missingDates.length > 0) {
     const remaining = new Set(missingDates);
-    for (const baseDir of baseDirs) {
+    for (const { projectsDir: baseDir, fallbackProvider } of sources) {
       if (remaining.size === 0) break;
       const statsCachePath = join(baseDir, '..', 'stats-cache.json');
-      await fillFromStatsCache(statsCachePath, remaining, groupedByDate);
+      await fillFromStatsCache(statsCachePath, fallbackProvider, remaining, groupedByDate);
       // Remove dates that were just filled
       for (const d of remaining) {
         if (groupedByDate.get(d)!.size > 0) remaining.delete(d);
@@ -158,6 +205,7 @@ export async function scanClaudeDates(
 async function processJsonlFile(
   filePath: string,
   fallbackFields: ProjectFields,
+  fallbackProvider: string,
   targetDateSet: Set<string>,
   projectAliases: Record<string, string> | undefined,
   groupedByDate: Map<string, Map<string, IngestBreakdown>>,
@@ -219,6 +267,7 @@ async function processJsonlFile(
       const usage = message.usage;
       let model = normalizeModelName(rawModel);
       if (usage.speed === 'fast') model = `${model}-fast`;
+      const provider = resolveProviderForModel(model, fallbackProvider);
       const recordFields = record.cwd ? resolveProject(record.cwd, projectAliases) : fallbackFields;
       const sessionId = record.sessionId ?? fallbackSessionId;
       const costUSD = record.costUSD ?? 0;
@@ -235,7 +284,7 @@ async function processJsonlFile(
       if (!grouped) continue;
 
       const cacheWriteTokens = cache5m + cache1h;
-      const key = `${model}|${recordFields.project}`;
+      const key = `${provider}|${model}|${recordFields.project}`;
 
       // Track distinct sessions per group
       const sessionSetKey = `${usageDate}|${key}`;
@@ -254,7 +303,7 @@ async function processJsonlFile(
         existing.costUSD = (existing.costUSD ?? 0) + costUSD;
       } else {
         grouped.set(key, {
-          provider: 'anthropic',
+          provider,
           product: 'claude-code',
           channel: 'cli',
           model,
@@ -280,6 +329,7 @@ async function processJsonlFile(
 
 async function fillFromStatsCache(
   statsCachePath: string,
+  fallbackProvider: string,
   missingDates: Set<string>,
   groupedByDate: Map<string, Map<string, IngestBreakdown>>,
 ): Promise<void> {
@@ -317,13 +367,14 @@ async function fillFromStatsCache(
     for (const [rawModel, totalTokens] of Object.entries(tokensByModel)) {
       if (!totalTokens) continue;
       const model = normalizeModelName(rawModel);
+      const provider = resolveProviderForModel(model, fallbackProvider);
       const ratio = inputRatios[rawModel] ?? inputRatios[model] ?? STATS_CACHE_DEFAULT_INPUT_RATIO;
 
       const inputTokens = Math.round(totalTokens * ratio);
       const outputTokens = totalTokens - inputTokens;
 
       // stats-cache has no per-project breakdown
-      const key = `${model}|unknown`;
+      const key = `${provider}|${model}|unknown`;
       const existing = grouped.get(key);
       if (existing) {
         existing.eventCount += 1;
@@ -331,7 +382,7 @@ async function fillFromStatsCache(
         existing.outputTokens += outputTokens;
       } else {
         grouped.set(key, {
-          provider: 'anthropic',
+          provider,
           product: 'claude-code',
           channel: 'cli',
           model,
