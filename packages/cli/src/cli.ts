@@ -132,8 +132,8 @@ async function runScan(flags: Record<string, string | boolean>, positionals: str
   const isJson = Boolean(flags.json);
   const dates = resolveScanDates(flags, config);
   const results = dates.length === 1
-    ? [await scanDate(dates[0], { projectAliases: config.projectAliases })]
-    : await scanDates(dates, { projectAliases: config.projectAliases });
+    ? [await scanDate(dates[0], { projectAliases: config.projectAliases, opencodeDbPaths: config.scanner?.opencodeDbPaths })]
+    : await scanDates(dates, { projectAliases: config.projectAliases, opencodeDbPaths: config.scanner?.opencodeDbPaths });
 
   if (isJson) {
     console.log(JSON.stringify(results.length === 1 ? results[0] : results, null, 2));
@@ -193,7 +193,11 @@ async function runReport(flags: Record<string, string | boolean>, positionals: s
 
   // 日期解析：--from/--start, --to/--end, --date, --today, --range, --lookback
   const { dates, range } = resolveDateParams(flags, config);
-  const report = await buildLocalReport(range, { projectAliases: config.projectAliases, dates });
+  const report = await buildLocalReport(range, {
+    projectAliases: config.projectAliases,
+    opencodeDbPaths: config.scanner?.opencodeDbPaths,
+    dates,
+  });
 
   if (flags.json) {
     console.log(JSON.stringify(report, null, 2));
@@ -311,7 +315,10 @@ async function runSync(flags: Record<string, string | boolean>, positionals: str
   // 扫描一次，所有 target 共享结果
   console.log(`扫描 ${targetDates.length} 天 (${targetDates[0]} ~ ${targetDates[targetDates.length - 1]}) ...`);
 
-  const results = await scanDates(targetDates, { projectAliases: config.projectAliases });
+  const results = await scanDates(targetDates, {
+    projectAliases: config.projectAliases,
+    opencodeDbPaths: config.scanner?.opencodeDbPaths,
+  });
   const visibility = config.privacy?.projectVisibility;
   const allDays = results
     .filter(r => r.breakdowns.length > 0)

@@ -224,14 +224,25 @@ Grok Build (xAI) is supported from `~/.grok/sessions/` (or `GROK_HOME`). The sca
 
 The controller automatically detects and scans all installed tools:
 
-| Tool | Provider | Log Location |
-|------|----------|-------------|
-| Claude Code | Anthropic | `~/.claude/projects/` |
-| Codex CLI | OpenAI | `~/.codex/sessions/` |
-| Copilot CLI | GitHub | `~/.copilot/session-state/` |
+| Tool | Provider | Usage Source |
+|------|----------|--------------|
+| Claude Code | Anthropic / compatible wrappers | `~/.config/claude/projects/`, `~/.claude/projects/` |
+| Codex CLI | OpenAI | `~/.codex/sessions/`, `~/.codex/archived_sessions/` |
+| Cursor | Cursor | Local `state.vscdb` credential + Cursor usage CSV API |
+| Copilot CLI | GitHub | `~/.copilot/otel/`, `~/.copilot/session-state/` |
+| Copilot for VS Code | GitHub | VS Code logs and `User/workspaceStorage/**/chatSessions/*.{json,jsonl}` |
 | Gemini CLI | Google | `~/.gemini/tmp/` |
-| Amp | Sourcegraph | `~/.local/share/amp/threads/` |
-| Kimi Code | Moonshot | `~/.kimi/sessions/` |
-| Qwen Code | Alibaba | `~/.qwen/tmp/` |
-| Droid | — | `~/.factory/sessions/` |
-| OpenCode | — | `~/.local/share/opencode/` |
+| Antigravity | Google | `~/.gemini/antigravity/` interaction metadata |
+| Amp | Model provider (Sourcegraph product) | `~/.local/share/amp/threads/` |
+| Kimi Code | Moonshot | `$KIMI_CODE_HOME/sessions/` (default `~/.kimi-code/sessions/`) |
+| Kimi CLI (legacy) | Moonshot | `~/.kimi/sessions/` |
+| Qwen Code | Alibaba | `~/.qwen/projects/`, legacy `~/.qwen/tmp/` |
+| Droid | Factory | `~/.factory/sessions/*.settings.json` |
+| OpenCode | OpenCode / underlying model provider | `$XDG_DATA_HOME/opencode/opencode*.db` (v1 `message` + v2 `session_message`), legacy `storage/message/`; supports `OPENCODE_DB` and configured extra paths |
+| Pi / Oh My Pi | Multiple | `~/.pi/agent/sessions/`, `~/.omp/agent/sessions/` |
+
+The scanner implementations are compatibility-audited against the overlapping
+MIT-licensed [tokscale](https://github.com/junhoyeo/tokscale) parsers. Some
+legacy IDE artifacts expose interaction timestamps but no reliable token
+counters; AIUsage keeps those as zero-token activity instead of estimating
+billable usage from conversation content.

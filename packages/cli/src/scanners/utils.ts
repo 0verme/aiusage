@@ -1,40 +1,54 @@
-import { readdir } from 'node:fs/promises';
+import { readdir, stat } from 'node:fs/promises';
 import { join } from 'node:path';
 import type { IngestBreakdown } from '@aiusage/shared';
 
+/** 早于此刻视为脏数据下界（2015-01-01），用于过滤被误判单位的时间戳 */
+const MIN_VALID_MS = Date.UTC(2015, 0, 1);
+
 export function parseTs(value?: string | number): Date | null {
-  if (value == null) return null;
-  if (typeof value === 'number') {
-    // Heuristic: values below 1e12 are unix seconds (Grok updates.jsonl), else ms.
-    const ms = value > 0 && value < 1e12 ? value * 1000 : value;
-    const d = new Date(ms);
-    return isNaN(d.getTime()) ? null : d;
+  if (value == null || value === '') return null;
+  // 数值时间戳：区分秒级（10 位）与毫秒级（13 位）。
+  // 形如 1775196391.26 的秒级值若按毫秒解析会落到 1970，需先 ×1000。
+  let input: string | number = value;
+  if (typeof value === 'number' || /^\d+(\.\d+)?$/.test(value)) {
+    const num = typeof value === 'number' ? value : Number(value);
+    input = num < 1e12 ? num * 1000 : num;
   }
-  const trimmed = value.trim();
-  if (!trimmed) return null;
-  // Numeric strings (unix seconds or ms)
-  if (/^\d+(\.\d+)?$/.test(trimmed)) {
-    const n = Number(trimmed);
-    if (!Number.isFinite(n)) return null;
-    const ms = n > 0 && n < 1e12 ? n * 1000 : n;
-    const d = new Date(ms);
-    return isNaN(d.getTime()) ? null : d;
-  }
-  const d = new Date(trimmed);
-  return isNaN(d.getTime()) ? null : d;
+  const d = new Date(input);
+  const t = d.getTime();
+  if (isNaN(t) || t < MIN_VALID_MS) return null;
+  return d;
 }
 
 export function dateKey(date: Date): string {
   return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`;
 }
 
-/** Split path on `/` or `\` so Windows cwd displays correctly. */
-function pathParts(raw: string): string[] {
-  return raw.split(/[/\\]/).filter(Boolean);
+/** 文件内没有可靠时间戳时，以 mtime 兜底，避免有真实 token 的记录被静默丢弃。 */
+export async function fileModifiedTs(filePath: string): Promise<Date | null> {
+  try {
+    return parseTs((await stat(filePath)).mtimeMs);
+  } catch {
+    return null;
+  }
+}
+
+/** 根据模型名推断底层供应商；无法识别时保留调用方指定的产品供应商。 */
+export function inferProviderFromModel(model: string, fallback: string): string {
+  const value = model.trim().toLowerCase();
+  if (/^(claude|opus|sonnet|haiku)(?:[-.]|$)/.test(value)) return 'anthropic';
+  if (/^(gpt|chatgpt|codex|o[134])(?:[-.]|$)/.test(value)) return 'openai';
+  if (/^gemini(?:[-.]|$)/.test(value)) return 'google';
+  if (/^qwen(?:[-.]|$)/.test(value)) return 'alibaba';
+  if (/^deepseek(?:[-.]|$)/.test(value)) return 'deepseek';
+  if (/^(glm|codegeex)(?:[-.]|$)/.test(value)) return 'zhipu';
+  if (/^(kimi|moonshot)(?:[-/.]|$)/.test(value)) return 'moonshot';
+  if (/^grok(?:[-.]|$)/.test(value)) return 'xai';
+  return fallback;
 }
 
 export function projectFromPath(raw: string, aliases?: Record<string, string>): string {
-  const parts = pathParts(raw);
+  const parts = raw.split(/[\\/]+/).filter(Boolean);
   const name = parts[parts.length - 1] || 'unknown';
   return aliases?.[raw] ?? aliases?.[name] ?? name;
 }
@@ -49,7 +63,7 @@ export function resolveProjectFields(
   rawPath: string,
   aliases?: Record<string, string>,
 ): ProjectFields {
-  const parts = pathParts(rawPath);
+  const parts = rawPath.split(/[\\/]+/).filter(Boolean);
   const display = parts[parts.length - 1] || 'unknown';
   const alias = aliases?.[rawPath] ?? aliases?.[display];
   return {
@@ -68,6 +82,7 @@ export async function walkFiles(dir: string, ext: string): Promise<string[]> {
 async function walk(dir: string, ext: string, out: string[]): Promise<void> {
   let entries;
   try { entries = await readdir(dir, { withFileTypes: true }); } catch { return; }
+  entries.sort((a, b) => a.name.localeCompare(b.name));
   for (const e of entries) {
     const full = join(dir, e.name);
     if (e.isDirectory()) await walk(full, ext, out);

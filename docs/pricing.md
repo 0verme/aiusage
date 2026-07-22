@@ -41,6 +41,7 @@ packages/shared/src/pricing/
 | `currency: 'USD' \| 'CNY'` | 价格币种。Worker 端结算时按 `catalog.fx` 折算到 USD |
 | `input_per_million` / `output_per_million` | 基础单价 / 1M tokens |
 | `cached_input_per_million` | cache hit 价（Anthropic 叫 cache_read，Kimi 叫缓存命中） |
+| `cache_write_per_million` | 通用 cache write 价（Kimi 的缓存未命中按普通输入价） |
 | `cache_write_5m_per_million` / `cache_write_1h_per_million` | Anthropic 风格 prompt caching write |
 | `tiers?: PricingTier[]` | 阶梯定价：按 input token 数命中不同档位（Qwen / Gemini 2.5 Pro / GLM 等） |
 | `effective_from` / `effective_to` | 价格生效区间（审计用） |

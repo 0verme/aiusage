@@ -2,7 +2,7 @@
 //   pnpm --filter @aiusage/worker add -D vitest
 
 import { describe, it, expect } from 'vitest';
-import { calculateCost, getPricingCatalog, getWorstCostStatus } from '../utils/pricing.js';
+import { calculateCost, calculateIngestBreakdownCost, getPricingCatalog, getWorstCostStatus } from '../utils/pricing.js';
 
 // ─── getPricingCatalog ───
 
@@ -94,6 +94,47 @@ describe('calculateCost: 基本计费', () => {
     // gpt-5.4 长上下文档: 1*5 + 1*0.5 + 1*22.5 = $28
     expect(result.estimatedCostUsd).toBe(28);
     // codex-auto-review 是 catalog 里的显式 alias → gpt-5.4，按 exact 处理
+    expect(result.costStatus).toBe('exact');
+  });
+
+  it('Kimi Code k3 按 Kimi K3 官方价格估算', () => {
+    const result = calculateIngestBreakdownCost({
+      provider: 'moonshot',
+      product: 'kimi-code',
+      channel: 'cli',
+      model: 'k3',
+      project: '/tmp/project',
+      eventCount: 1,
+      inputTokens: 1_000_000,
+      cachedInputTokens: 2_000_000,
+      cacheWriteTokens: 500_000,
+      outputTokens: 100_000,
+      reasoningOutputTokens: 0,
+    });
+
+    expect(result.resolvedModel).toBe('kimi-k3');
+    expect(result.estimatedCostUsd).toBeCloseTo(44 / 7.2, 4);
+    expect(result.costStatus).toBe('exact');
+  });
+
+  it('始终采用 OpenCode 消息中持久化的供应商费用', () => {
+    const result = calculateIngestBreakdownCost({
+      provider: 'openai',
+      product: 'opencode',
+      channel: 'cli',
+      model: 'gpt-5.6',
+      project: '/tmp/project',
+      eventCount: 2,
+      inputTokens: 500,
+      cachedInputTokens: 100,
+      cacheWriteTokens: 0,
+      outputTokens: 50,
+      reasoningOutputTokens: 0,
+      costUSD: 0.42,
+      pricingVersion: 'opencode-provider',
+    });
+
+    expect(result.estimatedCostUsd).toBe(0.42);
     expect(result.costStatus).toBe('exact');
   });
 });

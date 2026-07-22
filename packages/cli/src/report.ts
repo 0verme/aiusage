@@ -1,10 +1,12 @@
 import { readdir, readFile } from 'node:fs/promises';
 import { homedir } from 'node:os';
-import { basename, join } from 'node:path';
+import { basename, dirname, join } from 'node:path';
 import type { IngestBreakdown } from '@aiusage/shared';
 import { calculateCost } from '@aiusage/shared';
 import { scanDates } from './scan.js';
 import { getCodexBaseDir } from './scanners/codex.js';
+import { resolveKimiCodeHome } from './scanners/kimi.js';
+import { discoverOpenCodeUsageDates } from './scanners/opencode.js';
 
 export type ReportRange = '7d' | '1m' | '3m' | 'all' | 'today';
 
@@ -48,6 +50,7 @@ export interface LocalReport {
 
 interface BuildReportOptions {
   projectAliases?: Record<string, string>;
+  opencodeDbPaths?: readonly string[];
   /** 直接传入日期列表时忽略 range 参数 */
   dates?: string[];
 }
@@ -59,7 +62,7 @@ export async function buildLocalReport(
   const requestedDates = options.dates
     ? options.dates
     : range === 'all'
-    ? await discoverAllDates()
+    ? await discoverAllDates(options.opencodeDbPaths)
     : range === 'today'
     ? [toDateKey(getTodayLocalDate())]
     : buildPresetDates(range);
@@ -71,7 +74,10 @@ export async function buildLocalReport(
   const pricingWarnings = new Set<string>();
   let daysWithData = 0;
 
-  const results = await scanDates(requestedDates, { projectAliases: options.projectAliases });
+  const results = await scanDates(requestedDates, {
+    projectAliases: options.projectAliases,
+    opencodeDbPaths: options.opencodeDbPaths,
+  });
 
   for (const result of results) {
     const usageDate = result.usageDate;
@@ -157,7 +163,7 @@ function buildPresetDates(range: Exclude<ReportRange, 'all' | 'today'>): string[
   return result;
 }
 
-async function discoverAllDates(): Promise<string[]> {
+async function discoverAllDates(opencodeDbPaths?: readonly string[]): Promise<string[]> {
   const dates = new Set<string>();
   const home = homedir();
   await Promise.all([
@@ -169,9 +175,10 @@ async function discoverAllDates(): Promise<string[]> {
     discoverGenericJsonlDates(join(home, '.copilot', 'session-state'), dates),
     discoverGenericJsonlDates(join(home, '.qwen', 'tmp'), dates),
     discoverGenericJsonlDates(join(home, '.kimi', 'sessions'), dates),
+    discoverGenericJsonlDates(join(resolveKimiCodeHome(home), 'sessions'), dates),
     discoverGenericJsonDates(join(home, '.local', 'share', 'amp', 'threads'), dates),
     discoverGenericJsonlDates(join(home, '.factory', 'sessions'), dates),
-    discoverGenericJsonDates(join(home, '.local', 'share', 'opencode'), dates),
+    discoverOpenCodeUsageDates({ dbPaths: opencodeDbPaths }).then(found => found.forEach(date => dates.add(date))),
     discoverGenericJsonlDates(join(home, '.pi', 'agent', 'sessions'), dates),
     discoverGenericJsonlDates(join(process.env.GROK_HOME?.trim() ?? join(home, '.grok'), 'sessions'), dates),
   ]);
@@ -187,9 +194,9 @@ async function discoverGenericJsonlDates(baseDir: string, dates: Set<string>): P
     if (!content) continue;
     for (const line of content.split('\n')) {
       if (!line.trim()) continue;
-      let record: { timestamp?: string | number; created_at?: string | number; createdAt?: string | number; started_at?: string | number; startedAt?: string | number };
+      let record: { timestamp?: string | number; time?: string | number; created_at?: string | number; createdAt?: string | number; started_at?: string | number; startedAt?: string | number };
       try { record = JSON.parse(line); } catch { continue; }
-      const ts = parseTimestamp(record.timestamp ?? record.created_at ?? record.createdAt ?? record.started_at ?? record.startedAt);
+      const ts = parseTimestamp(record.timestamp ?? record.time ?? record.created_at ?? record.createdAt ?? record.started_at ?? record.startedAt);
       if (ts) dates.add(toDateKey(ts));
     }
   }
@@ -311,7 +318,7 @@ async function discoverCopilotVscodeDates(dates: Set<string>): Promise<void> {
   const sessionFiles: string[] = [];
   await walkForFiles(join(home, 'Library', 'Application Support', 'Code', 'User', 'workspaceStorage'), '.json', sessionFiles);
   for (const filePath of sessionFiles) {
-    if (!filePath.includes('/chatSessions/')) continue;
+    if (basename(dirname(filePath)) !== 'chatSessions') continue;
     const content = await safeReadUtf8(filePath);
     if (!content) continue;
     let session: { requests?: Array<{ timestamp?: string | number; response?: unknown[]; result?: { errorDetails?: { responseIsIncomplete?: boolean } } }> };

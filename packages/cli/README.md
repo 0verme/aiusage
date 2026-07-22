@@ -3,11 +3,37 @@
 `@aiusage/cli` is the AIUsage command-line tool for:
 
 - discovering and managing projects across AI tools
-- scanning local Claude Code, Codex, Cursor, Copilot CLI, Copilot for VS Code, Gemini CLI, and Antigravity usage
+- scanning local Claude Code, Codex, Cursor, Copilot CLI, Copilot for VS Code, Gemini CLI, Antigravity, Amp, Kimi Code, Qwen Code, Droid, OpenCode, and Pi usage
 - importing historical usage from Anthropic Admin API
 - printing local usage summaries for the last 7 days, 30 days, 90 days, or all history
 - scheduling automatic sync to an AIUsage Worker
 - diagnosing configuration and connectivity issues
+
+The local scanners have been compatibility-audited against the overlapping
+parsers in the MIT-licensed [tokscale](https://github.com/junhoyeo/tokscale)
+project. AIUsage keeps tool-specific safeguards where the source semantics
+differ, rather than treating every local record as billable token usage.
+
+## Local scanner coverage
+
+| Tool | Sources and compatibility behavior |
+|------|------------------------------------|
+| Claude Code | `~/.config/claude/projects/` and `~/.claude/projects/` JSONL; deduplicates parent/sidechain replays, merges streaming snapshots per token field, and honors wrapper providers. Aggregate `stats-cache.json` is intentionally not converted into guessed per-message usage. |
+| Codex CLI | Active and archived `~/.codex` sessions; fork-aware replay boundaries, inherited baselines, `last_token_usage`, and total-delta fallback. |
+| Cursor | Reads the local `state.vscdb` credential and requests Cursor's token-strategy usage CSV; the database is snapshotted when locked. |
+| Copilot CLI | OpenTelemetry JSONL under `~/.copilot/otel/` plus `session-state` shutdown totals; granular inference spans supersede same-trace aggregates. |
+| Copilot for VS Code | Chat logs, legacy session JSON, and modern CRDT `workspaceStorage/**/chatSessions/*.jsonl`; modern sessions contribute real token fields, while legacy records remain interaction-only. |
+| Gemini CLI | Session JSON/JSONL, headless stats, and `$set.messages` updates under `~/.gemini/tmp/`, with last-write-wins request deduplication. |
+| Antigravity | `~/.gemini/antigravity/brain` and browser-recording metadata; currently reports interaction counts because those artifacts do not expose reliable token counters. |
+| Amp | `~/.local/share/amp/threads/`; reconciles the usage ledger with message usage so partial ledgers are completed without double-counting. |
+| Kimi CLI / Kimi Code | Legacy `~/.kimi/sessions/` and `$KIMI_CODE_HOME/sessions/` (default `~/.kimi-code/sessions/`) `wire.jsonl`; handles progressive status snapshots and nested agent sessions. |
+| Qwen Code | Current `~/.qwen/projects/` and legacy `~/.qwen/tmp/` chat JSONL, with session/position deduplication and cache-aware input accounting. |
+| Droid | `~/.factory/sessions/*.settings.json`; uses persisted token totals first and the transcript only as a model fallback. |
+| OpenCode | All XDG `opencode*.db` channel databases, including v1 `message` and v2 `session_message`, plus legacy `storage/message/*.json`; deduplicates dual writes/forks and preserves provider-reported cost. Node 22.13+ uses built-in read-only SQLite, with system `sqlite3` as the older-Node fallback. |
+| Pi / Oh My Pi | `~/.pi/agent/sessions/` and `~/.omp/agent/sessions/` JSONL, including provider, cache-write, and session metadata. |
+
+Only token counters and session metadata are aggregated or uploaded. Conversation
+content and local credentials are never uploaded.
 
 ## Install
 
@@ -41,7 +67,7 @@ aiusage project alias                   # list all configured aliases
 aiusage project alias --remove myapp    # remove alias
 ```
 
-Scans data directories for Claude Code, Codex, Cursor, Copilot CLI, Copilot for VS Code, Gemini CLI, and Antigravity, listing discovered projects with their aliases and sources.
+Scans data directories for all supported tools, including Kimi Code session metadata, listing discovered projects with their aliases and sources.
 
 Project aliases are applied locally before upload. If two devices set the same alias for their respective project directories, the server merges them into one project.
 
@@ -185,6 +211,7 @@ aiusage config set emoji false                          # disable emoji in repor
 aiusage config set device.alias "MacBook Pro 工作机"      # device display name on dashboard
 aiusage config set privacy.projectVisibility masked     # hidden | masked | plain
 aiusage config set project.alias MyApp "我的应用"        # prefer: aiusage project alias
+aiusage config set scanner.opencodeDbPaths "/custom/opencode-next.db"  # extra OpenCode DB
 aiusage config set anthropic-admin-key sk-ant-admin...  # for aiusage import
 ```
 

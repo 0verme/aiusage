@@ -54,12 +54,47 @@ async function writeWorkspaceSession(opts: {
   );
 }
 
+async function writeWorkspaceJsonl(opts: {
+  rootDir: string;
+  workspaceId: string;
+  folderUri: string;
+  sessionId: string;
+  timestamp: number;
+  resolvedModel?: string;
+}): Promise<void> {
+  const workspaceDir = join(opts.rootDir, opts.workspaceId);
+  await mkdir(join(workspaceDir, 'chatSessions'), { recursive: true });
+  await writeFile(join(workspaceDir, 'workspace.json'), JSON.stringify({ folder: opts.folderUri }));
+  await writeFile(join(workspaceDir, 'chatSessions', `${opts.sessionId}.jsonl`), [
+    JSON.stringify({ kind: 0, v: { requests: [] } }),
+    JSON.stringify({
+      kind: 2,
+      k: ['requests'],
+      v: [{
+        requestId: 'request-jsonl',
+        timestamp: opts.timestamp,
+        modelId: 'copilot/auto',
+        promptTokens: 5_000,
+        completionTokens: 200,
+        result: { metadata: {
+          resolvedModel: opts.resolvedModel ?? 'claude-sonnet-4-6',
+          toolCallRounds: [
+            { thinking: { tokens: 30 } },
+            { thinking: { tokens: 70 } },
+          ],
+        } },
+      }],
+    }),
+  ].join('\n'));
+}
+
 describe('scanCopilotVscodeDates', () => {
   it('counts successful chat completions as IDE usage events', async () => {
     await writeCopilotLog([
       '2026-02-12 09:39:03.512 [info] Got Copilot token for hubeiqiao',
       '2026-02-12 09:39:05.000 [info] Open workspace file:///Users/test/project-one',
       '2026-02-12 09:40:20.336 [info] ccreq:4380bcbb.copilotmd | success | gpt-4.1 -> gpt-4.1-2025-04-14 | 2277ms | [settingsEditorSearchSuggestions]',
+      '2026-02-12 09:40:25.336 [info] ccreq:4480bcbb.copilotmd | success | copilot-suggestions-lysithea-0022 | 2277ms | [XtabProvider]',
       '2026-02-12 09:40:30.000 [info] ccreq:4390bcbb.copilotmd | error | gpt-4.1 -> gpt-4.1-2025-04-14 | 300ms | [settingsEditorSearchSuggestions]',
       '2026-02-12 09:41:20.336 [info] ccreq:4490bcbb.copilotmd | success | claude-sonnet-4.5 | 199ms | [chat]',
     ]);
@@ -71,21 +106,7 @@ describe('scanCopilotVscodeDates', () => {
     );
 
     const breakdowns = result.get('2026-02-12') ?? [];
-    expect(breakdowns).toHaveLength(2);
-
-    expect(breakdowns).toContainEqual({
-      provider: 'github',
-      product: 'copilot-vscode',
-      channel: 'ide',
-      model: 'gpt-4.1-2025-04-14',
-      project: 'Project One',
-      eventCount: 1,
-      inputTokens: 0,
-      cachedInputTokens: 0,
-      cacheWriteTokens: 0,
-      outputTokens: 0,
-      reasoningOutputTokens: 0,
-    });
+    expect(breakdowns).toHaveLength(1);
 
     expect(breakdowns).toContainEqual({
       provider: 'github',
@@ -171,5 +192,55 @@ describe('scanCopilotVscodeDates', () => {
         eventCount: 1,
       }),
     ]);
+  });
+
+  it('读取新版 chatSessions JSONL 中的真实 token 与 resolvedModel', async () => {
+    const workspaceStorageDir = join(tmpDir, 'workspaceStorage');
+    await writeWorkspaceJsonl({
+      rootDir: workspaceStorageDir,
+      workspaceId: 'ws-jsonl',
+      folderUri: 'file:///Users/test/JSONL%20Project',
+      sessionId: 'session-jsonl',
+      timestamp: Date.parse('2026-02-12T12:00:00.000Z'),
+      resolvedModel: 'claude-sonnet-4.6-20260201',
+    });
+
+    const [row] = (await scanCopilotVscodeDates(
+      ['2026-02-12'],
+      tmpDir,
+      { '/Users/test/JSONL Project': 'JSONL Project' },
+      workspaceStorageDir,
+    )).get('2026-02-12')!;
+
+    expect(row).toEqual(expect.objectContaining({
+      provider: 'anthropic',
+      model: 'claude-sonnet-4-6',
+      project: 'JSONL Project',
+      eventCount: 1,
+      inputTokens: 5_000,
+      outputTokens: 200,
+      reasoningOutputTokens: 100,
+    }));
+  });
+
+  it('保留非 Claude 模型名中的小数点', async () => {
+    const workspaceStorageDir = join(tmpDir, 'workspaceStorage');
+    await writeWorkspaceJsonl({
+      rootDir: workspaceStorageDir,
+      workspaceId: 'ws-gpt',
+      folderUri: 'file:///Users/test/GPT%20Project',
+      sessionId: 'session-gpt',
+      timestamp: Date.parse('2026-02-12T13:00:00.000Z'),
+      resolvedModel: 'gpt-4.1',
+    });
+
+    const [row] = (await scanCopilotVscodeDates(
+      ['2026-02-12'],
+      tmpDir,
+      undefined,
+      workspaceStorageDir,
+    )).get('2026-02-12')!;
+
+    expect(row.model).toBe('gpt-4.1');
   });
 });

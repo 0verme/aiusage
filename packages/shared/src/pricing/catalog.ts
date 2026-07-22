@@ -11,7 +11,7 @@ import { sourcegraph } from './data/sourcegraph.js';
 import { inflection, cursor, droid, opencode } from './data/placeholders.js';
 import { xai } from './data/xai.js';
 
-export const PRICING_VERSION = '2026-07-22-provider-routing-v1';
+export const PRICING_VERSION = '2026-07-22-scanner-sync-v1';
 
 /**
  * 模型别名（精确匹配优先于前缀回退）。
@@ -30,6 +30,8 @@ const aliases: Record<string, string> = {
   // Historical / alternate SKUs for Grok Code / Build
   'grok-code-fast-1': 'grok-build-0.1',
   'grok-build': 'grok-build-0.1',
+  'k3': 'kimi-k3',
+  'kimi-code/k3': 'kimi-k3',
 };
 
 export const catalog: PricingCatalog = {

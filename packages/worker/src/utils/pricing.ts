@@ -26,11 +26,13 @@ export function calculateIngestBreakdownCost(breakdown: IngestBreakdown): CostCa
     { requestCount: breakdown.eventCount },
   );
 
+  const hasVendorReportedCost = breakdown.product === 'opencode';
+
   if (
     breakdown.costUSD == null ||
     !Number.isFinite(breakdown.costUSD) ||
     breakdown.costUSD <= 0 ||
-    breakdown.pricingVersion !== calculated.pricingVersion
+    (!hasVendorReportedCost && breakdown.pricingVersion !== calculated.pricingVersion)
   ) {
     return calculated;
   }

@@ -25,6 +25,10 @@ export interface AIUsageConfig {
   privacy?: {
     projectVisibility?: 'hidden' | 'masked' | 'plain';
   };
+  scanner?: {
+    /** Extra OpenCode databases outside XDG_DATA_HOME/opencode. */
+    opencodeDbPaths?: string[];
+  };
   lang?: 'en' | 'zh';
   emoji?: boolean;
 
@@ -61,6 +65,7 @@ function migrateConfig(config: AIUsageConfig): AIUsageConfig {
     lookbackDays: config.lookbackDays,
     projectAliases: config.projectAliases,
     privacy: config.privacy,
+    scanner: config.scanner,
     lang: config.lang,
     emoji: config.emoji,
     targets: [target],
@@ -164,6 +169,20 @@ export function setConfigValue(
       throw new Error('privacy.projectVisibility 仅支持 hidden、masked、plain');
     }
     next.privacy = { ...(next.privacy ?? {}), projectVisibility: value };
+    return next;
+  }
+
+  if (keyPath === 'scanner.opencodeDbPaths') {
+    const paths = [...new Set(values.map(value => value.trim()).filter(Boolean))];
+    if (paths.length === 0) {
+      throw new Error('scanner.opencodeDbPaths 至少需要一个 opencode*.db 路径');
+    }
+    if (paths.length === 1 && ['none', 'off', 'default'].includes(paths[0].toLowerCase())) {
+      next.scanner = { ...(next.scanner ?? {}) };
+      delete next.scanner.opencodeDbPaths;
+      return next;
+    }
+    next.scanner = { ...(next.scanner ?? {}), opencodeDbPaths: paths };
     return next;
   }
 

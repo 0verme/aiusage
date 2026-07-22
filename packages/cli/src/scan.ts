@@ -30,6 +30,7 @@ export interface ScanResult {
 
 interface ScanOptions {
   projectAliases?: Record<string, string>;
+  opencodeDbPaths?: readonly string[];
 }
 
 export async function scanDate(targetDate: string, options: ScanOptions = {}): Promise<ScanResult> {
@@ -57,7 +58,10 @@ export async function scanDates(targetDates: string[], options: ScanOptions = {}
     scanKimiDates(uniqueDates, undefined, options.projectAliases),
     scanAmpDates(uniqueDates, undefined, options.projectAliases),
     scanDroidDates(uniqueDates, undefined, options.projectAliases),
-    scanOpencodeDates(uniqueDates, undefined, options.projectAliases),
+    scanOpencodeDates(uniqueDates, {
+      projectAliases: options.projectAliases,
+      dbPaths: options.opencodeDbPaths,
+    }),
     scanPiDates(uniqueDates, undefined, options.projectAliases),
     scanGrokBuildDates(uniqueDates, undefined, options.projectAliases),
   ];

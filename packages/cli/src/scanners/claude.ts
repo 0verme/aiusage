@@ -1,25 +1,13 @@
-import { readdir, open, readFile } from 'node:fs/promises';
+import { createReadStream } from 'node:fs';
+import { readdir, readFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { homedir } from 'node:os';
 import { createInterface } from 'node:readline';
-import { resolveProviderForModel, type IngestBreakdown } from '@aiusage/shared';
-import { normalizeModelName, runWithConcurrency, type ProjectFields } from './utils.js';
+import type { IngestBreakdown } from '@aiusage/shared';
+import { inferProviderFromModel, normalizeModelName, runWithConcurrency, type ProjectFields } from './utils.js';
 
 const FILE_CONCURRENCY = 16;
 const MAX_LINE_BYTES = 64 * 1024 * 1024; // 64 MB
-
-// Stats-cache fallback: Claude Code stores rolling daily token totals in
-// ~/.claude/stats-cache.json. When JSONL session files have been rotated away,
-// this is the only remaining source for historical token counts.
-// The dailyModelTokens field tracks (input + output) tokens per model per day
-// (cache tokens are NOT included). We distribute using the model's all-time
-// input/output ratio from modelUsage, and fall back to 70/30 if unavailable.
-const STATS_CACHE_DEFAULT_INPUT_RATIO = 0.7;
-
-interface StatsCache {
-  dailyModelTokens?: Array<{ date: string; tokensByModel: Record<string, number> }>;
-  modelUsage?: Record<string, { inputTokens?: number; outputTokens?: number }>;
-}
 
 interface ClaudeRecord {
   timestamp?: string;
@@ -29,9 +17,15 @@ interface ClaudeRecord {
   type?: string;
   cwd?: string;
   costUSD?: number;
+  providerId?: string;
+  provider_id?: string;
+  provider?: string;
   message?: {
     id?: string;
     model?: string;
+    providerId?: string;
+    provider_id?: string;
+    provider?: string;
     usage?: {
       input_tokens?: number;
       output_tokens?: number;
@@ -44,6 +38,21 @@ interface ClaudeRecord {
       speed?: 'standard' | 'fast';
     };
   };
+}
+
+interface ClaudeUsageSnapshot {
+  input: number;
+  cached: number;
+  cacheWrite: number;
+  cache5m: number;
+  cache1h: number;
+  output: number;
+  costUSD: number;
+}
+
+interface ClaudeSeenUsage {
+  breakdown: IngestBreakdown;
+  snapshot: ClaudeUsageSnapshot;
 }
 
 function getClaudeProjectDirs(claudeDir?: string): string[] {
@@ -85,24 +94,17 @@ async function readEndpointProvider(projectsDir: string): Promise<string> {
 
 function providerFromBaseUrl(value?: string): string | undefined {
   if (!value) return undefined;
-
   try {
     const hostname = new URL(value).hostname.toLowerCase();
-    if (!hostname || hostname === 'localhost' || /^\d+(?:\.\d+){3}$/.test(hostname)) {
-      return 'custom';
-    }
-
+    if (!hostname || hostname === 'localhost' || /^\d+(?:\.\d+){3}$/.test(hostname)) return 'custom';
     const knownProviders = [
       'anthropic', 'openai', 'google', 'deepseek', 'moonshot', 'alibaba',
       'zhipu', 'github', 'sourcegraph', 'xai', 'openrouter', 'siliconflow',
     ];
     const known = knownProviders.find(provider => hostname.split('.').includes(provider));
     if (known) return known;
-
     const labels = hostname.split('.').filter(Boolean);
-    if (labels.length < 2) return labels[0] || 'custom';
-    const compoundSuffix = labels.length >= 3 && ['com', 'net', 'org', 'co'].includes(labels.at(-2) ?? '');
-    return labels[compoundSuffix ? labels.length - 3 : labels.length - 2] ?? 'custom';
+    return labels.length >= 2 ? labels[labels.length - 2] : labels[0] || 'custom';
   } catch {
     return 'custom';
   }
@@ -128,12 +130,9 @@ export async function scanClaudeDates(
 
   const sources = await getClaudeSources(claudeDir);
 
-  // Global dedup set: compound key messageId:requestId (slopmeter approach).
-  // Only deduplicates when both IDs are present; entries missing either ID are
-  // counted without dedup. This mirrors how Claude Code session files are
-  // re-written on restart — the same completed request appears in multiple
-  // JSONL files with identical token counts.
-  const processedHashes = new Set<string>();
+  // Claude Code 某些代理/兼容模型没有 requestId，但仍会把同一 messageId
+  // 复制到父会话和 sidechain 文件；此时退化为 message.id 去重。
+  const processedHashes = new Map<string, ClaudeSeenUsage>();
 
   // Track distinct sessions per "date|model|project" group
   const sessionSets = new Map<string, Set<string>>();
@@ -165,28 +164,12 @@ export async function scanClaudeDates(
       }
     }
   }
+  fileJobs.sort((a, b) => a.filePath.localeCompare(b.filePath));
 
   // 并发流式处理文件，直接聚合到 groupedByDate
   await runWithConcurrency(fileJobs, FILE_CONCURRENCY, async (job) => {
     await processJsonlFile(job.filePath, job.projectFields, job.fallbackProvider, targetDateSet, projectAliases, groupedByDate, processedHashes, sessionSets);
   });
-
-
-  // For dates that have no JSONL data, fall back to stats-cache.json.
-  // This covers the period before Claude Code's JSONL rotation window.
-  const missingDates = [...targetDateSet].filter(d => groupedByDate.get(d)?.size === 0);
-  if (missingDates.length > 0) {
-    const remaining = new Set(missingDates);
-    for (const { projectsDir: baseDir, fallbackProvider } of sources) {
-      if (remaining.size === 0) break;
-      const statsCachePath = join(baseDir, '..', 'stats-cache.json');
-      await fillFromStatsCache(statsCachePath, fallbackProvider, remaining, groupedByDate);
-      // Remove dates that were just filled
-      for (const d of remaining) {
-        if (groupedByDate.get(d)!.size > 0) remaining.delete(d);
-      }
-    }
-  }
 
   // Assign session counts from collected sessionSets
   for (const [usageDate, grouped] of groupedByDate.entries()) {
@@ -209,21 +192,15 @@ async function processJsonlFile(
   targetDateSet: Set<string>,
   projectAliases: Record<string, string> | undefined,
   groupedByDate: Map<string, Map<string, IngestBreakdown>>,
-  processedHashes: Set<string>,
+  processedHashes: Map<string, ClaudeSeenUsage>,
   sessionSets: Map<string, Set<string>>,
 ): Promise<void> {
   // Derive fallback sessionId from filename (e.g. "abc-123.jsonl" → "abc-123")
   const fallbackSessionId = filePath.replace(/^.*[\\/]/, '').replace(/\.jsonl$/, '');
-  let fh;
-  try {
-    fh = await open(filePath, 'r');
-  } catch {
-    return;
-  }
-
+  const input = createReadStream(filePath, { encoding: 'utf-8' });
   try {
     const rl = createInterface({
-      input: fh.createReadStream({ encoding: 'utf-8' }),
+      input,
       crlfDelay: Infinity,
     });
 
@@ -252,22 +229,17 @@ async function processJsonlFile(
       const rawModel = message.model ?? 'unknown';
       if (rawModel === '<synthetic>') continue;
 
-      // Compound dedup key (slopmeter approach): only skip when BOTH the
-      // Anthropic message ID and the Claude Code request ID are present.
-      // Session files are rewritten on restart, so the same completed request
-      // appears in multiple files with identical token counts.
+      // 标准记录用 messageId:requestId；兼容模型缺 requestId 时用 message.id。
       const messageId = message.id;
       const requestId = record.requestId;
-      if (messageId && requestId) {
-        const hash = `${messageId}:${requestId}`;
-        if (processedHashes.has(hash)) continue;
-        processedHashes.add(hash);
-      }
+      const hash = messageId
+        ? (requestId ? `${messageId}:${requestId}` : `message:${messageId}`)
+        : undefined;
 
       const usage = message.usage;
       let model = normalizeModelName(rawModel);
       if (usage.speed === 'fast') model = `${model}-fast`;
-      const provider = resolveProviderForModel(model, fallbackProvider);
+      const provider = resolveClaudeProvider(record, rawModel, fallbackProvider);
       const recordFields = record.cwd ? resolveProject(record.cwd, projectAliases) : fallbackFields;
       const sessionId = record.sessionId ?? fallbackSessionId;
       const costUSD = record.costUSD ?? 0;
@@ -283,7 +255,22 @@ async function processJsonlFile(
       const grouped = groupedByDate.get(usageDate);
       if (!grouped) continue;
 
-      const cacheWriteTokens = cache5m + cache1h;
+      const snapshot: ClaudeUsageSnapshot = {
+        input: clampToken(usage.input_tokens),
+        cached: clampToken(usage.cache_read_input_tokens),
+        cacheWrite: clampToken(usage.cache_creation_input_tokens)
+          || clampToken(cache5m) + clampToken(cache1h),
+        cache5m: clampToken(cache5m),
+        cache1h: clampToken(cache1h),
+        output: clampToken(usage.output_tokens),
+        costUSD: clampToken(costUSD),
+      };
+      const cacheWriteTokens = snapshot.cacheWrite;
+      const seen = hash ? processedHashes.get(hash) : undefined;
+      if (seen) {
+        mergeClaudeDuplicate(seen, snapshot);
+        continue;
+      }
       const key = `${provider}|${model}|${recordFields.project}`;
 
       // Track distinct sessions per group
@@ -294,15 +281,16 @@ async function processJsonlFile(
       const existing = grouped.get(key);
       if (existing) {
         existing.eventCount += 1;
-        existing.inputTokens += usage.input_tokens ?? 0;
-        existing.cachedInputTokens += usage.cache_read_input_tokens ?? 0;
+        existing.inputTokens += snapshot.input;
+        existing.cachedInputTokens += snapshot.cached;
         existing.cacheWriteTokens += cacheWriteTokens;
-        existing.cacheWrite5mTokens = (existing.cacheWrite5mTokens ?? 0) + cache5m;
-        existing.cacheWrite1hTokens = (existing.cacheWrite1hTokens ?? 0) + cache1h;
-        existing.outputTokens += usage.output_tokens ?? 0;
-        existing.costUSD = (existing.costUSD ?? 0) + costUSD;
+        existing.cacheWrite5mTokens = (existing.cacheWrite5mTokens ?? 0) + snapshot.cache5m;
+        existing.cacheWrite1hTokens = (existing.cacheWrite1hTokens ?? 0) + snapshot.cache1h;
+        existing.outputTokens += snapshot.output;
+        existing.costUSD = (existing.costUSD ?? 0) + snapshot.costUSD;
+        if (hash) processedHashes.set(hash, { breakdown: existing, snapshot });
       } else {
-        grouped.set(key, {
+        const breakdown: IngestBreakdown = {
           provider,
           product: 'claude-code',
           channel: 'cli',
@@ -311,92 +299,70 @@ async function processJsonlFile(
           projectDisplay: recordFields.projectDisplay,
           projectAlias: recordFields.projectAlias,
           eventCount: 1,
-          inputTokens: usage.input_tokens ?? 0,
-          cachedInputTokens: usage.cache_read_input_tokens ?? 0,
+          inputTokens: snapshot.input,
+          cachedInputTokens: snapshot.cached,
           cacheWriteTokens,
-          cacheWrite5mTokens: cache5m,
-          cacheWrite1hTokens: cache1h,
-          outputTokens: usage.output_tokens ?? 0,
+          cacheWrite5mTokens: snapshot.cache5m,
+          cacheWrite1hTokens: snapshot.cache1h,
+          outputTokens: snapshot.output,
           reasoningOutputTokens: 0,
-          costUSD,
-        });
+          costUSD: snapshot.costUSD,
+        };
+        grouped.set(key, breakdown);
+        if (hash) processedHashes.set(hash, { breakdown, snapshot });
       }
     }
+  } catch {
+    // 文件在扫描期间被移动、归档或损坏时跳过该文件。
   } finally {
-    await fh.close();
+    input.destroy();
   }
 }
 
-async function fillFromStatsCache(
-  statsCachePath: string,
-  fallbackProvider: string,
-  missingDates: Set<string>,
-  groupedByDate: Map<string, Map<string, IngestBreakdown>>,
-): Promise<void> {
-  let raw: string;
-  try {
-    raw = await readFile(statsCachePath, 'utf-8');
-  } catch {
-    return;
-  }
+function mergeClaudeDuplicate(seen: ClaudeSeenUsage, incoming: ClaudeUsageSnapshot): void {
+  const incomingHasNewerCacheWrite = incoming.cacheWrite > seen.snapshot.cacheWrite;
+  const merged: ClaudeUsageSnapshot = {
+    input: Math.max(seen.snapshot.input, incoming.input),
+    cached: Math.max(seen.snapshot.cached, incoming.cached),
+    cacheWrite: Math.max(seen.snapshot.cacheWrite, incoming.cacheWrite),
+    cache5m: incomingHasNewerCacheWrite ? incoming.cache5m : seen.snapshot.cache5m,
+    cache1h: incomingHasNewerCacheWrite ? incoming.cache1h : seen.snapshot.cache1h,
+    output: Math.max(seen.snapshot.output, incoming.output),
+    costUSD: Math.max(seen.snapshot.costUSD, incoming.costUSD),
+  };
+  const breakdown = seen.breakdown;
+  breakdown.inputTokens += merged.input - seen.snapshot.input;
+  breakdown.cachedInputTokens += merged.cached - seen.snapshot.cached;
+  breakdown.cacheWrite5mTokens = (breakdown.cacheWrite5mTokens ?? 0)
+    + merged.cache5m - seen.snapshot.cache5m;
+  breakdown.cacheWrite1hTokens = (breakdown.cacheWrite1hTokens ?? 0)
+    + merged.cache1h - seen.snapshot.cache1h;
+  breakdown.cacheWriteTokens += merged.cacheWrite - seen.snapshot.cacheWrite;
+  breakdown.outputTokens += merged.output - seen.snapshot.output;
+  breakdown.costUSD = (breakdown.costUSD ?? 0) + merged.costUSD - seen.snapshot.costUSD;
+  seen.snapshot = merged;
+}
 
-  let cache: StatsCache;
-  try {
-    cache = JSON.parse(raw);
-  } catch {
-    return;
-  }
+function clampToken(value: number | undefined): number {
+  return Math.max(Number.isFinite(value) ? value! : 0, 0);
+}
 
-  // Build input ratio per model from all-time modelUsage aggregates.
-  // dailyModelTokens stores (input + output) only — no cache tokens.
-  const inputRatios: Record<string, number> = {};
-  for (const [model, usage] of Object.entries(cache.modelUsage ?? {})) {
-    const inp = usage.inputTokens ?? 0;
-    const out = usage.outputTokens ?? 0;
-    const total = inp + out;
-    if (total > 0) inputRatios[model] = inp / total;
-  }
-
-  for (const entry of cache.dailyModelTokens ?? []) {
-    const { date, tokensByModel } = entry;
-    if (!missingDates.has(date)) continue;
-
-    const grouped = groupedByDate.get(date);
-    if (!grouped) continue;
-
-    for (const [rawModel, totalTokens] of Object.entries(tokensByModel)) {
-      if (!totalTokens) continue;
-      const model = normalizeModelName(rawModel);
-      const provider = resolveProviderForModel(model, fallbackProvider);
-      const ratio = inputRatios[rawModel] ?? inputRatios[model] ?? STATS_CACHE_DEFAULT_INPUT_RATIO;
-
-      const inputTokens = Math.round(totalTokens * ratio);
-      const outputTokens = totalTokens - inputTokens;
-
-      // stats-cache has no per-project breakdown
-      const key = `${provider}|${model}|unknown`;
-      const existing = grouped.get(key);
-      if (existing) {
-        existing.eventCount += 1;
-        existing.inputTokens += inputTokens;
-        existing.outputTokens += outputTokens;
-      } else {
-        grouped.set(key, {
-          provider,
-          product: 'claude-code',
-          channel: 'cli',
-          model,
-          project: 'unknown',
-          eventCount: 1,
-          inputTokens,
-          cachedInputTokens: 0,
-          cacheWriteTokens: 0,
-          outputTokens,
-          reasoningOutputTokens: 0,
-        });
-      }
-    }
-  }
+function resolveClaudeProvider(record: ClaudeRecord, model: string, fallbackProvider: string): string {
+  const explicit = (
+    record.message?.providerId
+    ?? record.message?.provider_id
+    ?? record.message?.provider
+    ?? record.providerId
+    ?? record.provider_id
+    ?? record.provider
+  )?.trim().toLowerCase();
+  const prefix = model.trim().toLowerCase().match(/^([a-z0-9_-]+)\//)?.[1];
+  const inferred = prefix ?? inferProviderFromModel(model, 'unknown');
+  // 一些兼容层会固定写 anthropic，但模型名已明确指向其他供应商。
+  if (explicit && explicit !== 'anthropic') return explicit;
+  if (fallbackProvider !== 'anthropic' && fallbackProvider !== 'unknown') return fallbackProvider;
+  if (inferred !== 'unknown') return inferred;
+  return explicit ?? fallbackProvider;
 }
 
 function parseTimestamp(value?: string): Date | null {

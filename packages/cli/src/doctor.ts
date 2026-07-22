@@ -4,8 +4,10 @@ import { join } from 'node:path';
 import { readConfig, getConfigPath } from './config.js';
 import { fetchHealth } from './api.js';
 import { getScheduleStatus } from './schedule.js';
-import type { Lang } from './i18n.js';
 import { getCodexBaseDir } from './scanners/codex.js';
+import { resolveKimiCodeHome } from './scanners/kimi.js';
+import { detectOpenCodeSqliteRuntime, resolveOpenCodeSources } from './scanners/opencode.js';
+import type { Lang } from './i18n.js';
 
 export interface Check {
   group: string;
@@ -34,6 +36,8 @@ const msgs = {
     notInstalled: 'Not installed',
     installedNoData: 'Installed, no usage data yet',
     hasData: (n: number) => `${n} session${n > 1 ? 's' : ''} found`,
+    openCodeData: (dbs: number, legacy: number) => `${dbs} database(s), ${legacy} legacy message(s) found`,
+    openCodeSqliteUnavailable: 'Database found, but this Node version requires the system sqlite3 executable',
     schedule: 'Schedule',
     scheduleEvery: 'every',
     scheduleEnabled: 'Enabled',
@@ -60,6 +64,8 @@ const msgs = {
     notInstalled: '未安装',
     installedNoData: '已安装，暂无使用数据',
     hasData: (n: number) => `发现 ${n} 个会话`,
+    openCodeData: (dbs: number, legacy: number) => `发现 ${dbs} 个数据库、${legacy} 条旧版消息`,
+    openCodeSqliteUnavailable: '已发现数据库，但当前 Node 版本需要安装系统 sqlite3 才能读取',
     schedule: '定时同步',
     scheduleEvery: '每',
     scheduleEnabled: '已启用',
@@ -96,7 +102,7 @@ async function countFiles(dir: string, exts: string[], cap = 1000): Promise<numb
 
 // 每个工具的数据目录、检测的文件扩展名
 interface ToolDef {
-  dir: string;
+  dirs: string[];
   label: string;
   exts: string[];
 }
@@ -156,35 +162,86 @@ export async function runDoctor(lang: Lang = 'zh'): Promise<Check[]> {
   const g3 = s.groupTools;
   const home = homedir();
   const tools: ToolDef[] = [
-    { dir: join(home, '.claude', 'projects'), label: 'Claude Code', exts: ['.jsonl'] },
-    { dir: getCodexBaseDir(), label: 'Codex CLI', exts: ['.jsonl'] },
-    { dir: join(home, 'Library', 'Application Support', 'Cursor', 'User', 'globalStorage'), label: 'Cursor', exts: ['.vscdb'] },
-    { dir: join(home, '.copilot', 'session-state'), label: 'Copilot CLI', exts: ['.jsonl'] },
-    { dir: join(home, 'Library', 'Application Support', 'Code', 'logs'), label: 'Copilot VS Code', exts: ['.log'] },
-    { dir: join(home, '.gemini', 'tmp'), label: 'Gemini CLI', exts: ['.json'] },
-    { dir: join(home, '.gemini', 'antigravity'), label: 'Antigravity', exts: ['.json'] },
-    { dir: join(home, '.qwen', 'tmp'), label: 'Qwen Code', exts: ['.jsonl'] },
-    { dir: join(home, '.kimi', 'sessions'), label: 'Kimi Code', exts: ['.jsonl'] },
-    { dir: join(home, '.local', 'share', 'amp', 'threads'), label: 'Amp', exts: ['.json'] },
-    { dir: join(home, '.factory', 'sessions'), label: 'Droid', exts: ['.jsonl', '.json'] },
-    { dir: join(home, '.local', 'share', 'opencode'), label: 'OpenCode', exts: ['.json'] },
-    { dir: join(home, '.pi', 'agent', 'sessions'), label: 'Pi', exts: ['.jsonl'] },
-    { dir: process.env.GROK_HOME?.trim() ?? join(home, '.grok'), label: 'Grok Build', exts: ['.json', '.jsonl'] },
+    { dirs: [join(home, '.config', 'claude', 'projects'), join(home, '.claude', 'projects')], label: 'Claude Code', exts: ['.jsonl'] },
+    { dirs: [getCodexBaseDir()], label: 'Codex CLI', exts: ['.jsonl'] },
+    { dirs: [join(home, 'Library', 'Application Support', 'Cursor', 'User', 'globalStorage')], label: 'Cursor', exts: ['.vscdb'] },
+    { dirs: [join(home, '.copilot', 'session-state'), join(home, '.copilot', 'otel')], label: 'Copilot CLI', exts: ['.jsonl'] },
+    {
+      dirs: [
+        join(home, 'Library', 'Application Support', 'Code', 'logs'),
+        join(home, 'Library', 'Application Support', 'Code', 'User', 'workspaceStorage'),
+      ],
+      label: 'Copilot VS Code',
+      exts: ['.log', '.json', '.jsonl'],
+    },
+    { dirs: [join(home, '.gemini', 'tmp')], label: 'Gemini CLI', exts: ['.json', '.jsonl'] },
+    { dirs: [join(home, '.gemini', 'antigravity')], label: 'Antigravity', exts: ['.json'] },
+    { dirs: [join(home, '.qwen', 'projects'), join(home, '.qwen', 'tmp')], label: 'Qwen Code', exts: ['.jsonl'] },
+    { dirs: [join(resolveKimiCodeHome(home), 'sessions')], label: 'Kimi Code', exts: ['.jsonl'] },
+    { dirs: [join(home, '.kimi', 'sessions')], label: 'Kimi CLI (legacy)', exts: ['.jsonl'] },
+    { dirs: [join(home, '.local', 'share', 'amp', 'threads')], label: 'Amp', exts: ['.json'] },
+    { dirs: [join(home, '.factory', 'sessions')], label: 'Droid', exts: ['.settings.json'] },
+    { dirs: [join(home, '.pi', 'agent', 'sessions'), join(home, '.omp', 'agent', 'sessions')], label: 'Pi / OMP', exts: ['.jsonl'] },
+    { dirs: [process.env.GROK_HOME?.trim() ?? join(home, '.grok')], label: 'Grok Build', exts: ['.json', '.jsonl'] },
   ];
 
   for (const tool of tools) {
-    try {
-      await stat(tool.dir);
-    } catch {
+    let installed = false;
+    let n = 0;
+    for (const dir of tool.dirs) {
+      try {
+        await stat(dir);
+        installed = true;
+        n += await countFiles(dir, tool.exts);
+      } catch {
+        // 检查同一工具的其他兼容目录。
+      }
+    }
+    if (!installed) {
       checks.push({ group: g3, name: tool.label, status: 'warn', message: s.notInstalled });
       continue;
     }
-    const n = await countFiles(tool.dir, tool.exts);
     if (n > 0) {
       checks.push({ group: g3, name: tool.label, status: 'ok', message: s.hasData(n) });
     } else {
       checks.push({ group: g3, name: tool.label, status: 'warn', message: s.installedNoData });
     }
+  }
+
+  const openCodeSources = await resolveOpenCodeSources({
+    dbPaths: config.scanner?.opencodeDbPaths,
+  });
+  const openCodeLegacyCount = await countFiles(openCodeSources.legacyDir, ['.json']);
+  let openCodeInstalled = openCodeSources.dbPaths.length > 0 || openCodeLegacyCount > 0;
+  if (!openCodeInstalled) {
+    try {
+      await stat(openCodeSources.dataDir);
+      openCodeInstalled = true;
+    } catch {
+      // No OpenCode data directory and no configured database.
+    }
+  }
+  if (!openCodeInstalled) {
+    checks.push({ group: g3, name: 'OpenCode', status: 'warn', message: s.notInstalled });
+  } else if (openCodeSources.dbPaths.length === 0 && openCodeLegacyCount === 0) {
+    checks.push({ group: g3, name: 'OpenCode', status: 'warn', message: s.installedNoData });
+  } else if (
+    openCodeSources.dbPaths.length > 0
+    && await detectOpenCodeSqliteRuntime() === 'unavailable'
+  ) {
+    checks.push({
+      group: g3,
+      name: 'OpenCode',
+      status: 'warn',
+      message: s.openCodeSqliteUnavailable,
+    });
+  } else {
+    checks.push({
+      group: g3,
+      name: 'OpenCode',
+      status: 'ok',
+      message: s.openCodeData(openCodeSources.dbPaths.length, openCodeLegacyCount),
+    });
   }
 
   // 定时任务

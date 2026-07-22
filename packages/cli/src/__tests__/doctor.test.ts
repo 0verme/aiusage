@@ -60,4 +60,48 @@ describe('runDoctor', () => {
       }),
     );
   });
+
+  it('detects Kimi Code sessions from the new data directory', async () => {
+    const sessionDir = join(
+      homeDir,
+      '.kimi-code',
+      'sessions',
+      'wd_aiusage_123456789abc',
+      'session-1',
+      'agents',
+      'main',
+    );
+    await mkdir(sessionDir, { recursive: true });
+    await writeFile(join(sessionDir, 'wire.jsonl'), '{}\n');
+
+    const { runDoctor } = await import('../doctor.js');
+    const checks = await runDoctor('en');
+
+    expect(checks).toContainEqual(
+      expect.objectContaining({
+        group: 'Tools',
+        name: 'Kimi Code',
+        status: 'ok',
+        message: '1 session found',
+      }),
+    );
+  });
+
+  it('detects OpenCode channel databases', async () => {
+    const dataDir = join(homeDir, '.local', 'share', 'opencode');
+    await mkdir(dataDir, { recursive: true });
+    await writeFile(join(dataDir, 'opencode-next.db'), '');
+
+    const { runDoctor } = await import('../doctor.js');
+    const checks = await runDoctor('en');
+
+    expect(checks).toContainEqual(
+      expect.objectContaining({
+        group: 'Tools',
+        name: 'OpenCode',
+        status: 'ok',
+        message: '1 database(s), 0 legacy message(s) found',
+      }),
+    );
+  });
 });

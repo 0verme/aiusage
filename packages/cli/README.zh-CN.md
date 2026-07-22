@@ -9,6 +9,20 @@
 - 定时自动同步数据到 AIUsage Worker
 - 诊断配置与连接问题
 
+Kimi 同时支持旧版 Kimi CLI 的 `~/.kimi/sessions/` 与新版 Kimi Code 的
+`$KIMI_CODE_HOME/sessions/`（默认 `~/.kimi-code/sessions/`）。扫描器仅读取
+`wire.jsonl` 中的 Token 计数与会话元数据，不上传对话正文；新版格式参考了
+[tokscale](https://github.com/junhoyeo/tokscale) 的 MIT 开源实现。
+
+OpenCode 同时读取 XDG 数据目录中的全部 `opencode*.db`，兼容 v1 `message`、
+v2 `session_message`，并保留旧版 `storage/message/*.json` 兜底。支持
+`XDG_DATA_HOME`、`OPENCODE_DB`，以及额外数据库路径配置：
+
+```bash
+aiusage config set scanner.opencodeDbPaths "/custom/opencode-next.db" "/custom/opencode-stable.db"
+aiusage config set scanner.opencodeDbPaths default
+```
+
 ## 安装
 
 ```bash

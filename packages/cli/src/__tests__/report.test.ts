@@ -18,10 +18,14 @@ let homeDir: string;
 beforeEach(async () => {
   homeDir = join(tmpdir(), `aiusage-report-${Date.now()}`);
   mockHomedir.mockReturnValue(homeDir);
+  vi.stubEnv('CLAUDE_CONFIG_DIR', '');
+  vi.stubEnv('CODEX_HOME', '');
+  vi.stubEnv('CODEX_CONFIG_DIR', '');
   await mkdir(homeDir, { recursive: true });
 });
 
 afterEach(async () => {
+  vi.unstubAllEnvs();
   await rm(homeDir, { recursive: true, force: true });
 });
 
@@ -84,13 +88,58 @@ describe('buildLocalReport', () => {
     const { buildLocalReport } = await import('../report.js');
     const report = await buildLocalReport('all');
 
-    expect(report.daysWithData).toBe(4);
     expect(report.daily.map((day) => day.usageDate)).toEqual([
       '2025-06-30',
       '2025-09-17',
       '2025-10-22',
       '2025-12-10',
     ]);
+    expect(report.daysWithData).toBe(4);
+  });
+
+  it('discovers and reports Kimi Code usage from time-based usage.record lines', async () => {
+    const sessionDir = join(
+      homeDir,
+      '.kimi-code',
+      'sessions',
+      'wd_aiusage_123456789abc',
+      'session-1',
+    );
+    const agentDir = join(sessionDir, 'agents', 'main');
+    await mkdir(agentDir, { recursive: true });
+    await writeFile(
+      join(sessionDir, 'state.json'),
+      JSON.stringify({ workDir: '/Users/test/Projects/AI/aiusage' }),
+    );
+    await writeFile(
+      join(agentDir, 'wire.jsonl'),
+      JSON.stringify({
+        type: 'usage.record',
+        model: 'kimi-code/k3',
+        usage: {
+          inputOther: 1_000_000,
+          output: 100_000,
+          inputCacheRead: 2_000_000,
+          inputCacheCreation: 0,
+        },
+        usageScope: 'turn',
+        time: Date.parse('2026-07-17T12:00:00Z'),
+      }),
+    );
+
+    const { buildLocalReport } = await import('../report.js');
+    const report = await buildLocalReport('all');
+
+    expect(report.daily.map(day => day.usageDate)).toEqual(['2026-07-17']);
+    expect(report.bySource).toContainEqual(
+      expect.objectContaining({
+        source: 'moonshot/kimi-code',
+        eventCount: 1,
+        inputTokens: 1_000_000,
+        cachedInputTokens: 2_000_000,
+        outputTokens: 100_000,
+      }),
+    );
   });
 });
 
@@ -113,7 +162,31 @@ describe('calculateBreakdownCost', () => {
       reasoningOutputTokens: 0,
     }, warnings);
 
-    expect(cost).toBe(20.5);
+    expect(cost).toBe(33.5);
+    expect([...warnings]).toEqual([]);
+  });
+
+  it('trusts OpenCode provider-reported cost', async () => {
+    const { calculateBreakdownCost } = await import('../report.js');
+    const warnings = new Set<string>();
+
+    const cost = calculateBreakdownCost({
+      provider: 'openai',
+      product: 'opencode',
+      channel: 'cli',
+      model: 'gpt-5.6',
+      project: '/tmp/project',
+      eventCount: 1,
+      inputTokens: 100,
+      cachedInputTokens: 20,
+      cacheWriteTokens: 0,
+      outputTokens: 10,
+      reasoningOutputTokens: 0,
+      costUSD: 0.42,
+      pricingVersion: 'opencode-provider',
+    }, warnings);
+
+    expect(cost).toBe(0.42);
     expect([...warnings]).toEqual([]);
   });
 
@@ -135,7 +208,7 @@ describe('calculateBreakdownCost', () => {
       reasoningOutputTokens: 0,
     }, warnings);
 
-    expect(cost).toBe(17.75);
+    expect(cost).toBe(28);
     // codex-auto-review 是 catalog 里的显式 alias → gpt-5.4，按 exact 处理，不应有 warning
     expect([...warnings]).toEqual([]);
   });

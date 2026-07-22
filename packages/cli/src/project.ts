@@ -2,6 +2,7 @@ import { open, readdir, readFile } from 'node:fs/promises';
 import { basename, join } from 'node:path';
 import { homedir } from 'node:os';
 import { getCodexBaseDir } from './scanners/codex.js';
+import { resolveKimiCodeHome } from './scanners/kimi.js';
 
 export interface DiscoveredProject {
   /** 原始项目名（目录 basename） */
@@ -57,6 +58,9 @@ export async function discoverProjects(
 
     // Grok Build: ~/.grok/sessions/{URL-encoded cwd}/{session-id}/summary.json
     discoverGrokBuildProjects().then(names => names.forEach(n => add(n, 'grok-build'))),
+
+    // Kimi CLI / Kimi Code: legacy workspace map + new session metadata.
+    discoverKimiProjects().then(names => names.forEach(n => add(n, 'kimi'))),
   ]);
 
   // ���建结果
@@ -354,6 +358,54 @@ async function discoverGrokBuildProjects(): Promise<string[]> {
     }
   }
   return [...names];
+}
+
+async function discoverKimiProjects(): Promise<string[]> {
+  const projects = new Set<string>();
+  const home = homedir();
+
+  try {
+    const raw = await readFile(join(home, '.kimi', 'kimi.json'), 'utf-8');
+    const data = JSON.parse(raw) as { workspaces?: Record<string, { path?: string }> };
+    for (const workspace of Object.values(data.workspaces ?? {})) {
+      const name = basename(workspace.path?.trim() ?? '');
+      if (name && name !== 'unknown') projects.add(name);
+    }
+  } catch {
+    // Legacy Kimi config is optional.
+  }
+
+  const codeHome = resolveKimiCodeHome(home);
+  try {
+    const raw = await readFile(join(codeHome, 'session_index.jsonl'), 'utf-8');
+    for (const line of raw.split('\n')) {
+      if (!line.trim()) continue;
+      try {
+        const record = JSON.parse(line) as { workDir?: string };
+        const name = basename(record.workDir?.trim() ?? '');
+        if (name && name !== 'unknown') projects.add(name);
+      } catch {
+        continue;
+      }
+    }
+  } catch {
+    // Fall through to per-session state files.
+  }
+
+  const stateFiles = (await walkFiles(join(codeHome, 'sessions'), '.json'))
+    .filter(filePath => basename(filePath) === 'state.json');
+  for (const filePath of stateFiles) {
+    try {
+      const raw = await readFile(filePath, 'utf-8');
+      const state = JSON.parse(raw) as { workDir?: string };
+      const name = basename(state.workDir?.trim() ?? '');
+      if (name && name !== 'unknown') projects.add(name);
+    } catch {
+      continue;
+    }
+  }
+
+  return [...projects];
 }
 
 function nameFromFileUri(raw?: string): string | undefined {
