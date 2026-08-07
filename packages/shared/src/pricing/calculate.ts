@@ -69,29 +69,37 @@ function getServiceTierMultiplier(
  * 这样可确保未来出现 `claude-opus-4-8` 等新版本被显式登记前，会返回 unavailable
  * 而不是默默按旧版本计算（旧版本可能贵 3 倍）。
  */
+/** 剥离 Claude Code 上下文窗口标记（如 deepseek-v4-flash[1M] → deepseek-v4-flash）。 */
+function stripContextWindowSuffix(model: string): string {
+  return model.replace(/\[\d+[a-zA-Z]*\]$/, '');
+}
+
 function resolveModelInProduct(
   catalog: PricingCatalog,
   models: Record<string, ModelPricing>,
   model: string,
 ): { resolvedModel: string; pricing: ModelPricing; normalized: boolean } | null {
-  const aliasResolved = catalog.aliases[model];
+  // 带上下文窗口后缀的模型名（deepseek-v4-flash[1M]）统一剥离后再匹配，
+  // 否则 exact/前缀回退都命中不了，会被计为 unavailable（0 元）。
+  const normalizedModel = stripContextWindowSuffix(model);
+  const aliasResolved = catalog.aliases[normalizedModel];
   if (aliasResolved && models[aliasResolved]) {
     // Alias 是 catalog 显式声明的等价名（如 claude-opus-4-7-20260201 → claude-opus-4-7），
     // 视为 exact 命中；只有前缀回退（fallback）才算 estimated
     return { resolvedModel: aliasResolved, pricing: models[aliasResolved], normalized: false };
   }
 
-  if (models[model]) {
-    return { resolvedModel: model, pricing: models[model], normalized: false };
+  if (models[normalizedModel]) {
+    return { resolvedModel: normalizedModel, pricing: models[normalizedModel], normalized: false };
   }
 
   // longest-prefix fallback（同 family / 同档位前缀）
   for (const knownModel of Object.keys(models).sort((a, b) => b.length - a.length)) {
-    if (!model.startsWith(`${knownModel}-`)) continue;
+    if (!normalizedModel.startsWith(`${knownModel}-`)) continue;
 
     // 跨档防护：剥掉 known 前缀后，若 suffix 仅是版本号数字段（如 `-7`、`-7-20260201`），
     // 视为独立新版本，拒绝回退。这是为了避免 `claude-opus-4-7` 被错误归到旧 `claude-opus-4`。
-    const suffix = model.slice(knownModel.length + 1); // 去掉 "knownModel-"
+    const suffix = normalizedModel.slice(knownModel.length + 1); // 去掉 "knownModel-"
     if (/^\d+(?:[-.]\d+)*(?:-\d{6,8})?$/.test(suffix)) continue;
 
     return { resolvedModel: knownModel, pricing: models[knownModel], normalized: true };

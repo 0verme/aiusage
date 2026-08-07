@@ -289,6 +289,18 @@ describe('多币种折算', () => {
     expect(r.costStatus).toBe('exact');
   });
 
+  it('带上下文窗口后缀的模型名（deepseek-v4-flash[1M]）应命中定价而非 unavailable', () => {
+    const r = calculateCost('deepseek', 'claude-code', 'deepseek-v4-flash[1M]', {
+      inputTokens: 1_000_000,
+      cachedInputTokens: 0,
+      cacheWriteTokens: 0,
+      outputTokens: 1_000_000,
+    });
+    expect(r.resolvedModel).toBe('deepseek-v4-flash');
+    expect(r.estimatedCostUsd).toBeCloseTo(0.42, 4);
+    expect(r.costStatus).toBe('exact');
+  });
+
   it('按定价目录中的唯一模型归属识别 provider', () => {
     expect(resolveProviderForModel('deepseek-v4-pro', 'anthropic')).toBe('deepseek');
     expect(resolveProviderForModel('claude-opus-4-8', 'custom')).toBe('anthropic');

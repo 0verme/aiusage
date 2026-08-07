@@ -159,6 +159,10 @@ describe('JSONL scanning', () => {
   });
 
   it('从显式字段或模型前缀识别兼容模型供应商', async () => {
+    // 固定 fallback 端点为 anthropic，避免宿主环境导出的 ANTHROPIC_BASE_URL 干扰前缀推断
+    await writeFile(join(tmpDir, 'settings.json'), JSON.stringify({
+      env: { ANTHROPIC_BASE_URL: 'https://api.anthropic.com' },
+    }));
     const projectDir = join(tmpDir, 'projects', '-Users-test-project');
     await writeJsonl(projectDir, 'session.jsonl', [
       {
@@ -171,6 +175,34 @@ describe('JSONL scanning', () => {
 
     const [b] = (await scanClaudeDates(['2026-01-15'], join(tmpDir, 'projects'))).get('2026-01-15')!;
     expect(b.provider).toBe('model_api');
+  });
+
+  it('DeepSeek 模型经 Claude Code 记录时识别为 deepseek 供应商，带上下文窗口后缀的模型名被归一化', async () => {
+    const projectDir = join(tmpDir, 'projects', '-Users-test-project');
+    await writeJsonl(projectDir, 'session.jsonl', [
+      claudeRecord({
+        timestamp: '2026-01-15T10:00:00.000Z',
+        requestId: 'req_ds_pro',
+        model: 'deepseek-v4-pro',
+        inputTokens: 1000,
+        outputTokens: 200,
+        cacheRead: 500,
+      }),
+      claudeRecord({
+        timestamp: '2026-01-15T10:00:01.000Z',
+        requestId: 'req_ds_flash',
+        model: 'deepseek-v4-flash[1M]',
+        inputTokens: 500,
+        outputTokens: 100,
+      }),
+    ]);
+
+    const breakdowns = (await scanClaudeDates(['2026-01-15'], join(tmpDir, 'projects'))).get('2026-01-15')!;
+    const byModel = new Map(breakdowns.map(b => [b.model, b]));
+    expect(byModel.get('deepseek-v4-pro')?.provider).toBe('deepseek');
+    // [1M] 后缀应被剥离，确保 worker 定价能精确命中 deepseek 目录
+    expect(byModel.get('deepseek-v4-flash')?.provider).toBe('deepseek');
+    expect(byModel.has('deepseek-v4-flash[1M]')).toBe(false);
   });
 
   it('returns empty array for a date with no JSONL data and no stats-cache', async () => {

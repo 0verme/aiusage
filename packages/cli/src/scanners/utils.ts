@@ -136,8 +136,11 @@ export function emptyResult(dates: Set<string>): Map<string, IngestBreakdown[]> 
 }
 
 // 归一化模型名，去掉日期后缀（如 claude-3-5-sonnet-20241022 → claude-3-5-sonnet）
+// 与上下文窗口标记（如 deepseek-v4-flash[1M] → deepseek-v4-flash，Claude Code 会附带 [1M]/[200k] 等）
 export function normalizeModelName(name: string): string {
-  return name.replace(/-\d{8}$/, '');
+  return name
+    .replace(/\[\d+[a-zA-Z]*\]$/, '')
+    .replace(/-\d{8}$/, '');
 }
 
 // Pool-based 并发控制，避免同时打开过多文件句柄
