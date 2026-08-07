@@ -8,7 +8,8 @@ import { useOverview, type OverviewPayload } from '../hooks/use-overview';
 import { TOKEN_SERIES, getChartColors, getTokenColor, providerLabel } from '../constants';
 import { useIsDark } from '../hooks/use-dark';
 import {
-  formatUsd, formatCompact, formatNumber, formatPercent, formatModelName, arrSum,
+  formatUsd, formatUsdFull, formatCompact, formatNumber, formatPercent, formatTokens,
+  formatModelName, arrSum,
 } from '../utils/format';
 
 import { KpiCard } from '../components/kpi-card';
@@ -233,27 +234,40 @@ function WidgetRenderer({
       const providerData = (overview?.filters.options.providers ?? []).map((p) => ({
         value: p.value,
         label: providerLabel(p.value),
-        estimatedCostUsd: p.estimatedCostUsd,
-        eventCount: p.eventCount,
+        amount: p.estimatedCostUsd,
       }));
       const modelData = (overview?.modelCostShare ?? []).map((m) => ({
-        ...m,
+        value: m.value,
         label: formatModelName(m.label),
+        amount: m.totalTokens,
       }));
       const deviceData = (overview?.filters.options.devices ?? []).map((d) => ({
         value: d.value,
         label: d.label,
-        estimatedCostUsd: d.estimatedCostUsd,
-        eventCount: d.eventCount,
+        amount: d.estimatedCostUsd,
       }));
 
-      const centerLabel = formatUsd(overview?.totalCostUsd ?? 0);
       const colors = getChartColors(isDark);
 
       const sections = [
-        { idx: 0, title: t.providerShare, data: providerData, colors },
-        { idx: 1, title: t.modelShare, data: modelData, colors },
-        { idx: 2, title: t.deviceShare, data: deviceData, colors },
+        {
+          idx: 0, title: t.providerShare, data: providerData, colors,
+          centerLabel: formatUsd(overview?.totalCostUsd ?? 0),
+          formatValue: formatUsd,
+          formatTooltipValue: formatUsdFull,
+        },
+        {
+          idx: 1, title: t.modelShare, data: modelData, colors,
+          centerLabel: formatCompact(kpis?.totalTokens ?? 0, locale),
+          formatValue: (value: number) => formatCompact(value, locale),
+          formatTooltipValue: (value: number) => formatTokens(value, locale),
+        },
+        {
+          idx: 2, title: t.deviceShare, data: deviceData, colors,
+          centerLabel: formatUsd(overview?.totalCostUsd ?? 0),
+          formatValue: formatUsd,
+          formatTooltipValue: formatUsdFull,
+        },
       ];
 
       const visible = items ? sections.filter((s) => items.includes(s.idx)) : sections;
@@ -272,7 +286,9 @@ function WidgetRenderer({
                 title={sec.title}
                 data={sec.data}
                 colors={sec.colors}
-                centerLabel={centerLabel}
+                centerLabel={sec.centerLabel}
+                formatValue={sec.formatValue}
+                formatTooltipValue={sec.formatTooltipValue}
               />
             </div>
           ))}

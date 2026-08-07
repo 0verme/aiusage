@@ -1,6 +1,7 @@
 import type { SankeyGraph } from '@aiusage/shared';
 import type { OverviewPayload, FiltersState } from '../hooks/use-overview';
 import { arrSum } from './format';
+import { scaleModelShares } from './share-data';
 
 const SANKEY_SOURCE_COLORS = [
   '#22d3ee',
@@ -61,8 +62,11 @@ export function padMonth(ov: OverviewPayload): OverviewPayload {
   const totalEvents = arrSum(monthTrend.map((d) => d.eventCount));
   const activeDays = monthTrend.length;
 
-  // Scale share/sankey data by cost ratio (month vs full range)
+  // Scale share/sankey data to the frontend-only current-month window.
   const ratio = ov.totalCostUsd > 0 ? totalCostUsd / ov.totalCostUsd : 0;
+  const fullRangeTokens = arrSum(ov.tokenComposition.map((d) => d.totalTokens));
+  const monthTokens = arrSum(tokenComposition.map((d) => d.totalTokens));
+  const tokenRatio = fullRangeTokens > 0 ? monthTokens / fullRangeTokens : 0;
   const eventRatio = ov.totalEvents > 0 ? totalEvents / ov.totalEvents : 0;
 
   function scaleShares<T extends { estimatedCostUsd: number; eventCount: number }>(items: T[]): T[] {
@@ -94,7 +98,7 @@ export function padMonth(ov: OverviewPayload): OverviewPayload {
     dailyTrend,
     providerDailyTrend,
     tokenComposition,
-    modelCostShare: scaleShares(ov.modelCostShare),
+    modelCostShare: scaleModelShares(ov.modelCostShare, ratio, tokenRatio),
     channelCostShare: scaleShares(ov.channelCostShare),
     sankey,
     filters: {

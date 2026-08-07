@@ -7000,175 +7000,204 @@ export const DEMO_OVERVIEW: OverviewResponse & { ok: boolean } = {
       "value": "claude-opus-4-6",
       "label": "claude-opus-4-6",
       "estimatedCostUsd": 4507.5852,
-      "eventCount": 45781
+      "eventCount": 45781,
+      "totalTokens": 5642107730
     },
     {
       "value": "gpt-5.4",
       "label": "gpt-5.4",
       "estimatedCostUsd": 2016.7512,
-      "eventCount": 29555
+      "eventCount": 29555,
+      "totalTokens": 4212365136
     },
     {
       "value": "claude-opus-4-5",
       "label": "claude-opus-4-5",
       "estimatedCostUsd": 681.9071,
-      "eventCount": 7501
+      "eventCount": 7501,
+      "totalTokens": 371591041
     },
     {
       "value": "gpt-5.3-codex",
       "label": "gpt-5.3-codex",
       "estimatedCostUsd": 91.7091,
-      "eventCount": 2394
+      "eventCount": 2394,
+      "totalTokens": 299888974
     },
     {
       "value": "gpt-5-codex",
       "label": "gpt-5-codex",
       "estimatedCostUsd": 89.6371,
-      "eventCount": 5548
+      "eventCount": 5548,
+      "totalTokens": 331784629
     },
     {
       "value": "gpt-5.2-codex",
       "label": "gpt-5.2-codex",
       "estimatedCostUsd": 87.1511,
-      "eventCount": 2522
+      "eventCount": 2522,
+      "totalTokens": 245268121
     },
     {
       "value": "gpt-5",
       "label": "gpt-5",
       "estimatedCostUsd": 39.8052,
-      "eventCount": 2257
+      "eventCount": 2257,
+      "totalTokens": 112424792
     },
     {
       "value": "gpt-5.2",
       "label": "gpt-5.2",
       "estimatedCostUsd": 26.5929,
-      "eventCount": 815
+      "eventCount": 815,
+      "totalTokens": 72840228
     },
     {
       "value": "claude-sonnet-4-6",
       "label": "claude-sonnet-4-6",
       "estimatedCostUsd": 14.3072,
-      "eventCount": 303
+      "eventCount": 303,
+      "totalTokens": 27481030
     },
     {
       "value": "gpt-5.1",
       "label": "gpt-5.1",
       "estimatedCostUsd": 12.0748,
-      "eventCount": 760
+      "eventCount": 760,
+      "totalTokens": 35969842
     },
     {
       "value": "claude-haiku-4-5",
       "label": "claude-haiku-4-5",
       "estimatedCostUsd": 10.7336,
-      "eventCount": 1028
+      "eventCount": 1028,
+      "totalTokens": 37263943
     },
     {
       "value": "gpt-5.1-codex",
       "label": "gpt-5.1-codex",
       "estimatedCostUsd": 9.9755,
-      "eventCount": 615
+      "eventCount": 615,
+      "totalTokens": 37774012
     },
     {
       "value": "gpt-5.1-codex-max",
       "label": "gpt-5.1-codex-max",
       "estimatedCostUsd": 4.306,
-      "eventCount": 224
+      "eventCount": 224,
+      "totalTokens": 11251344
     },
     {
       "value": "claude-sonnet-4-5",
       "label": "claude-sonnet-4-5",
       "estimatedCostUsd": 0.4415,
-      "eventCount": 25
+      "eventCount": 25,
+      "totalTokens": 233469
     },
     {
       "value": "gpt-5.1-codex-mini",
       "label": "gpt-5.1-codex-mini",
       "estimatedCostUsd": 0.3244,
-      "eventCount": 19
+      "eventCount": 19,
+      "totalTokens": 2721003
     },
     {
       "value": "gpt-5-codex-mini",
       "label": "gpt-5-codex-mini",
       "estimatedCostUsd": 0.1256,
-      "eventCount": 20
+      "eventCount": 20,
+      "totalTokens": 172313
     },
     {
       "value": "gemini-2.5-pro",
       "label": "gemini-2.5-pro",
       "estimatedCostUsd": 0,
-      "eventCount": 795
+      "eventCount": 795,
+      "totalTokens": 73204891
     },
     {
       "value": "claude-opus-4.5",
       "label": "claude-opus-4.5",
       "estimatedCostUsd": 0,
-      "eventCount": 537
+      "eventCount": 537,
+      "totalTokens": 0
     },
     {
       "value": "gemini-3-pro-preview",
       "label": "gemini-3-pro-preview",
       "estimatedCostUsd": 0,
-      "eventCount": 359
+      "eventCount": 359,
+      "totalTokens": 18886014
     },
     {
       "value": "claude-sonnet-4.5",
       "label": "claude-sonnet-4.5",
       "estimatedCostUsd": 0,
-      "eventCount": 119
+      "eventCount": 119,
+      "totalTokens": 0
     },
     {
       "value": "unknown",
       "label": "unknown",
       "estimatedCostUsd": 0,
-      "eventCount": 87
+      "eventCount": 87,
+      "totalTokens": 0
     },
     {
       "value": "gpt-5-codex",
       "label": "gpt-5-codex",
       "estimatedCostUsd": 0,
-      "eventCount": 43
+      "eventCount": 43,
+      "totalTokens": 0
     },
     {
       "value": "gemini-2.5-flash",
       "label": "gemini-2.5-flash",
       "estimatedCostUsd": 0,
-      "eventCount": 24
+      "eventCount": 24,
+      "totalTokens": 1087582
     },
     {
       "value": "claude-haiku-4.5",
       "label": "claude-haiku-4.5",
       "estimatedCostUsd": 0,
-      "eventCount": 14
+      "eventCount": 14,
+      "totalTokens": 0
     },
     {
       "value": "grok-code-fast-1",
       "label": "grok-code-fast-1",
       "estimatedCostUsd": 0,
-      "eventCount": 7
+      "eventCount": 7,
+      "totalTokens": 0
     },
     {
       "value": "gemini-2.5-pro",
       "label": "gemini-2.5-pro",
       "estimatedCostUsd": 0,
-      "eventCount": 4
+      "eventCount": 4,
+      "totalTokens": 0
     },
     {
       "value": "gemini-3-pro-preview",
       "label": "gemini-3-pro-preview",
       "estimatedCostUsd": 0,
-      "eventCount": 3
+      "eventCount": 3,
+      "totalTokens": 0
     },
     {
       "value": "oswe-vscode-prime",
       "label": "oswe-vscode-prime",
       "estimatedCostUsd": 0,
-      "eventCount": 2
+      "eventCount": 2,
+      "totalTokens": 0
     },
     {
       "value": "gpt-4.1-2025-04-14",
       "label": "gpt-4.1-2025-04-14",
       "estimatedCostUsd": 0,
-      "eventCount": 1
+      "eventCount": 1,
+      "totalTokens": 0
     }
   ],
   "channelCostShare": [

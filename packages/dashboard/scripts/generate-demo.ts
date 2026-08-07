@@ -111,6 +111,7 @@ function fmtModel(raw: string): string {
 interface AggregateEntry {
   estimatedCostUsd: number;
   eventCount: number;
+  totalTokens?: number;
 }
 
 async function main() {
@@ -164,7 +165,7 @@ async function main() {
     for (const breakdown of result.breakdowns) {
       const estimatedCostUsd = calculateBreakdownCost(breakdown, warnings);
       const totalTokens = totalTokensOf(breakdown);
-      const sourceKey = `${breakdown.provider}/${breakdown.product}|${breakdown.model}`;
+      const sourceKey = breakdown.model;
       const providerDayKey = `${result.usageDate}|${breakdown.provider}`;
       const projectName = breakdown.project || 'Unknown';
       const flowKey = `${breakdown.model}\u2192${projectName}`;
@@ -183,6 +184,7 @@ async function main() {
       byModel.set(sourceKey, {
         estimatedCostUsd: (byModel.get(sourceKey)?.estimatedCostUsd ?? 0) + estimatedCostUsd,
         eventCount: (byModel.get(sourceKey)?.eventCount ?? 0) + breakdown.eventCount,
+        totalTokens: (byModel.get(sourceKey)?.totalTokens ?? 0) + totalTokens,
       });
 
       byChannel.set(breakdown.channel, {
@@ -254,16 +256,16 @@ async function main() {
     .sort((a, b) => a.usageDate.localeCompare(b.usageDate) || a.provider.localeCompare(b.provider));
 
   const modelCostShare = [...byModel.entries()]
-    .map(([key, summary]) => {
-      const [, model] = key.split('|');
+    .map(([model, summary]) => {
       return {
         value: model,
         label: model,
         estimatedCostUsd: roundUsd(summary.estimatedCostUsd),
         eventCount: summary.eventCount,
+        totalTokens: summary.totalTokens ?? 0,
       };
     })
-    .sort((a, b) => b.estimatedCostUsd - a.estimatedCostUsd || b.eventCount - a.eventCount);
+    .sort((a, b) => b.totalTokens - a.totalTokens || b.estimatedCostUsd - a.estimatedCostUsd);
 
   const channelCostShare = [...byChannel.entries()]
     .map(([value, summary]) => ({

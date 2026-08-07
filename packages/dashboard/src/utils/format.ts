@@ -67,17 +67,3 @@ export function longDate(v: string): string {
 export function arrSum(arr: number[]): number {
   return arr.reduce((a, b) => a + Number(b || 0), 0);
 }
-
-export function foldItems<T extends { estimatedCostUsd: number; label: string; value: string }>(
-  items: T[],
-  limit: number,
-): T[] {
-  if (items.length <= limit) return items;
-  const head = items.slice(0, limit - 1);
-  const tail = items.slice(limit - 1);
-  const other = tail.reduce(
-    (acc, it) => ({ ...acc, estimatedCostUsd: acc.estimatedCostUsd + Number(it.estimatedCostUsd || 0) }),
-    { ...tail[0], value: 'other', label: 'Other', estimatedCostUsd: 0 },
-  );
-  return [...head, other];
-}

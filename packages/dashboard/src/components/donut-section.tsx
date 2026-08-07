@@ -1,7 +1,8 @@
 import { useState, useRef } from "react";
 import { Cell, Pie, PieChart, ResponsiveContainer } from "recharts";
 import { ChartContainer } from "./ui/chart";
-import { formatUsd, formatUsdFull, arrSum, foldItems } from "../utils/format";
+import { arrSum, formatUsd } from "../utils/format";
+import { getSharePercent, prepareShareItems } from "../utils/share-data";
 import { EmptyState } from "./chart-helpers";
 
 export function ProviderBars({ data }: { data: Array<{ label: string; estimatedCostUsd: number }> }) {
@@ -35,15 +36,18 @@ export function DonutSection({
     data,
     colors,
     centerLabel,
+    formatValue,
+    formatTooltipValue,
 }: {
     title: string;
-    data: Array<{ label: string; value: string; estimatedCostUsd: number; eventCount: number }>;
+    data: Array<{ label: string; value: string; amount: number }>;
     colors: string[];
     centerLabel: string;
+    formatValue: (value: number) => string;
+    formatTooltipValue?: (value: number) => string;
 }) {
-    const sorted = [...data].sort((a, b) => b.estimatedCostUsd - a.estimatedCostUsd);
-    const folded = foldItems(sorted, 6);
-    const total = arrSum(folded.map((d) => d.estimatedCostUsd));
+    const folded = prepareShareItems(data, 6);
+    const total = arrSum(folded.map((d) => d.amount));
 
     const containerRef = useRef<HTMLDivElement>(null);
     const [tip, setTip] = useState<{ x: number; y: number; label: string; value: number } | null>(null);
@@ -73,7 +77,7 @@ export function DonutSection({
                             <PieChart>
                                 <Pie
                                     data={folded}
-                                    dataKey="estimatedCostUsd"
+                                    dataKey="amount"
                                     nameKey="label"
                                     innerRadius="62%"
                                     outerRadius="86%"
@@ -81,7 +85,7 @@ export function DonutSection({
                                     stroke="none"
                                     onMouseEnter={(_, idx) => {
                                         const item = folded[idx];
-                                        if (item) setTip({ x: 0, y: 0, label: item.label, value: item.estimatedCostUsd });
+                                        if (item) setTip({ x: 0, y: 0, label: item.label, value: item.amount });
                                     }}
                                     onMouseLeave={() => setTip(null)}
                                 >
@@ -103,7 +107,7 @@ export function DonutSection({
                             style={{ left: tip.x, top: tip.y, background: 'var(--panel)', borderColor: 'var(--border)' }}
                         >
                             <div className="text-[11px]" style={{ color: 'var(--fg2)' }}>{tip.label}</div>
-                            <div className="mt-1 text-[11px] font-semibold tabular-nums" style={{ color: 'var(--fg)' }}>{formatUsdFull(tip.value)}</div>
+                            <div className="mt-1 text-[11px] font-semibold tabular-nums" style={{ color: 'var(--fg)' }}>{(formatTooltipValue ?? formatValue)(tip.value)}</div>
                         </div>
                     )}
                 </div>
@@ -111,14 +115,14 @@ export function DonutSection({
                 {/* Legend */}
                 <div className="grid min-w-0 gap-y-2 font-mono text-[12px]" style={{ gridTemplateColumns: "10px minmax(0,1fr) auto auto", columnGap: "10px" }}>
                     {folded.map((item, i) => {
-                        const pct = total > 0 ? (item.estimatedCostUsd / total) * 100 : 0;
+                        const pct = getSharePercent(item.amount, total);
                         const c = colors[i % colors.length];
                         return (
                             <div key={item.value} className="col-span-4 grid grid-cols-subgrid items-center">
                                 <span className="h-[9px] w-[9px] rounded-[2px]" style={{ backgroundColor: c, boxShadow: `0 0 7px ${c}` }} />
                                 <span className="truncate" style={{ color: 'var(--fg)' }}>{item.label}</span>
                                 <span className="text-right tabular-nums" style={{ color: 'var(--fg2)' }}>{pct.toFixed(1)}%</span>
-                                <span className="text-right font-semibold tabular-nums" style={{ color: 'var(--fg)' }}>{formatUsd(item.estimatedCostUsd)}</span>
+                                <span className="text-right font-semibold tabular-nums" style={{ color: 'var(--fg)' }}>{formatValue(item.amount)}</span>
                             </div>
                         );
                     })}

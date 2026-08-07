@@ -7,8 +7,8 @@ import { getStoredTheme, applyTheme } from './theme';
 import { TOKEN_SERIES, getChartColors, getTokenColor, providerLabel, formatProductLabel } from './constants';
 import { useIsDark } from './hooks/use-dark';
 import {
-  formatUsd, formatUsdFull, formatCompact, formatNumber, formatPercent,
-  formatModelName, shortDate, longDate, arrSum, foldItems,
+  formatUsd, formatUsdFull, formatCompact, formatNumber, formatPercent, formatTokens,
+  formatModelName, shortDate, longDate, arrSum,
 } from './utils/format';
 import type { FiltersState, FacetOption } from './hooks/use-overview';
 import { useOverview } from './hooks/use-overview';
@@ -561,18 +561,25 @@ export function App() {
                       data={(overview?.filters.options.providers ?? []).map((p) => ({
                         value: p.value,
                         label: providerLabel(p.value),
-                        estimatedCostUsd: p.estimatedCostUsd,
-                        eventCount: p.eventCount,
+                        amount: p.estimatedCostUsd,
                       }))}
                       colors={getChartColors(isDark)}
                       centerLabel={formatUsd(overview?.totalCostUsd ?? 0)}
+                      formatValue={formatUsd}
+                      formatTooltipValue={formatUsdFull}
                     />
                     <div className="my-5 border-t" style={{ borderColor: 'var(--border)' }} />
                     <DonutSection
                       title={t.modelShare}
-                      data={(overview?.modelCostShare ?? []).map((m) => ({ ...m, label: formatModelName(m.label, isMobile) }))}
+                      data={(overview?.modelCostShare ?? []).map((m) => ({
+                        value: m.value,
+                        label: formatModelName(m.label, isMobile),
+                        amount: m.totalTokens,
+                      }))}
                       colors={getChartColors(isDark)}
-                      centerLabel={formatUsd(overview?.totalCostUsd ?? 0)}
+                      centerLabel={formatCompact(kpis?.totalTokens ?? 0, locale)}
+                      formatValue={(value) => formatCompact(value, locale)}
+                      formatTooltipValue={(value) => formatTokens(value, locale)}
                     />
                     <div className="my-5 border-t" style={{ borderColor: 'var(--border)' }} />
                     <DonutSection
@@ -580,11 +587,12 @@ export function App() {
                       data={(overview?.filters.options.devices ?? []).map((d) => ({
                         value: d.value,
                         label: d.label,
-                        estimatedCostUsd: d.estimatedCostUsd,
-                        eventCount: d.eventCount,
+                        amount: d.estimatedCostUsd,
                       }))}
                       colors={getChartColors(isDark)}
                       centerLabel={formatUsd(overview?.totalCostUsd ?? 0)}
+                      formatValue={formatUsd}
+                      formatTooltipValue={formatUsdFull}
                     />
                   </div>
                 </ChartBoundary>

@@ -99,7 +99,7 @@ export interface OverviewResponse {
   dailyTrend: DailyTrendItem[];
   providerDailyTrend: ProviderDailyTrendItem[];
   tokenComposition: TokenCompositionItem[];
-  modelCostShare: ShareItem[];
+  modelCostShare: ModelShareItem[];
   channelCostShare: ShareItem[];
   sankey: SankeyGraph;
   heatmap: HeatmapDay[];
@@ -133,6 +133,10 @@ export interface ShareItem {
   label: string;
   estimatedCostUsd: number;
   eventCount: number;
+}
+
+export interface ModelShareItem extends ShareItem {
+  totalTokens: number;
 }
 
 export interface SankeyNode {

@@ -13,7 +13,7 @@ const WIDGETS = [
   { id: 'token-trend', nameZh: 'Token 趋势', nameEn: 'Token Trend', descZh: '按天展示各类 Token 用量的面积图', descEn: 'Daily token usage area chart by type', height: 380, supportsItems: false },
   { id: 'token-composition', nameZh: 'Token 构成', nameEn: 'Token Composition', descZh: '按天展示 Token 类型分布的堆叠柱状图', descEn: 'Daily token type distribution stacked bar chart', height: 380, supportsItems: false },
   { id: 'flow', nameZh: 'Token 流向', nameEn: 'Token Flow', descZh: '模型到项目的 Token 流向桑基图', descEn: 'Model-to-project token flow Sankey diagram', height: 420, supportsItems: false },
-  { id: 'share', nameZh: '占比分析', nameEn: 'Share Analysis', descZh: '厂商、模型、设备的费用占比环形图', descEn: 'Provider, model, and device cost share donut charts', height: 480, supportsItems: true, itemsNoteZh: '0=厂商, 1=模型, 2=设备', itemsNoteEn: '0=Provider, 1=Model, 2=Device' },
+  { id: 'share', nameZh: '占比分析', nameEn: 'Share Analysis', descZh: '厂商和设备费用占比、模型 Token 占比环形图', descEn: 'Provider and device cost share plus model token share donut charts', height: 480, supportsItems: true, itemsNoteZh: '0=厂商, 1=模型, 2=设备', itemsNoteEn: '0=Provider, 1=Model, 2=Device' },
 ] as const;
 
 type WidgetId = (typeof WIDGETS)[number]['id'];
