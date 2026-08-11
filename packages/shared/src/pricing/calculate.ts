@@ -146,6 +146,9 @@ export function resolveProviderForModel(
 
   const { baseModel } = splitServiceTierSuffix(model);
   const providers = Object.entries(catalog.providers)
+    // These entries mirror a canonical provider for gateway/client records;
+    // they must not make model ownership ambiguous during inference.
+    .filter(([provider]) => provider !== 'custom' && provider !== 'opencode-go')
     .filter(([, products]) => Object.values(products).some(
       product => resolveModelInProduct(catalog, product.models, baseModel) !== null,
     ))
