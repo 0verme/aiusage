@@ -358,11 +358,11 @@ function resolveClaudeProvider(record: ClaudeRecord, model: string, fallbackProv
   )?.trim().toLowerCase();
   const prefix = model.trim().toLowerCase().match(/^([a-z0-9_-]+)\//)?.[1];
   const inferred = prefix ?? inferProviderFromModel(model, 'unknown');
-  // 一些兼容层会固定写 anthropic，但模型名已明确指向其他供应商。
   if (explicit && explicit !== 'anthropic') return explicit;
+  // 一些兼容层会固定写 anthropic，但模型名已明确指向其他供应商。
+  if (inferred !== 'unknown' && inferred !== 'anthropic') return inferred;
   if (fallbackProvider !== 'anthropic' && fallbackProvider !== 'unknown') return fallbackProvider;
-  if (inferred !== 'unknown') return inferred;
-  return explicit ?? fallbackProvider;
+  return fallbackProvider ?? explicit ?? 'anthropic';
 }
 
 function parseTimestamp(value?: string): Date | null {
