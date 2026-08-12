@@ -62,4 +62,20 @@ describe('setConfigValue', () => {
     const cleared = setConfigValue(configured, 'scanner.opencodeDbPaths', ['default']);
     expect(cleared.scanner?.opencodeDbPaths).toBeUndefined();
   });
+
+  it('configures remote pricing behavior', async () => {
+    const { setConfigValue } = await import('../config.js');
+    let config = setConfigValue({}, 'pricing.mode', ['manual']);
+    config = setConfigValue(config, 'pricing.url', ['https://example.com/pricing/']);
+    config = setConfigValue(config, 'pricing.cacheTtlHours', ['12']);
+
+    expect(config.pricing).toEqual({
+      mode: 'manual',
+      url: 'https://example.com/pricing',
+      cacheTtlHours: 12,
+    });
+
+    config = setConfigValue(config, 'pricing.url', ['default']);
+    expect(config.pricing?.url).toBeUndefined();
+  });
 });

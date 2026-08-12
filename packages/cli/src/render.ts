@@ -24,6 +24,7 @@ export function renderReport(report: LocalReport, opts: RenderOptions): string {
   lines.push(`${s.events.padEnd(10)}${fmtInt(report.totals.eventCount)}`);
   lines.push(`${s.tokens.padEnd(10)}${fmtToken(report.totals.totalTokens)}`);
   lines.push(`${s.cost.padEnd(10)}${fmtUsd(report.totals.estimatedCostUsd, opts.detail)}`);
+  lines.push(`${s.pricing.padEnd(10)}${report.pricing.source} ${report.pricing.version}`);
 
   if (report.daysWithData === 0) {
     lines.push('');

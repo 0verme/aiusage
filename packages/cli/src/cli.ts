@@ -24,6 +24,7 @@ import { runDoctor } from './doctor.js';
 import { getVersion } from './version.js';
 import { discoverProjects } from './project.js';
 import { applyPrivacy } from './privacy.js';
+import { getPricingStatus, resolvePricingCatalog } from './pricing.js';
 
 const argv = process.argv.slice(2);
 const command = argv[0];
@@ -77,6 +78,13 @@ try {
     const parsed = parseArgs(argv.slice(1));
     if (parsed.flags.help) return helpForSubcommand('doctor');
     await runDoctorCommand(parsed.flags);
+  } else if (command === 'pricing') {
+    const sub = argv[1];
+    const parsed = parseArgs(argv.slice(2));
+    if (sub === '--help' || sub === '-h' || parsed.flags.help) return helpForSubcommand('pricing');
+    if (sub === 'update') await runPricingUpdate(parsed.flags);
+    else if (sub === 'status' || sub === undefined) await runPricingStatus(parsed.flags);
+    else throw new Error(`Unknown subcommand: pricing ${sub}`);
   } else if (command === 'config' && argv[1] === 'set') {
     await runConfigSet(argv.slice(2));
   } else if (command === 'project') {
@@ -193,10 +201,18 @@ async function runReport(flags: Record<string, string | boolean>, positionals: s
 
   // 日期解析：--from/--start, --to/--end, --date, --today, --range, --lookback
   const { dates, range } = resolveDateParams(flags, config);
+  const targetName = resolveOptionalString(flags.target, undefined);
+  const pricingTarget = targetName ? findTargetOrThrow(config, targetName) : config.targets?.[0];
+  const pricing = await resolvePricingCatalog(config, {
+    explicitUrl: resolveOptionalString(flags['pricing-url'], undefined),
+    target: pricingTarget,
+  });
   const report = await buildLocalReport(range, {
     projectAliases: config.projectAliases,
     opencodeDbPaths: config.scanner?.opencodeDbPaths,
     dates,
+    pricingCatalog: pricing.catalog,
+    pricingInfo: pricing.info,
   });
 
   if (flags.json) {
@@ -572,6 +588,39 @@ async function runDoctorCommand(flags: Record<string, string | boolean>) {
   if (failures.length > 0) process.exitCode = 1;
 }
 
+async function runPricingStatus(flags: Record<string, string | boolean>) {
+  const config = await readConfig();
+  const status = await getPricingStatus(config);
+  if (flags.json) {
+    console.log(JSON.stringify(status, null, 2));
+    return;
+  }
+  console.log(`Mode: ${status.mode}`);
+  if (status.configuredUrl) console.log(`Configured URL: ${status.configuredUrl}`);
+  console.log(`Cache: ${status.cachePath}`);
+  console.log(`Cached version: ${status.cache?.version ?? '(none)'}`);
+  if (status.cache) {
+    console.log(`Cached source: ${status.cache.sourceUrl}`);
+    console.log(`Fetched at: ${status.cache.fetchedAt}`);
+  }
+  console.log(`Bundled version: ${status.bundled.version}`);
+}
+
+async function runPricingUpdate(flags: Record<string, string | boolean>) {
+  const config = await readConfig();
+  const targetName = resolveOptionalString(flags.target, undefined);
+  const target = targetName ? findTargetOrThrow(config, targetName) : config.targets?.[0];
+  const pricing = await resolvePricingCatalog(config, {
+    forceRefresh: true,
+    explicitUrl: resolveOptionalString(flags.url, undefined),
+    target,
+  });
+  console.log(JSON.stringify({
+    cachePath: (await getPricingStatus(config)).cachePath,
+    pricing: pricing.info,
+  }, null, 2));
+}
+
 async function runConfigSet(args: string[]) {
   const [keyPath, ...values] = args;
   if (!keyPath) throw new Error('config set 缺少配置项');
@@ -686,6 +735,7 @@ function printHelp(zh = false) {
     ['sync [--today|--yesterday] [--range 7d|1m|3m]',             '上传用量到服务端'],
     ['scan/report/sync --from YYYY-MM-DD [--to YYYY-MM-DD]',      '指定日期范围（--start/--end 同义）'],
     ['project [list|alias]',                                  '项目管理与别名设置'],
+    ['pricing [status|update] [--url URL]',                   '查看或更新定价目录'],
     ['schedule [on|off|status] [--every 5m] [--yesterday]',  '定时同步管理'],
     ['doctor',                                               '诊断检查'],
     ['config set <key> <value>',                             '修改配置'],
@@ -698,6 +748,7 @@ function printHelp(zh = false) {
     ['sync [--today|--yesterday] [--range 7d|1m|3m]',             'Upload usage to server'],
     ['scan/report/sync --from YYYY-MM-DD [--to YYYY-MM-DD]',      'Date range (--start/--end aliases)'],
     ['project [list|alias]',                                 'Project management & aliases'],
+    ['pricing [status|update] [--url URL]',                  'Pricing catalog management'],
     ['schedule [on|off|status] [--every 5m] [--yesterday]',  'Scheduled sync management'],
     ['doctor',                                               'Run diagnostics'],
     ['config set <key> <value>',                             'Update config'],
@@ -724,6 +775,7 @@ function printUsageHint(zh = false) {
     ['report [--today] [--range 7d|1m|3m|all]', '本地用量报告'],
     ['sync [--today|--yesterday] [--range 7d|1m|3m]', '上传用量到服务端'],
     ['project [list|alias]',                  '项目管理与别名设置'],
+    ['pricing [status|update]',               '查看或更新定价目录'],
     ['schedule [on|off|status] [--yesterday]', '定时同步管理'],
     ['doctor',                                '诊断检查'],
     ['config set <key> <value>',              '修改配置'],
@@ -732,6 +784,7 @@ function printUsageHint(zh = false) {
     ['report [--today] [--range 7d|1m|3m|all]', 'Local usage report'],
     ['sync [--today|--yesterday] [--range 7d|1m|3m]', 'Upload usage to server'],
     ['project [list|alias]',                  'Project management & aliases'],
+    ['pricing [status|update]',               'Pricing catalog management'],
     ['schedule [on|off|status] [--yesterday]', 'Scheduled sync management'],
     ['doctor',                                'Run diagnostics'],
     ['config set <key> <value>',              'Update config'],

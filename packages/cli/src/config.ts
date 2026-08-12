@@ -29,6 +29,11 @@ export interface AIUsageConfig {
     /** Extra OpenCode databases outside XDG_DATA_HOME/opencode. */
     opencodeDbPaths?: string[];
   };
+  pricing?: {
+    mode?: 'auto' | 'manual' | 'offline';
+    url?: string;
+    cacheTtlHours?: number;
+  };
   lang?: 'en' | 'zh';
   emoji?: boolean;
 
@@ -66,6 +71,7 @@ function migrateConfig(config: AIUsageConfig): AIUsageConfig {
     projectAliases: config.projectAliases,
     privacy: config.privacy,
     scanner: config.scanner,
+    pricing: config.pricing,
     lang: config.lang,
     emoji: config.emoji,
     targets: [target],
@@ -194,6 +200,31 @@ export function setConfigValue(
     const alias = rest.join(' ').trim();
     if (!alias) throw new Error('project.alias 别名不能为空');
     next.projectAliases = { ...(next.projectAliases ?? {}), [from]: alias };
+    return next;
+  }
+
+  if (keyPath === 'pricing.mode') {
+    const value = requireSingleValue(keyPath, values);
+    if (value !== 'auto' && value !== 'manual' && value !== 'offline') {
+      throw new Error('pricing.mode only supports auto, manual, or offline');
+    }
+    next.pricing = { ...(next.pricing ?? {}), mode: value };
+    return next;
+  }
+
+  if (keyPath === 'pricing.url') {
+    const value = requireSingleValue(keyPath, values);
+    next.pricing = { ...(next.pricing ?? {}) };
+    if (['default', 'none', 'off'].includes(value.toLowerCase())) delete next.pricing.url;
+    else next.pricing.url = normalizeServerUrl(value);
+    return next;
+  }
+
+  if (keyPath === 'pricing.cacheTtlHours') {
+    next.pricing = {
+      ...(next.pricing ?? {}),
+      cacheTtlHours: parsePositiveInt(requireSingleValue(keyPath, values), keyPath),
+    };
     return next;
   }
 
