@@ -21,12 +21,12 @@ export interface DashboardFilters {
   maxDate: string | null;
   rangeDays: number | null;
   range: string;
-  deviceId: string | null;
-  provider: string | null;
-  product: string | null;
-  channel: string | null;
-  model: string | null;
-  project: string | null;
+  deviceId: string[];
+  provider: string[];
+  product: string[];
+  channel: string[];
+  model: string[];
+  project: string[];
 }
 
 export interface WhereParts {
@@ -306,13 +306,38 @@ export function parseFilters(url: URL): DashboardFilters | null {
     maxDate: window.maxDate,
     rangeDays: window.days,
     range,
-    deviceId: readTextParam(url, 'deviceId'),
-    provider: readTextParam(url, 'provider'),
-    product: readTextParam(url, 'product'),
-    channel: readTextParam(url, 'channel'),
-    model: readTextParam(url, 'model'),
-    project: readTextParam(url, 'project'),
+    deviceId: readTextParams(url, 'deviceId'),
+    provider: readTextParams(url, 'provider'),
+    product: readTextParams(url, 'product'),
+    channel: readTextParams(url, 'channel'),
+    model: readTextParams(url, 'model'),
+    project: readTextParams(url, 'project'),
   };
+}
+
+function readTextParams(url: URL, key: string): string[] {
+  const values = url.searchParams
+    .getAll(key)
+    .flatMap((value) => value.split(','))
+    .map((value) => value.trim())
+    .filter(Boolean);
+  return [...new Set(values)];
+}
+
+function addValueFilter(
+  clauses: string[],
+  params: (string | number)[],
+  expression: string,
+  values: string[],
+): void {
+  if (values.length === 0) return;
+  if (values.length === 1) {
+    clauses.push(`${expression} = ?`);
+    params.push(values[0]);
+    return;
+  }
+  clauses.push(`${expression} IN (${values.map(() => '?').join(', ')})`);
+  params.push(...values);
 }
 
 function readTextParam(url: URL, key: string): string | null {
@@ -334,29 +359,12 @@ export function buildWhere(filters: DashboardFilters, omit?: FilterKey): WherePa
     clauses.push('b.usage_date <= ?');
     params.push(filters.maxDate);
   }
-  if (filters.deviceId && omit !== 'deviceId') {
-    clauses.push('b.device_id = ?');
-    params.push(filters.deviceId);
-  }
-  if (filters.provider && omit !== 'provider') {
-    clauses.push('b.provider = ?');
-    params.push(filters.provider);
-  }
-  if (filters.product && omit !== 'product') {
-    appendProductFilter(clauses, params, 'b', filters.product);
-  }
-  if (filters.channel && omit !== 'channel') {
-    clauses.push('b.channel = ?');
-    params.push(filters.channel);
-  }
-  if (filters.model && omit !== 'model') {
-    clauses.push('b.model = ?');
-    params.push(filters.model);
-  }
-  if (filters.project && omit !== 'project') {
-    clauses.push(`${PROJECT_DISPLAY_SQL} = ?`);
-    params.push(filters.project);
-  }
+  if (omit !== 'deviceId') addValueFilter(clauses, params, 'b.device_id', filters.deviceId);
+  if (omit !== 'provider') addValueFilter(clauses, params, 'b.provider', filters.provider);
+  if (omit !== 'product') addProductFilter(clauses, params, 'b', filters.product);
+  if (omit !== 'channel') addValueFilter(clauses, params, 'b.channel', filters.channel);
+  if (omit !== 'model') addValueFilter(clauses, params, 'b.model', filters.model);
+  if (omit !== 'project') addValueFilter(clauses, params, PROJECT_DISPLAY_SQL, filters.project);
 
   return {
     whereClause: clauses.length > 0 ? `WHERE ${clauses.join(' AND ')}` : '',
@@ -623,27 +631,16 @@ function buildActivityWhere(filters: DashboardFilters): WhereParts {
     clauses.push('a.usage_date <= ?');
     params.push(filters.maxDate);
   }
-  if (filters.deviceId) {
-    clauses.push('a.device_id = ?');
-    params.push(filters.deviceId);
-  }
-  if (filters.provider) {
-    clauses.push('a.provider = ?');
-    params.push(filters.provider);
-  }
-  if (filters.product) {
-    appendProductFilter(clauses, params, 'a', filters.product);
-  }
-  if (filters.channel && filters.channel !== 'cli') {
+  addValueFilter(clauses, params, 'a.device_id', filters.deviceId);
+  addValueFilter(clauses, params, 'a.provider', filters.provider);
+  addProductFilter(clauses, params, 'a', filters.product);
+  if (filters.channel.length > 0 && !filters.channel.includes('cli')) {
     clauses.push('1 = 0');
   }
-  if (filters.model) {
+  if (filters.model.length > 0) {
     clauses.push('1 = 0');
   }
-  if (filters.project) {
-    clauses.push(`${ACTIVITY_PROJECT_DISPLAY_SQL} = ?`);
-    params.push(filters.project);
-  }
+  addValueFilter(clauses, params, ACTIVITY_PROJECT_DISPLAY_SQL, filters.project);
 
   return {
     whereClause: clauses.length > 0 ? `WHERE ${clauses.join(' AND ')}` : '',
@@ -781,19 +778,31 @@ function formatDate(date: Date): string {
   return date.toISOString().split('T')[0];
 }
 
-function appendProductFilter(
+function addProductFilter(
   clauses: string[],
   params: (string | number)[],
   tableAlias: 'a' | 'b',
-  product: string,
+  products: string[],
 ): void {
-  if (product === 'trae') {
-    clauses.push(`${tableAlias}.product IN (?, ?, ?)`);
-    params.push('trae', 'trae-cn', 'trae-intl');
+  if (products.length === 0) return;
+  const expanded = new Set<string>();
+  for (const product of products) {
+    if (product === 'trae') {
+      expanded.add('trae');
+      expanded.add('trae-cn');
+      expanded.add('trae-intl');
+    } else {
+      expanded.add(product);
+    }
+  }
+  const values = [...expanded];
+  if (values.length === 1) {
+    clauses.push(`${tableAlias}.product = ?`);
+    params.push(values[0]);
     return;
   }
-  clauses.push(`${tableAlias}.product = ?`);
-  params.push(product);
+  clauses.push(`${tableAlias}.product IN (${values.map(() => '?').join(', ')})`);
+  params.push(...values);
 }
 
 function productLabel(value: string, combined: boolean): string {

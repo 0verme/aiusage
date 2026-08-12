@@ -40,3 +40,15 @@ test('does not mark mixed product sets as unavailable when a token-bearing produ
   assert.equal(availability.mode, 'standard');
   assert.equal(availability.tokenMetricsUnavailable, false);
 });
+
+test('supports explicit multi-selected product filters', () => {
+  const availability = getMetricAvailability({
+    selectedProduct: ['copilot-vscode', 'codex'],
+    productOptions: [{ value: 'copilot-vscode' }, { value: 'codex' }],
+    totalEvents: 50,
+    totalTokens: 10_000,
+  });
+
+  assert.equal(availability.mode, 'standard');
+  assert.equal(availability.tokenMetricsUnavailable, false);
+});

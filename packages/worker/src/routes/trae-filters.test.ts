@@ -10,12 +10,12 @@ describe('Trae dashboard filters', () => {
       maxDate: null,
       rangeDays: null,
       range: 'all',
-      deviceId: null,
-      provider: null,
-      product: 'trae',
-      channel: null,
-      model: null,
-      project: null,
+      deviceId: [],
+      provider: [],
+      product: ['trae'],
+      channel: [],
+      model: [],
+      project: [],
     };
 
     expect(buildWhere(filters)).toEqual({

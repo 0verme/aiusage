@@ -225,12 +225,12 @@ export interface FacetOption {
 export interface DashboardFiltersPayload {
   selection: {
     range: string;
-    deviceId: string | null;
-    provider: string | null;
-    product: string | null;
-    channel: string | null;
-    model: string | null;
-    project: string | null;
+    deviceId: string[];
+    provider: string[];
+    product: string[];
+    channel: string[];
+    model: string[];
+    project: string[];
   };
   options: {
     devices: FacetOption[];

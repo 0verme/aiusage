@@ -42,4 +42,13 @@ describe('overview date windows', () => {
       'trae-intl',
     ]);
   });
+
+  it('parses repeated and comma-separated facets as multi-select values', () => {
+    const filters = parseFilters(new URL(
+      'https://example.com/api/v1/public/overview?range=30d&product=codex&product=claude-code&model=gpt-5,claude-opus',
+    ));
+
+    expect(filters?.product).toEqual(['codex', 'claude-code']);
+    expect(filters?.model).toEqual(['gpt-5', 'claude-opus']);
+  });
 });

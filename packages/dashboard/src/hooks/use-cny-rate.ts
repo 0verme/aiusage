@@ -7,7 +7,10 @@ export type CurrencyMode = 'auto' | 'USD' | 'CNY';
 // ── global currency store ──
 
 let _rate: number | null = null;
-let _showCny = localStorage.getItem('aiusage_currency') === 'cny';
+let _showCny = false;
+try {
+  _showCny = typeof localStorage !== 'undefined' && localStorage.getItem('aiusage_currency') === 'cny';
+} catch { /* storage unavailable */ }
 const _listeners = new Set<() => void>();
 
 function notify() { _listeners.forEach(fn => fn()); }
@@ -15,7 +18,7 @@ function notify() { _listeners.forEach(fn => fn()); }
 export function setCnyRate(r: number) { _rate = r; notify(); }
 export function toggleCurrency() {
   _showCny = !_showCny;
-  localStorage.setItem('aiusage_currency', _showCny ? 'cny' : 'usd');
+  try { localStorage.setItem('aiusage_currency', _showCny ? 'cny' : 'usd'); } catch { /* storage unavailable */ }
   notify();
 }
 export function getShowCny() { return _showCny; }
@@ -61,7 +64,7 @@ export function useFetchCnyRate() {
         const cny = data.rates?.CNY;
         if (cny) {
           setCnyRate(cny);
-          localStorage.setItem(CACHE_KEY, JSON.stringify({ rate: cny, ts: Date.now() }));
+          try { localStorage.setItem(CACHE_KEY, JSON.stringify({ rate: cny, ts: Date.now() })); } catch { /* storage unavailable */ }
           setLoaded(true);
         }
       })

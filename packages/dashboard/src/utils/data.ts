@@ -113,10 +113,20 @@ export function padMonth(ov: OverviewPayload): OverviewPayload {
 
 export function buildQuery(f: FiltersState): string {
   const p = new URLSearchParams();
+  const aliases: Record<string, string> = {
+    deviceIds: 'deviceId',
+    products: 'product',
+    models: 'model',
+    projects: 'project',
+  };
   for (const [k, v] of Object.entries(f)) {
+    if (Array.isArray(v)) {
+      const key = aliases[k] ?? k;
+      v.filter(Boolean).forEach((item) => p.append(key, item));
+      continue;
+    }
     if (!v) continue;
-    // "month" is frontend-only; request 30d from API
-    p.set(k, k === 'range' && v === 'month' ? '30d' : v);
+    p.set(k, v);
   }
   return p.toString();
 }

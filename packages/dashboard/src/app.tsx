@@ -132,16 +132,16 @@ function SegmentedControl({
   );
 }
 
-function FilterTabs({
+function MultiFilterTabs({
   value,
   options,
   onChange,
   allLabel = 'All',
   tooltips,
 }: {
-  value: string;
+  value: string[];
   options: FacetOption[];
-  onChange: (v: string) => void;
+  onChange: (v: string[]) => void;
   allLabel?: string;
   tooltips?: Record<string, string>;
 }) {
@@ -149,8 +149,8 @@ function FilterTabs({
   return (
     <div className="pill-group flex-nowrap">
       <button
-        onClick={() => onChange('')}
-        className={`pill shrink-0 px-3.5 py-1.5 text-[13px] ${!value ? 'pill-active' : ''}`}
+        onClick={() => onChange([])}
+        className={`pill shrink-0 px-3.5 py-1.5 text-[13px] ${value.length === 0 ? 'pill-active' : ''}`}
       >
         {allLabel}
       </button>
@@ -159,8 +159,10 @@ function FilterTabs({
         return (
           <span key={o.value} className={tip ? 'group relative' : ''}>
             <button
-              onClick={() => onChange(o.value === value ? '' : o.value)}
-              className={`pill shrink-0 px-3.5 py-1.5 text-[13px] ${value === o.value ? 'pill-active' : ''}`}
+              onClick={() => onChange(value.includes(o.value)
+                ? value.filter((item) => item !== o.value)
+                : [...value, o.value])}
+              className={`pill shrink-0 px-3.5 py-1.5 text-[13px] ${value.includes(o.value) ? 'pill-active' : ''}`}
             >
               {formatProductLabel(o.label)}
             </button>
@@ -225,6 +227,57 @@ function FilterChips({
               );
             })}
           </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function MultiFilterChips({
+  value,
+  options,
+  onChange,
+  allLabel = 'All',
+  tooltips,
+}: {
+  value: string[];
+  options: FacetOption[];
+  onChange: (v: string[]) => void;
+  allLabel?: string;
+  tooltips?: Record<string, string>;
+}) {
+  if (!options.length) return null;
+  return (
+    <div className="relative min-w-0 flex-1">
+      <div className="overflow-x-auto scrollbar-hide">
+        <div className="pill-group w-max flex-nowrap">
+          <button
+            onClick={() => onChange([])}
+            className={`pill shrink-0 px-3 py-1 text-[12px] ${value.length === 0 ? 'pill-active' : ''}`}
+          >
+            {allLabel}
+          </button>
+          {options.map((option) => {
+            const selected = value.includes(option.value);
+            const tip = tooltips?.[option.value];
+            return (
+              <span key={option.value} className={tip ? 'group relative' : ''}>
+                <button
+                  onClick={() => onChange(selected
+                    ? value.filter((item) => item !== option.value)
+                    : [...value, option.value])}
+                  className={`pill shrink-0 px-3 py-1 text-[12px] ${selected ? 'pill-active' : ''}`}
+                >
+                  {formatProductLabel(option.label)}
+                </button>
+                {tip && (
+                  <span className="pointer-events-none absolute left-1/2 top-full z-50 mt-2 w-64 -translate-x-1/2 rounded-lg bg-slate-800 px-3 py-2 text-[11px] leading-relaxed text-slate-200 opacity-0 shadow-lg transition-opacity duration-150 group-hover:opacity-100 dark:bg-slate-700">
+                    {tip}
+                  </span>
+                )}
+              </span>
+            );
+          })}
         </div>
       </div>
     </div>
@@ -340,7 +393,7 @@ function InteractionMetricsSection({
 
 export function App() {
   const [filters, setFilters] = useState<FiltersState>({
-    range: '30d', deviceId: '', product: '',
+    range: '30d', deviceIds: [], products: [], models: [],
   });
 
   const {
@@ -479,20 +532,28 @@ export function App() {
             onChange={(v) => setFilters((f) => ({ ...f, range: v }))}
           />
           {overview && fOpts.products.length > 1 && (
-            <FilterTabs
-              value={filters.product}
+            <MultiFilterTabs
+              value={filters.products ?? []}
               options={fOpts.products}
               allLabel={t.all}
-              onChange={(v) => setFilters((f) => ({ ...f, product: v }))}
+              onChange={(v) => setFilters((f) => ({ ...f, products: v }))}
               tooltips={{ 'claude-code': t.claudeCodeDataNotice }}
             />
           )}
+          {overview && fOpts.models.length > 1 && (
+            <MultiFilterTabs
+              value={filters.models ?? []}
+              options={fOpts.models}
+              allLabel={t.all}
+              onChange={(v) => setFilters((f) => ({ ...f, models: v }))}
+            />
+          )}
           {overview && fOpts.devices.length >= 1 && (
-            <FilterTabs
-              value={filters.deviceId}
+            <MultiFilterTabs
+              value={filters.deviceIds ?? []}
               options={fOpts.devices}
               allLabel={t.all}
-              onChange={(v) => setFilters((f) => ({ ...f, deviceId: v }))}
+              onChange={(v) => setFilters((f) => ({ ...f, deviceIds: v }))}
             />
           )}
         </div>
@@ -507,22 +568,28 @@ export function App() {
             onChange={(v) => setFilters((f) => ({ ...f, range: v || '30d' }))}
           />
           {overview && fOpts.products.length > 1 && (
-            <FilterChips
-              label=""
-              value={filters.product}
+            <MultiFilterChips
+              value={filters.products ?? []}
               options={fOpts.products}
               allLabel={t.all}
-              onChange={(v) => setFilters((f) => ({ ...f, product: v }))}
+              onChange={(v) => setFilters((f) => ({ ...f, products: v }))}
               tooltips={{ 'claude-code': t.claudeCodeDataNotice }}
             />
           )}
+          {overview && fOpts.models.length > 1 && (
+            <MultiFilterChips
+              value={filters.models ?? []}
+              options={fOpts.models}
+              allLabel={t.all}
+              onChange={(v) => setFilters((f) => ({ ...f, models: v }))}
+            />
+          )}
           {overview && fOpts.devices.length >= 1 && (
-            <FilterChips
-              label=""
-              value={filters.deviceId}
+            <MultiFilterChips
+              value={filters.deviceIds ?? []}
               options={fOpts.devices}
               allLabel={t.all}
-              onChange={(v) => setFilters((f) => ({ ...f, deviceId: v }))}
+              onChange={(v) => setFilters((f) => ({ ...f, deviceIds: v }))}
             />
           )}
         </div>
