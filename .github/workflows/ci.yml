@@ -93,18 +93,35 @@ jobs:
 
       - run: pnpm install --frozen-lockfile
 
-      - name: Build CLI
-        run: pnpm turbo build --filter @aiusage/cli
+      - name: Build publishable packages
+        run: pnpm turbo build --filter @aiusage/pricing --filter @aiusage/cli
 
-      - name: Publish CLI (if version is new)
+      - name: Publish packages (if versions are new)
         run: |
-          LOCAL_VERSION=$(node -p "require('./packages/cli/package.json').version")
-          if npm view "@aiusage/cli@${LOCAL_VERSION}" version >/dev/null 2>&1; then
-            echo "CLI v${LOCAL_VERSION} already published, skipping"
-          else
-            NPM_VERSION=$(npm view @aiusage/cli version 2>/dev/null || echo "none")
-            echo "Publishing @aiusage/cli@${LOCAL_VERSION} (npm latest is ${NPM_VERSION})"
-            cd packages/cli && npm publish --access public
-          fi
+          publish_if_new() {
+            local pkg_dir="$1"
+            local allow_first_publish="${2:-true}"
+            local pkg_name
+            local local_version
+            local npm_version
+            pkg_name=$(node -p "require('./${pkg_dir}/package.json').name")
+            local_version=$(node -p "require('./${pkg_dir}/package.json').version")
+            if npm view "${pkg_name}@${local_version}" version >/dev/null 2>&1; then
+              echo "${pkg_name} v${local_version} already published, skipping"
+              return 0
+            fi
+
+            npm_version=$(npm view "${pkg_name}" version 2>/dev/null || echo "none")
+            if [ "${npm_version}" = "none" ] && [ "${allow_first_publish}" != "true" ]; then
+              echo "${pkg_name} has not been published before; skipping until npm package permissions are created"
+              return 0
+            fi
+
+            echo "Publishing ${pkg_name}@${local_version} (npm latest is ${npm_version})"
+            (cd "${pkg_dir}" && npm publish --access public)
+          }
+
+          publish_if_new packages/cli true
+          publish_if_new packages/pricing false
         env:
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
