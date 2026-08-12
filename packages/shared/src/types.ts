@@ -28,6 +28,7 @@ export interface DeviceInfo {
 export interface IngestDay {
   usageDate: string;
   breakdowns: IngestBreakdown[];
+  activity?: IngestActivityDay;
 }
 
 export interface IngestBreakdown {
@@ -51,6 +52,23 @@ export interface IngestBreakdown {
   costUSD?: number;
   /** 与 costUSD 配套的定价版本；版本不一致时 Worker 会回退重算 */
   pricingVersion?: string;
+}
+
+export interface IngestActivityDay {
+  items: IngestActivityItem[];
+}
+
+export interface IngestActivityItem {
+  provider: Provider;
+  product: Product;
+  source: string;
+  project: string;
+  projectDisplay?: string;
+  projectAlias?: string;
+  kind: string;
+  name: string;
+  count: number;
+  confidence: 'exact' | 'proxy';
 }
 
 // ── API 响应 ──
@@ -103,7 +121,30 @@ export interface OverviewResponse {
   channelCostShare: ShareItem[];
   sankey: SankeyGraph;
   heatmap: HeatmapDay[];
+  interactionMetrics?: InteractionMetricsPayload;
   filters: DashboardFiltersPayload;
+}
+
+export interface InteractionMetricItem {
+  value: string;
+  label: string;
+  eventCount: number;
+  proxyCount?: number;
+}
+
+export interface InteractionMetricsPayload {
+  exactCount: number;
+  proxyCount: number;
+  userMessageCount?: number;
+  functionCallCount: number;
+  toolCallCount: number;
+  skillCallCount: number;
+  skillProxyCount: number;
+  subagentCount: number;
+  topTools: InteractionMetricItem[];
+  topSkills: InteractionMetricItem[];
+  topAgents: InteractionMetricItem[];
+  kindShare: InteractionMetricItem[];
 }
 
 export interface DailyTrendItem {
