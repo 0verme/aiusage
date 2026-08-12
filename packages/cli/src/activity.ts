@@ -2,6 +2,7 @@ import { open, readdir } from 'node:fs/promises';
 import { createInterface } from 'node:readline';
 import { homedir } from 'node:os';
 import { basename, join } from 'node:path';
+import { getCodexBaseDir } from './scanners/codex.js';
 import { dateKey, parseTs, resolveProjectFields, runWithConcurrency, type ProjectFields } from './scanners/utils.js';
 import type { ReportRange } from './report.js';
 
@@ -298,7 +299,7 @@ async function scanCodexActivity(
   targetDates: Set<string> | undefined,
   options: BuildActivityReportOptions,
 ): Promise<ScanResult> {
-  const baseDir = options.codexDir ?? join(homedir(), '.codex');
+  const baseDir = getCodexBaseDir(options.codexDir);
   const acc = createAccumulator(targetDates, options.projectAliases);
   const files = await collectCodexSessionFiles(baseDir);
   acc.stats.filesScanned = files.length;

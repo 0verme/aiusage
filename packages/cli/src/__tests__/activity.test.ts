@@ -20,6 +20,38 @@ afterEach(async () => {
 });
 
 describe('buildActivityReport', () => {
+  it('honors CODEX_HOME when locating Codex activity logs', async () => {
+    const codexHome = join(tmpDir, 'custom-codex-home');
+    const sessionFile = join(codexHome, 'sessions', '2026', '06', '24', 'rollout-env.jsonl');
+    await writeJsonl(sessionFile, [
+      { type: 'session_meta', timestamp: '2026-06-24T12:00:00.000Z', payload: { id: 'codex-env-session' } },
+      {
+        type: 'response_item',
+        timestamp: '2026-06-24T12:01:00.000Z',
+        payload: {
+          item: { type: 'function_call', name: 'exec_command', call_id: 'env-call-1', arguments: '{}' },
+        },
+      },
+    ]);
+
+    const previousCodexHome = process.env.CODEX_HOME;
+    process.env.CODEX_HOME = codexHome;
+    try {
+      const { buildActivityReport } = await import('../activity.js');
+      const report = await buildActivityReport('today', {
+        dates: ['2026-06-24'],
+        claudeProjectsDirs: [join(tmpDir, 'missing-claude')],
+      });
+
+      expect(report.totals.exactCount).toBe(1);
+      expect(report.totals.filesScanned).toBe(1);
+      expect(report.byKind.find(row => row.key === 'function_call')?.count).toBe(1);
+    } finally {
+      if (previousCodexHome == null) delete process.env.CODEX_HOME;
+      else process.env.CODEX_HOME = previousCodexHome;
+    }
+  });
+
   it('counts Codex function calls, agent calls, lifecycle events, and skill proxy signals', async () => {
     const codexDir = join(tmpDir, 'codex');
     const sessionFile = join(codexDir, 'sessions', '2026', '06', '24', 'rollout-test.jsonl');
