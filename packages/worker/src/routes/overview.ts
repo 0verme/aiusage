@@ -2,7 +2,7 @@ import { CACHE_PRESETS, jsonCached, jsonError } from '../utils/response.js';
 import { toPublicProjectName } from '../utils/privacy.js';
 import type { Env } from '../types.js';
 
-const TOTAL_TOKENS_SQL = `
+export const TOTAL_TOKENS_SQL = `
   COALESCE(b.input_tokens, 0) +
   COALESCE(b.cached_input_tokens, 0) +
   COALESCE(b.cache_write_tokens, 0) +
@@ -14,7 +14,7 @@ const PROJECT_DISPLAY_SQL = `COALESCE(b.project_alias, b.project_display)`;
 
 type FilterKey = 'deviceId' | 'provider' | 'product' | 'channel' | 'model' | 'project';
 
-interface DashboardFilters {
+export interface DashboardFilters {
   minDate: string | null;
   range: string;
   deviceId: string | null;
@@ -25,7 +25,7 @@ interface DashboardFilters {
   project: string | null;
 }
 
-interface WhereParts {
+export interface WhereParts {
   whereClause: string;
   params: (string | number)[];
 }
@@ -279,7 +279,7 @@ export async function handleOverview(url: URL, env: Env): Promise<Response> {
   }, CACHE_PRESETS.dashboard, true);
 }
 
-function parseFilters(url: URL): DashboardFilters | null {
+export function parseFilters(url: URL): DashboardFilters | null {
   const range = readTextParam(url, 'range') ?? '30d';
   const minDate = buildMinDate(range);
   if (minDate === undefined) return null;
@@ -303,7 +303,7 @@ function readTextParam(url: URL, key: string): string | null {
   return trimmed === '' ? null : trimmed;
 }
 
-function buildWhere(filters: DashboardFilters, omit?: FilterKey): WhereParts {
+export function buildWhere(filters: DashboardFilters, omit?: FilterKey): WhereParts {
   const clauses: string[] = [];
   const params: (string | number)[] = [];
 
