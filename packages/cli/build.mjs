@@ -8,7 +8,7 @@ await build({
   format: 'esm',
   outfile: 'dist/cli.js',
   banner: { js: '#!/usr/bin/env node' },
-  external: [],
+  external: ['ws'],
   minifySyntax: true,
   treeShaking: true,
 });

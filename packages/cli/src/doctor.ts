@@ -7,6 +7,7 @@ import { getScheduleStatus } from './schedule.js';
 import { getCodexBaseDir } from './scanners/codex.js';
 import { resolveKimiCodeHome } from './scanners/kimi.js';
 import { detectOpenCodeSqliteRuntime, resolveOpenCodeSources } from './scanners/opencode.js';
+import { resolveTraeNativeCacheDir, resolveTokscaleTraeCacheDir } from './scanners/trae.js';
 import type { Lang } from './i18n.js';
 
 export interface Check {
@@ -183,6 +184,7 @@ export async function runDoctor(lang: Lang = 'zh'): Promise<Check[]> {
     { dirs: [join(home, '.factory', 'sessions')], label: 'Droid', exts: ['.settings.json'] },
     { dirs: [join(home, '.pi', 'agent', 'sessions'), join(home, '.omp', 'agent', 'sessions')], label: 'Pi / OMP', exts: ['.jsonl'] },
     { dirs: [process.env.GROK_HOME?.trim() ?? join(home, '.grok')], label: 'Grok Build', exts: ['.json', '.jsonl'] },
+    { dirs: [resolveTraeNativeCacheDir(home), resolveTokscaleTraeCacheDir(home)], label: 'Trae', exts: ['.json'] },
   ];
 
   for (const tool of tools) {

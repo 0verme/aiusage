@@ -12,6 +12,7 @@ import { scanDroidDates } from './scanners/droid.js';
 import { scanOpencodeDates } from './scanners/opencode.js';
 import { scanPiDates } from './scanners/pi.js';
 import { scanGrokBuildDates } from './scanners/grok-build.js';
+import { scanTraeDates } from './scanners/trae.js';
 
 import type { IngestBreakdown } from '@aiusage/shared';
 
@@ -64,6 +65,7 @@ export async function scanDates(targetDates: string[], options: ScanOptions = {}
     }),
     scanPiDates(uniqueDates, undefined, options.projectAliases),
     scanGrokBuildDates(uniqueDates, undefined, options.projectAliases),
+    scanTraeDates(uniqueDates, { projectAliases: options.projectAliases }),
   ];
 
   const results = await Promise.all(scanners);
