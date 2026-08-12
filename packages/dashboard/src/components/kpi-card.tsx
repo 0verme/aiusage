@@ -8,12 +8,14 @@ export function KpiCard({
   sub,
   suffix,
   highlight = false,
+  delta,
 }: {
   label: string;
   value: string;
   sub?: string;
   suffix?: string;
   highlight?: boolean;
+  delta?: string;
 }) {
   return (
     <div className="flex flex-col gap-2 px-[18px] py-[17px]">
@@ -27,7 +29,10 @@ export function KpiCard({
         {value}
         {suffix && <span style={{ color: 'var(--fg3)' }}>{suffix}</span>}
       </div>
-      {sub && <div className="font-mono text-[11px]" style={{ color: 'var(--fg3)' }}>{sub}</div>}
+      <div className="flex min-h-[14px] items-center justify-between gap-2 font-mono text-[11px]" style={{ color: 'var(--fg3)' }}>
+        <span>{sub}</span>
+        {delta && <span className="tabular-nums">{delta}</span>}
+      </div>
     </div>
   );
 }
@@ -36,10 +41,12 @@ export function CostKpiCard({
   label,
   value,
   sub,
+  delta,
 }: {
   label: string;
   value: string;
   sub?: string;
+  delta?: string;
 }) {
   const [hovered, setHovered] = useState(false);
   const { showCny, rate } = useCurrencyStore();
@@ -71,7 +78,10 @@ export function CostKpiCard({
           </button>
         )}
       </div>
-      {sub && <div className="font-mono text-[11px]" style={{ color: 'var(--fg3)' }}>{sub}</div>}
+      <div className="flex min-h-[14px] items-center justify-between gap-2 font-mono text-[11px]" style={{ color: 'var(--fg3)' }}>
+        <span>{sub}</span>
+        {delta && <span className="tabular-nums">{delta}</span>}
+      </div>
     </div>
   );
 }

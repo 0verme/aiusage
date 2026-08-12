@@ -1,6 +1,7 @@
 import { CACHE_PRESETS, jsonCached, jsonError } from '../utils/response.js';
 import { toPublicProjectName } from '../utils/privacy.js';
 import type { Env } from '../types.js';
+import type { OverviewComparisonPayload } from '@aiusage/shared';
 
 export const TOTAL_TOKENS_SQL = `
   COALESCE(b.input_tokens, 0) +
@@ -17,6 +18,8 @@ type FilterKey = 'deviceId' | 'provider' | 'product' | 'channel' | 'model' | 'pr
 
 export interface DashboardFilters {
   minDate: string | null;
+  maxDate: string | null;
+  rangeDays: number | null;
   range: string;
   deviceId: string | null;
   provider: string | null;
@@ -43,6 +46,7 @@ export async function handleOverview(url: URL, env: Env): Promise<Response> {
   if (!filters) return jsonError(400, 'INVALID_PAYLOAD', 'Invalid range parameter', true);
 
   const where = buildWhere(filters);
+  const previousFilters = buildPreviousFilters(filters);
 
   // 热力图固定查最近 365 天（不受 range 过滤器影响，但保留 device/provider 等维度过滤）
   const heatmapMinDate = (() => {
@@ -50,7 +54,13 @@ export async function handleOverview(url: URL, env: Env): Promise<Response> {
     d.setDate(d.getDate() - 364);
     return d.toISOString().split('T')[0];
   })();
-  const heatmapWhere = buildWhere({ ...filters, minDate: heatmapMinDate, range: '365d' });
+  const heatmapWhere = buildWhere({
+    ...filters,
+    minDate: heatmapMinDate,
+    maxDate: todayDateString(),
+    rangeDays: 365,
+    range: '365d',
+  });
 
   const [
     summary,
@@ -68,6 +78,7 @@ export async function handleOverview(url: URL, env: Env): Promise<Response> {
     models,
     projects,
     interactionMetrics,
+    comparison,
   ] = await Promise.all([
     env.DB.prepare(`
       SELECT
@@ -201,6 +212,7 @@ export async function handleOverview(url: URL, env: Env): Promise<Response> {
     loadFacetOptions('model', filters, env),
     loadFacetOptions('project', filters, env),
     loadInteractionMetrics(filters, env),
+    previousFilters ? loadComparison(previousFilters, env) : Promise.resolve(null),
   ]);
 
   const activeDays = Number(summary?.active_days ?? 0);
@@ -210,7 +222,7 @@ export async function handleOverview(url: URL, env: Env): Promise<Response> {
   const totalCostUsd = roundUsd(summary?.total_cost_usd ?? 0);
 
   return jsonCached({
-    totalDays: activeDays,
+    totalDays: filters.rangeDays ?? activeDays,
     activeDays,
     totalEvents,
     totalSessions,
@@ -261,6 +273,7 @@ export async function handleOverview(url: URL, env: Env): Promise<Response> {
       estimatedCostUsd: roundUsd(row.estimated_cost_usd ?? 0),
     })),
     interactionMetrics,
+    comparison,
     filters: {
       selection: {
         range: filters.range,
@@ -285,11 +298,13 @@ export async function handleOverview(url: URL, env: Env): Promise<Response> {
 
 export function parseFilters(url: URL): DashboardFilters | null {
   const range = readTextParam(url, 'range') ?? '30d';
-  const minDate = buildMinDate(range);
-  if (minDate === undefined) return null;
+  const window = buildDateWindow(range);
+  if (!window) return null;
 
   return {
-    minDate,
+    minDate: window.minDate,
+    maxDate: window.maxDate,
+    rangeDays: window.days,
     range,
     deviceId: readTextParam(url, 'deviceId'),
     provider: readTextParam(url, 'provider'),
@@ -314,6 +329,10 @@ export function buildWhere(filters: DashboardFilters, omit?: FilterKey): WherePa
   if (filters.minDate) {
     clauses.push('b.usage_date >= ?');
     params.push(filters.minDate);
+  }
+  if (filters.maxDate) {
+    clauses.push('b.usage_date <= ?');
+    params.push(filters.maxDate);
   }
   if (filters.deviceId && omit !== 'deviceId') {
     clauses.push('b.device_id = ?');
@@ -472,6 +491,73 @@ async function loadInteractionMetrics(filters: DashboardFilters, env: Env) {
   };
 }
 
+async function loadComparison(filters: DashboardFilters, env: Env): Promise<OverviewComparisonPayload> {
+  const where = buildWhere(filters);
+  const activityWhere = buildActivityWhere(filters);
+
+  const [summary, activity] = await Promise.all([
+    env.DB.prepare(`
+      SELECT
+        COUNT(DISTINCT b.usage_date) AS active_days,
+        COALESCE(SUM(b.event_count), 0) AS total_events,
+        COALESCE(SUM(b.session_count), 0) AS total_sessions,
+        COALESCE(SUM(b.estimated_cost_usd), 0) AS total_cost_usd,
+        COALESCE(SUM(b.input_tokens), 0) AS input_tokens,
+        COALESCE(SUM(b.cached_input_tokens), 0) AS cached_input_tokens,
+        COALESCE(SUM(b.cache_write_tokens), 0) AS cache_write_tokens,
+        COALESCE(SUM(b.output_tokens), 0) AS output_tokens,
+        COALESCE(SUM(b.reasoning_output_tokens), 0) AS reasoning_output_tokens
+      FROM daily_usage_breakdown b
+      ${where.whereClause}
+    `).bind(...where.params).first<{
+      active_days: number;
+      total_events: number;
+      total_sessions: number;
+      total_cost_usd: number;
+      input_tokens: number;
+      cached_input_tokens: number;
+      cache_write_tokens: number;
+      output_tokens: number;
+      reasoning_output_tokens: number;
+    }>(),
+    env.DB.prepare(`
+      SELECT
+        COALESCE(SUM(CASE WHEN a.kind = 'user_message' THEN a.event_count ELSE 0 END), 0) AS user_message_count
+      FROM daily_activity_breakdown a
+      ${activityWhere.whereClause}
+    `).bind(...activityWhere.params).first<{ user_message_count: number }>().catch((error) => {
+      if (String(error).includes('daily_activity_breakdown')) return null;
+      throw error;
+    }),
+  ]);
+
+  const activeDays = Number(summary?.active_days ?? 0);
+  const inputTokens = Number(summary?.input_tokens ?? 0);
+  const cachedInputTokens = Number(summary?.cached_input_tokens ?? 0);
+  const cacheWriteTokens = Number(summary?.cache_write_tokens ?? 0);
+  const outputTokens = Number(summary?.output_tokens ?? 0);
+  const reasoningOutputTokens = Number(summary?.reasoning_output_tokens ?? 0);
+  const totalTokens = inputTokens + cachedInputTokens + cacheWriteTokens + outputTokens + reasoningOutputTokens;
+  const cacheDenominator = inputTokens + cachedInputTokens;
+  const totalCostUsd = roundUsd(summary?.total_cost_usd ?? 0);
+
+  return {
+    activeDays,
+    totalEvents: Number(summary?.total_events ?? 0),
+    totalSessions: Number(summary?.total_sessions ?? 0),
+    totalCostUsd,
+    averageDailyCostUsd: activeDays > 0 ? roundUsd(totalCostUsd / activeDays) : 0,
+    inputTokens,
+    cachedInputTokens,
+    cacheWriteTokens,
+    outputTokens,
+    reasoningOutputTokens,
+    totalTokens,
+    cacheHitRate: cacheDenominator > 0 ? (cachedInputTokens / cacheDenominator) * 100 : 0,
+    userMessageCount: activity ? Number(activity.user_message_count ?? 0) : undefined,
+  };
+}
+
 function emptyInteractionMetrics() {
   return {
     exactCount: 0,
@@ -532,6 +618,10 @@ function buildActivityWhere(filters: DashboardFilters): WhereParts {
   if (filters.minDate) {
     clauses.push('a.usage_date >= ?');
     params.push(filters.minDate);
+  }
+  if (filters.maxDate) {
+    clauses.push('a.usage_date <= ?');
+    params.push(filters.maxDate);
   }
   if (filters.deviceId) {
     clauses.push('a.device_id = ?');
@@ -631,19 +721,64 @@ function roundUsd(value: number): number {
   return Math.round(Number(value || 0) * 10000) / 10000;
 }
 
-function buildMinDate(range: string): string | null | undefined {
-  if (range === 'all') return null;
+export function buildDateWindow(
+  range: string,
+  now: Date = new Date(),
+): { minDate: string | null; maxDate: string | null; days: number | null } | undefined {
+  if (range === 'all') return { minDate: null, maxDate: null, days: null };
 
-  const now = new Date();
+  const today = startOfUtcDay(now);
+  let start: Date;
   let days: number;
   if (range === '7d') days = 7;
   else if (range === '30d') days = 30;
   else if (range === '3m' || range === '90d') days = 90;
   else if (range === '6m' || range === '180d') days = 180;
-  else return undefined;
+  else if (range === 'month') {
+    start = new Date(Date.UTC(today.getUTCFullYear(), today.getUTCMonth(), 1));
+    days = diffUtcDays(start, today) + 1;
+    return { minDate: formatDate(start), maxDate: formatDate(today), days };
+  } else return undefined;
 
-  const min = new Date(now.getTime() - days * 24 * 60 * 60 * 1000);
-  return min.toISOString().split('T')[0];
+  start = addUtcDays(today, -(days - 1));
+  return { minDate: formatDate(start), maxDate: formatDate(today), days };
+}
+
+function buildPreviousFilters(filters: DashboardFilters): DashboardFilters | null {
+  if (!filters.minDate || !filters.rangeDays) return null;
+  const currentStart = parseDateOnly(filters.minDate);
+  return {
+    ...filters,
+    minDate: formatDate(addUtcDays(currentStart, -filters.rangeDays)),
+    maxDate: formatDate(addUtcDays(currentStart, -1)),
+  };
+}
+
+function todayDateString(): string {
+  return formatDate(startOfUtcDay(new Date()));
+}
+
+function startOfUtcDay(date: Date): Date {
+  return new Date(Date.UTC(date.getUTCFullYear(), date.getUTCMonth(), date.getUTCDate()));
+}
+
+function parseDateOnly(value: string): Date {
+  const [year, month, day] = value.split('-').map(Number);
+  return new Date(Date.UTC(year, month - 1, day));
+}
+
+function addUtcDays(date: Date, days: number): Date {
+  const next = new Date(date);
+  next.setUTCDate(next.getUTCDate() + days);
+  return next;
+}
+
+function diffUtcDays(start: Date, end: Date): number {
+  return Math.round((startOfUtcDay(end).getTime() - startOfUtcDay(start).getTime()) / 86_400_000);
+}
+
+function formatDate(date: Date): string {
+  return date.toISOString().split('T')[0];
 }
 
 function appendProductFilter(

@@ -122,7 +122,24 @@ export interface OverviewResponse {
   sankey: SankeyGraph;
   heatmap: HeatmapDay[];
   interactionMetrics?: InteractionMetricsPayload;
+  comparison?: OverviewComparisonPayload | null;
   filters: DashboardFiltersPayload;
+}
+
+export interface OverviewComparisonPayload {
+  activeDays: number;
+  totalEvents: number;
+  totalSessions: number;
+  totalCostUsd: number;
+  averageDailyCostUsd: number;
+  inputTokens: number;
+  cachedInputTokens: number;
+  cacheWriteTokens: number;
+  outputTokens: number;
+  reasoningOutputTokens: number;
+  totalTokens: number;
+  cacheHitRate: number;
+  userMessageCount?: number;
 }
 
 export interface InteractionMetricItem {

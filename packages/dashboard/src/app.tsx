@@ -41,6 +41,14 @@ function getRanges(t: T) {
   ] as const;
 }
 
+function formatComparisonDelta(current: number, previous: number): string | undefined {
+  if (!Number.isFinite(current) || !Number.isFinite(previous) || previous <= 0) return undefined;
+  const delta = ((current - previous) / previous) * 100;
+  if (!Number.isFinite(delta)) return undefined;
+  const normalized = Math.abs(delta) < 0.05 ? 0 : delta;
+  return `${normalized > 0 ? '+' : ''}${normalized.toFixed(1)}%`;
+}
+
 // ────────────────────────────────────────
 // Theme & Language Toggles
 // ────────────────────────────────────────
@@ -407,6 +415,26 @@ export function App() {
     dailyTrend: overview?.dailyTrend ?? [],
     tokenMetricsUnavailable: unavailable,
   }), [overview, unavailable]);
+  const kpiDeltas = useMemo(() => {
+    const previous = overview?.comparison;
+    if (!overview || !kpis || !previous) return {};
+    const previousOutput = previous.outputTokens + previous.reasoningOutputTokens;
+    const previousCostPerSession = previous.totalSessions > 0
+      ? previous.totalCostUsd / previous.totalSessions
+      : 0;
+    return {
+      totalCostUsd: formatComparisonDelta(overview.totalCostUsd, previous.totalCostUsd),
+      totalTokens: formatComparisonDelta(kpis.totalTokens, previous.totalTokens),
+      inputTokens: formatComparisonDelta(kpis.inputTokens, previous.inputTokens),
+      outputTokens: formatComparisonDelta(kpis.outputTokens, previousOutput),
+      cachedTokens: formatComparisonDelta(kpis.cachedTokens, previous.cachedInputTokens),
+      activeDays: formatComparisonDelta(overview.activeDays, previous.activeDays),
+      sessions: formatComparisonDelta(overview.totalSessions, previous.totalSessions),
+      costPerSession: formatComparisonDelta(kpis.costPerSession, previousCostPerSession),
+      averageDailyCostUsd: formatComparisonDelta(overview.averageDailyCostUsd, previous.averageDailyCostUsd),
+      cacheHitRate: formatComparisonDelta(kpis.cacheHitRate, previous.cacheHitRate),
+    };
+  }, [overview, kpis]);
 
   return (
     <main className="mx-auto w-full max-w-[1340px] px-4 pb-16 sm:px-6 lg:px-8">
@@ -539,19 +567,20 @@ export function App() {
                 label={t.estimatedCost}
                 value={unavailable ? t.unavailable : formatUsd(overview?.totalCostUsd ?? 0)}
                 sub={rangeSub}
+                delta={unavailable ? undefined : kpiDeltas.totalCostUsd}
               />
             </div>
             <div className="kpi">
-              <KpiCard label={t.totalTokens} value={unavailable ? t.unavailable : formatCompact(kpis?.totalTokens ?? 0, locale)} sub={locale === 'zh' ? '累计消耗' : 'Cumulative'} />
+              <KpiCard label={t.totalTokens} value={unavailable ? t.unavailable : formatCompact(kpis?.totalTokens ?? 0, locale)} sub={locale === 'zh' ? '累计消耗' : 'Cumulative'} delta={unavailable ? undefined : kpiDeltas.totalTokens} />
             </div>
             <div className="kpi">
-              <KpiCard label={t.inputTokens} value={unavailable ? t.unavailable : formatCompact(kpis?.inputTokens ?? 0, locale)} sub="Prompt" />
+              <KpiCard label={t.inputTokens} value={unavailable ? t.unavailable : formatCompact(kpis?.inputTokens ?? 0, locale)} sub="Prompt" delta={unavailable ? undefined : kpiDeltas.inputTokens} />
             </div>
             <div className="kpi">
-              <KpiCard label={t.outputTokens} value={unavailable ? t.unavailable : formatCompact(kpis?.outputTokens ?? 0, locale)} sub="Completion" />
+              <KpiCard label={t.outputTokens} value={unavailable ? t.unavailable : formatCompact(kpis?.outputTokens ?? 0, locale)} sub="Completion" delta={unavailable ? undefined : kpiDeltas.outputTokens} />
             </div>
             <div className="kpi">
-              <KpiCard label={t.cachedTokens} value={unavailable ? t.unavailable : formatCompact(kpis?.cachedTokens ?? 0, locale)} sub="Cached" />
+              <KpiCard label={t.cachedTokens} value={unavailable ? t.unavailable : formatCompact(kpis?.cachedTokens ?? 0, locale)} sub="Cached" delta={unavailable ? undefined : kpiDeltas.cachedTokens} />
             </div>
           </div>
 
@@ -566,6 +595,7 @@ export function App() {
                 value={String(overview?.activeDays ?? 0)}
                 suffix={` / ${overview?.totalDays ?? 0}`}
                 sub={locale === 'zh' ? '区间内' : 'In range'}
+                delta={kpiDeltas.activeDays}
               />
             </div>
             <div className="kpi">
@@ -574,16 +604,17 @@ export function App() {
                 value={formatNumber((overview?.totalSessions ?? 0) > 0 ? overview!.totalSessions : (overview?.totalEvents ?? 0))}
                 suffix={(overview?.totalSessions ?? 0) > 0 && overview!.totalSessions !== overview!.totalEvents ? ` / ${formatNumber(overview!.totalEvents)}` : undefined}
                 sub={locale === 'zh' ? '对话 / 消息' : 'Sessions / Msgs'}
+                delta={kpiDeltas.sessions}
               />
             </div>
             <div className="kpi">
-              <KpiCard label={t.costPerSession} value={unavailable ? t.unavailable : formatUsd(kpis?.costPerSession ?? 0)} sub={locale === 'zh' ? '每会话' : 'Per session'} />
+              <KpiCard label={t.costPerSession} value={unavailable ? t.unavailable : formatUsd(kpis?.costPerSession ?? 0)} sub={locale === 'zh' ? '每会话' : 'Per session'} delta={unavailable ? undefined : kpiDeltas.costPerSession} />
             </div>
             <div className="kpi">
-              <KpiCard label={t.avgDailyCost} value={unavailable ? t.unavailable : formatUsd(overview?.averageDailyCostUsd ?? 0)} sub={locale === 'zh' ? '平均' : 'Average'} />
+              <KpiCard label={t.avgDailyCost} value={unavailable ? t.unavailable : formatUsd(overview?.averageDailyCostUsd ?? 0)} sub={locale === 'zh' ? '平均' : 'Average'} delta={unavailable ? undefined : kpiDeltas.averageDailyCostUsd} />
             </div>
             <div className="kpi">
-              <KpiCard label={t.cacheHitRate} value={unavailable ? t.unavailable : formatPercent(kpis?.cacheHitRate ?? 0)} sub={locale === 'zh' ? '高效复用' : 'Reuse'} />
+              <KpiCard label={t.cacheHitRate} value={unavailable ? t.unavailable : formatPercent(kpis?.cacheHitRate ?? 0)} sub={locale === 'zh' ? '高效复用' : 'Reuse'} delta={unavailable ? undefined : kpiDeltas.cacheHitRate} />
             </div>
           </div>
 
