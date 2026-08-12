@@ -29,6 +29,7 @@ import type { IngestActivityItem, IngestDay } from '@aiusage/shared';
 import { getPricingStatus, resolvePricingCatalog } from './pricing.js';
 import { syncTraeCnUsage } from './trae-sync.js';
 import { syncTraeIntlUsage } from './trae-intl-sync.js';
+import { batchIngestDays } from './sync-batches.js';
 
 const argv = process.argv.slice(2);
 const command = argv[0];
@@ -425,16 +426,14 @@ async function runSync(flags: Record<string, string | boolean>, positionals: str
       console.log(`上传至 "${target.name}" (${target.apiBaseUrl}) ...`);
     }
 
-    const BATCH_SIZE = 30;
+    const batches = batchIngestDays(allDays);
     let totalProcessed = 0;
     const allCostSummary: Record<string, { estimatedCostUsd: number; costStatus: string }> = {};
 
-    for (let i = 0; i < allDays.length; i += BATCH_SIZE) {
-      const batch = allDays.slice(i, i + BATCH_SIZE);
-      const totalBatches = Math.ceil(allDays.length / BATCH_SIZE);
-      if (totalBatches > 1) {
-        const batchNum = Math.floor(i / BATCH_SIZE) + 1;
-        console.log(`  批次 ${batchNum}/${totalBatches}: ${batch[0].usageDate} ~ ${batch[batch.length - 1].usageDate}`);
+    for (let i = 0; i < batches.length; i += 1) {
+      const batch = batches[i];
+      if (batches.length > 1) {
+        console.log(`  批次 ${i + 1}/${batches.length}: ${batch[0].usageDate} ~ ${batch[batch.length - 1].usageDate}`);
       }
 
       const response = await uploadDailyUsage(
@@ -670,11 +669,10 @@ async function runImport(flags: Record<string, string | boolean>, positionals: s
       continue;
     }
 
-    const BATCH_SIZE = 30;
+    const batches = batchIngestDays(allDays);
     let totalProcessed = 0;
 
-    for (let i = 0; i < allDays.length; i += BATCH_SIZE) {
-      const batch = allDays.slice(i, i + BATCH_SIZE);
+    for (const batch of batches) {
       const response = await uploadDailyUsage(
         target.apiBaseUrl,
         { siteId: target.siteId, deviceId, deviceAlias: config.deviceAlias, deviceToken: target.deviceToken },
