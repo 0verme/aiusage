@@ -4,8 +4,15 @@ import { ChartContainer } from "./ui/chart";
 import { arrSum, formatUsd } from "../utils/format";
 import { getSharePercent, prepareShareItems } from "../utils/share-data";
 import { EmptyState } from "./chart-helpers";
+import type { CurrencyMode } from "../hooks/use-cny-rate";
 
-export function ProviderBars({ data }: { data: Array<{ label: string; estimatedCostUsd: number }> }) {
+export function ProviderBars({
+    data,
+    currency = 'auto',
+}: {
+    data: Array<{ label: string; estimatedCostUsd: number }>;
+    currency?: CurrencyMode;
+}) {
     if (!data.length) return <EmptyState label="No data" />;
     const max = Math.max(...data.map((d) => d.estimatedCostUsd), 1);
     return (
@@ -18,7 +25,7 @@ export function ProviderBars({ data }: { data: Array<{ label: string; estimatedC
                         <div key={item.label}>
                             <div className="mb-1 flex items-baseline justify-between text-[12px]">
                                 <span className="font-medium text-slate-700 dark:text-slate-300">{item.label}</span>
-                                <span className="tabular-nums font-medium text-slate-900 dark:text-slate-300">{formatUsd(item.estimatedCostUsd)}</span>
+                                <span className="tabular-nums font-medium text-slate-900 dark:text-slate-300">{formatUsd(item.estimatedCostUsd, currency)}</span>
                             </div>
                             <div className="h-2 w-full overflow-hidden rounded-full bg-slate-100 dark:bg-[#1a1a1a]">
                                 <div className="h-full rounded-full bg-slate-800 dark:bg-slate-300 transition-all duration-500" style={{ width: `${pct}%` }} />

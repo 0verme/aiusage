@@ -79,7 +79,8 @@ export function useOverview(filters: FiltersState) {
     const cachedTokens = arrSum(tc.map((d) => d.cachedInputTokens));
     const denominator = inputTokens + cachedTokens;
     const cacheHitRate = denominator > 0 ? (cachedTokens / denominator) * 100 : 0;
-    return { totalTokens, inputTokens, outputTokens, cachedTokens, cacheHitRate };
+    const costPerSession = overview.totalSessions > 0 ? overview.totalCostUsd / overview.totalSessions : 0;
+    return { totalTokens, inputTokens, outputTokens, cachedTokens, cacheHitRate, costPerSession };
   }, [overview]);
 
   const metricAvailability = useMemo(() => {

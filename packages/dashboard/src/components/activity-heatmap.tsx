@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import type { ActivityHeatmapDay } from '../utils/activity-heatmap-data';
+import type { Locale } from '../i18n';
 
 // ── 常量 ──
 
@@ -68,9 +69,10 @@ function useContainerWidth(ref: React.RefObject<HTMLDivElement | null>): number 
 
 // ── 主组件 ──
 
-export function ActivityHeatmap({ days, metricLabel = 'tokens', className = '' }: {
+export function ActivityHeatmap({ days, metricLabel = 'tokens', locale = 'en', className = '' }: {
   days: ActivityHeatmapDay[];
   metricLabel?: 'tokens' | 'sessions';
+  locale?: Locale;
   className?: string;
 }) {
   const containerRef = useRef<HTMLDivElement>(null);
@@ -144,13 +146,13 @@ export function ActivityHeatmap({ days, metricLabel = 'tokens', className = '' }
       {/* 统计摘要 */}
       <div className="flex flex-wrap items-center gap-5 font-mono text-[12px]" style={{ color: 'var(--fg)' }}>
         <span>
-          <span className="font-bold" style={{ color: 'var(--accent)' }}>{activeDays}</span> active days
+          <span className="font-bold" style={{ color: 'var(--accent)' }}>{activeDays}</span> {locale === 'zh' ? '个活跃日' : 'active days'}
         </span>
         <span>
-          <span className="font-bold" style={{ color: 'var(--accent)' }}>{streak}</span> day streak
+          <span className="font-bold" style={{ color: 'var(--accent)' }}>{streak}</span> {locale === 'zh' ? '天连续活跃' : 'day streak'}
         </span>
         <span>
-          <span className="font-bold" style={{ color: 'var(--accent)' }}>{fmtCompact(totalActivity)}</span> {metricLabel} total
+          <span className="font-bold" style={{ color: 'var(--accent)' }}>{fmtCompact(totalActivity)}</span> {locale === 'zh' ? `${metricLabel === 'tokens' ? 'Token' : '会话'}总计` : `${metricLabel} total`}
         </span>
       </div>
 
@@ -217,7 +219,7 @@ export function ActivityHeatmap({ days, metricLabel = 'tokens', className = '' }
 
             {/* 图例：居中，与热力图保持间距 */}
             <g transform={`translate(${(containerWidth - LEGEND_W) / 2}, ${totalH - LEGEND_ROW + 10})`}>
-              <text x={0} y={9} fontSize={9} fill={LABEL_FILL} fontFamily="'JetBrains Mono', monospace">Less</text>
+              <text x={0} y={9} fontSize={9} fill={LABEL_FILL} fontFamily="'JetBrains Mono', monospace">{locale === 'zh' ? '少' : 'Less'}</text>
               {[0, 1, 2, 3, 4].map((lvl) => (
                 <rect
                   key={lvl}
@@ -229,7 +231,7 @@ export function ActivityHeatmap({ days, metricLabel = 'tokens', className = '' }
                   fill={LEVELS[lvl]}
                 />
               ))}
-              <text x={24 + 5 * STEP} y={9} fontSize={9} fill={LABEL_FILL} fontFamily="'JetBrains Mono', monospace">More</text>
+              <text x={24 + 5 * STEP} y={9} fontSize={9} fill={LABEL_FILL} fontFamily="'JetBrains Mono', monospace">{locale === 'zh' ? '多' : 'More'}</text>
             </g>
           </svg>
         )}
@@ -254,7 +256,7 @@ export function ActivityHeatmap({ days, metricLabel = 'tokens', className = '' }
                 )}
               </>
             ) : (
-              <div style={{ color: 'var(--fg3)' }}>No activity</div>
+              <div style={{ color: 'var(--fg3)' }}>{locale === 'zh' ? '无活动' : 'No activity'}</div>
             )}
           </div>
         )}
@@ -262,7 +264,7 @@ export function ActivityHeatmap({ days, metricLabel = 'tokens', className = '' }
 
       {/* 空状态 */}
       {days.length === 0 && (
-        <p className="font-mono text-xs" style={{ color: 'var(--fg3)' }}>No activity data in the past year.</p>
+        <p className="font-mono text-xs" style={{ color: 'var(--fg3)' }}>{locale === 'zh' ? '过去一年暂无活动数据。' : 'No activity data in the past year.'}</p>
       )}
     </div>
   );
