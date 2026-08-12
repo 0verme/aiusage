@@ -9,17 +9,25 @@ export function corsHeaders(): HeadersInit {
 export interface CacheHeaderOptions {
   maxAge: number;
   staleWhileRevalidate?: number;
+  cdnMaxAge?: number;
+  cdnStaleWhileRevalidate?: number;
 }
 
 export const CACHE_PRESETS = {
-  dashboard: { maxAge: 60, staleWhileRevalidate: 300 },
-  trend: { maxAge: 300, staleWhileRevalidate: 600 },
-  staticPublic: { maxAge: 600, staleWhileRevalidate: 1800 },
+  dashboard: { maxAge: 60, staleWhileRevalidate: 300, cdnMaxAge: 300, cdnStaleWhileRevalidate: 3600 },
+  trend: { maxAge: 300, staleWhileRevalidate: 600, cdnMaxAge: 900, cdnStaleWhileRevalidate: 3600 },
+  staticPublic: { maxAge: 600, staleWhileRevalidate: 1800, cdnMaxAge: 3600, cdnStaleWhileRevalidate: 86400 },
 } as const satisfies Record<string, CacheHeaderOptions>;
 
 export function withCacheHeaders(response: Response, options: CacheHeaderOptions): Response {
   const headers = new Headers(response.headers);
   headers.set('Cache-Control', cacheControl(options));
+  if (options.cdnMaxAge !== undefined) {
+    headers.set('Cloudflare-CDN-Cache-Control', cacheControl({
+      maxAge: options.cdnMaxAge,
+      staleWhileRevalidate: options.cdnStaleWhileRevalidate,
+    }));
+  }
   return new Response(response.body, {
     status: response.status,
     statusText: response.statusText,
