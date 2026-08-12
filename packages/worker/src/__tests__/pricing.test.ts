@@ -19,6 +19,89 @@ describe('getPricingCatalog', () => {
 // ─── calculateCost: 基本计费 ───
 
 describe('calculateCost: 基本计费', () => {
+  it('优先采用 scanner 按请求累计的精确成本', () => {
+    const result = calculateIngestBreakdownCost({
+      provider: 'openai',
+      product: 'codex',
+      channel: 'cli',
+      model: 'gpt-5.6-sol',
+      project: '/tmp/project',
+      eventCount: 2,
+      inputTokens: 500_000,
+      cachedInputTokens: 0,
+      cacheWriteTokens: 0,
+      outputTokens: 20_000,
+      reasoningOutputTokens: 0,
+      costUSD: 5.25,
+      pricingVersion: getPricingCatalog().version,
+    });
+
+    expect(result.estimatedCostUsd).toBe(5.25);
+    expect(result.costStatus).toBe('exact');
+  });
+
+  it('定价版本不一致时拒绝客户端预计算成本', () => {
+    const result = calculateIngestBreakdownCost({
+      provider: 'openai',
+      product: 'codex',
+      channel: 'cli',
+      model: 'gpt-5.6-sol',
+      project: '/tmp/project',
+      eventCount: 2,
+      inputTokens: 500_000,
+      cachedInputTokens: 0,
+      cacheWriteTokens: 0,
+      outputTokens: 20_000,
+      reasoningOutputTokens: 0,
+      costUSD: 5.25,
+      pricingVersion: 'stale-catalog',
+    });
+
+    expect(result.estimatedCostUsd).toBe(3.1);
+    expect(result.costStatus).toBe('estimated');
+  });
+
+  it('始终采用 Trae 国际版官方 API 返回的账号费用', () => {
+    const result = calculateIngestBreakdownCost({
+      provider: 'openai',
+      product: 'trae-intl',
+      channel: 'ide',
+      model: 'gpt-5.4',
+      project: 'unknown',
+      eventCount: 1,
+      inputTokens: 100,
+      cachedInputTokens: 200,
+      cacheWriteTokens: 0,
+      outputTokens: 20,
+      reasoningOutputTokens: 0,
+      costUSD: 0.25,
+      pricingVersion: 'stale-catalog',
+    });
+
+    expect(result.estimatedCostUsd).toBe(0.25);
+    expect(result.costStatus).toBe('exact');
+  });
+
+  it('忽略旧 scanner 用作缺省值的零成本', () => {
+    const result = calculateIngestBreakdownCost({
+      provider: 'openai',
+      product: 'codex',
+      channel: 'cli',
+      model: 'gpt-5.6-sol',
+      project: '/tmp/project',
+      eventCount: 2,
+      inputTokens: 400_000,
+      cachedInputTokens: 0,
+      cacheWriteTokens: 0,
+      outputTokens: 20_000,
+      reasoningOutputTokens: 0,
+      costUSD: 0,
+    });
+
+    expect(result.estimatedCostUsd).toBe(2.6);
+    expect(result.costStatus).toBe('estimated');
+  });
+
   it('Claude haiku-4-5 基本 input/output 计费', () => {
     // haiku-4-5: input=$1/M, output=$5/M
     const result = calculateCost('anthropic', 'claude-code', 'claude-haiku-4-5', {
