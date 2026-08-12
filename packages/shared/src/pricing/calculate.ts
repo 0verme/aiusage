@@ -8,17 +8,16 @@ import type {
 } from './types.js';
 import { catalog as defaultCatalog } from './catalog.js';
 
-const ANTHROPIC_FAST_MULTIPLIER = 6;
-
 /**
- * Fast 模式 ×6 仅适用以下模型（Anthropic 官方明确支持）。
+ * Fast 模式按 Anthropic 官方公布的独立价格折算。
+ * Opus 4.7 保留旧 6x 倍率供历史日志重算；Opus 4.6 现按标准价。
  * OpenAI Codex 的 fast/priority 倍率另按官方 Codex speed/API priority 口径处理。
  */
-const FAST_SUPPORTED = new Set<string>([
-  'claude-opus-4-8',
-  'claude-opus-4-7',
-  'claude-opus-4-6',
-]);
+const ANTHROPIC_FAST_MULTIPLIERS: Record<string, number> = {
+  'claude-opus-5': 2,
+  'claude-opus-4-8': 2,
+  'claude-opus-4-7': 6,
+};
 
 type ServiceTierSuffix = 'fast' | 'priority' | null;
 
@@ -54,8 +53,8 @@ function getServiceTierMultiplier(
     return OPENAI_CODEX_TIER_MULTIPLIERS[resolvedModel] ?? 1;
   }
 
-  if (tier === 'fast' && FAST_SUPPORTED.has(resolvedModel)) {
-    return ANTHROPIC_FAST_MULTIPLIER;
+  if (tier === 'fast') {
+    return ANTHROPIC_FAST_MULTIPLIERS[resolvedModel] ?? 1;
   }
 
   return 1;

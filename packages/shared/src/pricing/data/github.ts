@@ -17,6 +17,16 @@ export const github: Record<string, ProductPricing> = {
     models: {
       'gpt-4o': { currency: 'USD', input_per_million: 2.5, cached_input_per_million: 1.25, output_per_million: 10 },
       'gpt-4o-mini': { currency: 'USD', input_per_million: 0.15, cached_input_per_million: 0.075, output_per_million: 0.6 },
+      'claude-fable-5': { currency: 'USD', input_per_million: 10, cached_input_per_million: 1, output_per_million: 50 },
+      'claude-mythos-5': { currency: 'USD', input_per_million: 10, cached_input_per_million: 1, output_per_million: 50 },
+      'claude-opus-5': { currency: 'USD', input_per_million: 5, cached_input_per_million: 0.5, output_per_million: 25 },
+      'claude-sonnet-5': {
+        currency: 'USD',
+        notes: 'introductory pricing through 2026-08-31; standard pricing is $3 input / $15 output from 2026-09-01',
+        input_per_million: 2,
+        cached_input_per_million: 0.2,
+        output_per_million: 10,
+      },
       'claude-sonnet-4': { currency: 'USD', input_per_million: 3, cached_input_per_million: 0.3, output_per_million: 15 },
       'claude-sonnet-4-6': { currency: 'USD', input_per_million: 3, cached_input_per_million: 0.3, output_per_million: 15 },
       'o3-mini': { currency: 'USD', input_per_million: 1.1, cached_input_per_million: 0.55, output_per_million: 4.4 },

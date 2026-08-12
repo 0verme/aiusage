@@ -42,8 +42,12 @@ describe('calculateCost — 关键模型', () => {
   };
 
   it.each([
+    ['anthropic', 'claude-code', 'claude-fable-5', 60], // 10 + 50
+    ['anthropic', 'claude-code', 'claude-mythos-5', 60], // 10 + 50
+    ['anthropic', 'claude-code', 'claude-opus-5', 30], // 5 + 25
     ['anthropic', 'claude-code', 'claude-opus-4-8', 30], // 5 + 25
     ['anthropic', 'claude-code', 'claude-opus-4-7', 30], // 5 + 25
+    ['anthropic', 'claude-code', 'claude-sonnet-5', 12], // 2 + 10 (intro through 2026-08-31)
     ['anthropic', 'claude-code', 'claude-sonnet-4-6', 18],
     ['openai', 'codex', 'gpt-5.4', 27.5], // 1M input → 长上下文档 5 + 22.5
     ['openai', 'codex', 'gpt-5.6', 55], // alias → sol 长上下文档 10 + 45
@@ -122,6 +126,15 @@ describe('calculateCost — 关键模型', () => {
     expect(r.costStatus).toBe('exact');
   });
 
+  it('Claude 5 常见误写别名解析为 exact', () => {
+    const fable = calculateCost('anthropic', 'claude-code', 'claude-fibre-5', tokens);
+    const opus = calculateCost('anthropic', 'claude-code', 'claude-ops-5', tokens);
+    expect(fable.resolvedModel).toBe('claude-fable-5');
+    expect(fable.costStatus).toBe('exact');
+    expect(opus.resolvedModel).toBe('claude-opus-5');
+    expect(opus.costStatus).toBe('exact');
+  });
+
   it('语义化未知后缀触发前缀回退（estimated）', () => {
     const r = calculateCost('anthropic', 'claude-code', 'claude-sonnet-4-6-bedrock', tokens);
     expect(r.resolvedModel).toBe('claude-sonnet-4-6');
@@ -184,10 +197,16 @@ describe('Fast 模式白名单', () => {
     outputTokens: 1_000_000,
   };
 
-  it('Opus 4.8-fast 应 ×6', () => {
+  it('Opus 5-fast 应 ×2', () => {
+    const fast = calculateCost('anthropic', 'claude-code', 'claude-opus-5-fast', tokens);
+    const normal = calculateCost('anthropic', 'claude-code', 'claude-opus-5', tokens);
+    expect(fast.estimatedCostUsd).toBeCloseTo(normal.estimatedCostUsd * 2, 3);
+  });
+
+  it('Opus 4.8-fast 应 ×2', () => {
     const fast = calculateCost('anthropic', 'claude-code', 'claude-opus-4-8-fast', tokens);
     const normal = calculateCost('anthropic', 'claude-code', 'claude-opus-4-8', tokens);
-    expect(fast.estimatedCostUsd).toBeCloseTo(normal.estimatedCostUsd * 6, 3);
+    expect(fast.estimatedCostUsd).toBeCloseTo(normal.estimatedCostUsd * 2, 3);
   });
 
   it('Opus 4.7-fast 应 ×6', () => {
@@ -196,10 +215,10 @@ describe('Fast 模式白名单', () => {
     expect(fast.estimatedCostUsd).toBeCloseTo(normal.estimatedCostUsd * 6, 3);
   });
 
-  it('Opus 4.6-fast 应 ×6', () => {
+  it('Opus 4.6-fast 现按标准价', () => {
     const fast = calculateCost('anthropic', 'claude-code', 'claude-opus-4-6-fast', tokens);
     const normal = calculateCost('anthropic', 'claude-code', 'claude-opus-4-6', tokens);
-    expect(fast.estimatedCostUsd).toBeCloseTo(normal.estimatedCostUsd * 6, 3);
+    expect(fast.estimatedCostUsd).toBe(normal.estimatedCostUsd);
   });
 
   it('Sonnet-fast 不应 ×6（官方不支持）', () => {

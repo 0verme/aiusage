@@ -11,6 +11,13 @@ import type { ProductPricing } from '../types.js';
 export const sourcegraph: Record<string, ProductPricing> = {
   amp: {
     models: {
+      'claude-sonnet-5': {
+        currency: 'USD',
+        notes: 'introductory pricing through 2026-08-31; standard pricing is $3 input / $15 output from 2026-09-01',
+        input_per_million: 2,
+        cached_input_per_million: 0.2,
+        output_per_million: 10,
+      },
       'claude-sonnet-4': { currency: 'USD', input_per_million: 3, cached_input_per_million: 0.3, output_per_million: 15 },
       'claude-sonnet-3.7': { currency: 'USD', input_per_million: 3, cached_input_per_million: 0.3, output_per_million: 15 },
       'gemini-2.5-pro': { currency: 'USD', input_per_million: 1.25, cached_input_per_million: 0.125, output_per_million: 10 },
