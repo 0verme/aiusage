@@ -13,6 +13,31 @@ export interface ActivityHeatmapData {
   days: ActivityHeatmapDay[];
 }
 
+function toLocalDateString(date: Date): string {
+  return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`;
+}
+
+function addLocalDays(date: Date, days: number): Date {
+  const result = new Date(date);
+  result.setDate(result.getDate() + days);
+  return result;
+}
+
+export function calculateActivityStreak(days: ActivityHeatmapDay[], today = new Date()): number {
+  const activityByDate = new Map(days.map(day => [day.usageDate, day.activityValue]));
+  const todayActivity = activityByDate.get(toLocalDateString(today)) ?? 0;
+  const startOffset = todayActivity > 0 ? 0 : 1;
+  let streak = 0;
+
+  for (let offset = startOffset; ; offset++) {
+    const activity = activityByDate.get(toLocalDateString(addLocalDays(today, -offset))) ?? 0;
+    if (activity <= 0) break;
+    streak++;
+  }
+
+  return streak;
+}
+
 export function buildActivityHeatmapData({
   heatmap,
   dailyTrend,

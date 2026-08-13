@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
-import type { ActivityHeatmapDay } from '../utils/activity-heatmap-data';
+import { calculateActivityStreak, type ActivityHeatmapDay } from '../utils/activity-heatmap-data';
 import type { Locale } from '../i18n';
 
 // ── 常量 ──
@@ -104,13 +104,7 @@ export function ActivityHeatmap({ days, metricLabel = 'tokens', locale = 'en', c
     const totalActivity = visibleDays.reduce((s, d) => s + d.activityValue, 0);
     const activeDays = visibleDays.filter(d => d.activityValue > 0).length;
 
-    let streak = 0;
-    for (let i = 0; i < weeks * DAYS; i++) {
-      const ds = toDateStr(addDays(today, -i));
-      const d = byDate.get(ds);
-      if (!d || d.activityValue === 0) break;
-      streak++;
-    }
+    const streak = calculateActivityStreak(days, today);
 
     const grid: Array<Array<{ dateStr: string; data?: ActivityHeatmapDay }>> = [];
     const monthMarks: Array<{ weekIdx: number; label: string }> = [];
