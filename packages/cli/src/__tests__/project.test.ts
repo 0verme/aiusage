@@ -1,8 +1,18 @@
-import { describe, it, expect, beforeEach, afterEach } from 'vitest';
+import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { mkdir, writeFile, rm } from 'node:fs/promises';
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
 import { discoverProjects } from '../project.js';
+
+const mockHomedir = vi.fn();
+
+vi.mock('node:os', async () => {
+  const actual = await vi.importActual<typeof import('node:os')>('node:os');
+  return {
+    ...actual,
+    homedir: () => mockHomedir(),
+  };
+});
 
 /** 向指定目录写入 JSONL 文件 */
 async function writeJsonl(dir: string, filename: string, lines: object[]): Promise<void> {
@@ -17,6 +27,7 @@ let origKimiCodeHome: string | undefined;
 
 beforeEach(async () => {
   tmpDir = join(tmpdir(), `aiusage-project-test-${Date.now()}`);
+  mockHomedir.mockReturnValue(join(tmpDir, 'home'));
   await mkdir(tmpDir, { recursive: true });
   origEnv = process.env.CLAUDE_CONFIG_DIR;
   origKimiCodeHome = process.env.KIMI_CODE_HOME;

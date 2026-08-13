@@ -3,6 +3,7 @@ import { createInterface } from 'node:readline';
 import { homedir } from 'node:os';
 import { basename, join } from 'node:path';
 import { getCodexBaseDir } from './scanners/codex.js';
+import { getClaudeProjectDirs } from './scanners/claude-paths.js';
 import { dateKey, parseTs, resolveProjectFields, runWithConcurrency, type ProjectFields } from './scanners/utils.js';
 import type { ReportRange } from './report.js';
 
@@ -523,7 +524,7 @@ async function scanClaudeActivity(
 ): Promise<ScanResult> {
   const acc = createAccumulator(targetDates, options.projectAliases);
   const fileJobs: { filePath: string; projectFields: ProjectFields }[] = [];
-  for (const baseDir of getClaudeProjectDirs(options.claudeProjectsDirs)) {
+  for (const baseDir of getClaudeProjectDirs({ configuredProjectsDirs: options.claudeProjectsDirs })) {
     let projectDirs;
     try {
       projectDirs = await readdir(baseDir, { withFileTypes: true });
@@ -742,19 +743,6 @@ async function collectCodexSessionFiles(baseDir: string): Promise<string[]> {
   } catch { /* ignore */ }
   await walkJsonl(join(baseDir, 'sessions'), paths);
   return paths;
-}
-
-function getClaudeProjectDirs(configured?: string[]): string[] {
-  if (configured?.length) return configured;
-  const envVar = process.env.CLAUDE_CONFIG_DIR?.trim();
-  if (envVar) {
-    return envVar.split(',').map(p => p.trim()).filter(Boolean).map(p => join(p, 'projects'));
-  }
-  const home = homedir();
-  return [
-    join(home, '.config', 'claude', 'projects'),
-    join(home, '.claude', 'projects'),
-  ];
 }
 
 async function walkJsonl(dir: string, result: string[]): Promise<void> {

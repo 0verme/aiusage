@@ -1,10 +1,10 @@
 import { createReadStream } from 'node:fs';
 import { readdir, readFile } from 'node:fs/promises';
 import { join } from 'node:path';
-import { homedir } from 'node:os';
 import { createInterface } from 'node:readline';
 import type { IngestBreakdown } from '@aiusage/shared';
 import { inferProviderFromModel, normalizeModelName, runWithConcurrency, type ProjectFields } from './utils.js';
+import { getClaudeProjectDirs } from './claude-paths.js';
 
 const FILE_CONCURRENCY = 16;
 const MAX_LINE_BYTES = 64 * 1024 * 1024; // 64 MB
@@ -55,28 +55,13 @@ interface ClaudeSeenUsage {
   snapshot: ClaudeUsageSnapshot;
 }
 
-function getClaudeProjectDirs(claudeDir?: string): string[] {
-  if (claudeDir) return [claudeDir];
-
-  const envVar = process.env.CLAUDE_CONFIG_DIR?.trim();
-  if (envVar) {
-    return envVar.split(',').map(p => p.trim()).filter(Boolean).map(p => join(p, 'projects'));
-  }
-
-  const home = homedir();
-  return [
-    join(home, '.config', 'claude', 'projects'),
-    join(home, '.claude', 'projects'),
-  ];
-}
-
 interface ClaudeSource {
   projectsDir: string;
   fallbackProvider: string;
 }
 
 async function getClaudeSources(claudeDir?: string): Promise<ClaudeSource[]> {
-  return Promise.all(getClaudeProjectDirs(claudeDir).map(async projectsDir => ({
+  return Promise.all(getClaudeProjectDirs({ explicitProjectsDir: claudeDir }).map(async projectsDir => ({
     projectsDir,
     fallbackProvider: await readEndpointProvider(projectsDir),
   })));

@@ -12,6 +12,7 @@ import {
   resolveTraeNativeCacheDir,
 } from './scanners/trae.js';
 import { discoverOpenCodeUsageDates } from './scanners/opencode.js';
+import { getClaudeProjectDirs } from './scanners/claude-paths.js';
 import type { PricingInfo } from './pricing.js';
 
 export type ReportRange = '7d' | '1m' | '3m' | '6m' | 'all' | 'today';
@@ -475,13 +476,7 @@ async function discoverAntigravityDates(dates: Set<string>): Promise<void> {
 }
 
 async function discoverClaudeDates(dates: Set<string>): Promise<void> {
-  const home = homedir();
-  const baseDirs = [
-    join(home, '.config', 'claude', 'projects'),
-    join(home, '.claude', 'projects'),
-  ];
-
-  for (const baseDir of baseDirs) {
+  for (const baseDir of getClaudeProjectDirs()) {
     let projectDirs: string[];
     try {
       projectDirs = await readdir(baseDir);

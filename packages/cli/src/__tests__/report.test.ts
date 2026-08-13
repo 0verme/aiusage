@@ -30,6 +30,33 @@ afterEach(async () => {
 });
 
 describe('buildLocalReport', () => {
+  it('discovers all-history dates from CLAUDE_CONFIG_DIR and the default directory together', async () => {
+    const customRoot = join(homeDir, 'custom-claude');
+    vi.stubEnv('CLAUDE_CONFIG_DIR', customRoot);
+    const customProject = join(customRoot, 'projects', 'custom-project');
+    const defaultProject = join(homeDir, '.claude', 'projects', 'default-project');
+    await mkdir(customProject, { recursive: true });
+    await mkdir(defaultProject, { recursive: true });
+    const usage = (timestamp: string, requestId: string, cwd: string) => JSON.stringify({
+      timestamp,
+      requestId,
+      cwd,
+      message: {
+        id: `msg_${requestId}`,
+        model: 'claude-sonnet-4-6',
+        usage: { input_tokens: 100, output_tokens: 20 },
+      },
+    });
+    await writeFile(join(customProject, 'custom.jsonl'), usage('2026-07-21T12:00:00Z', 'custom', '/work/custom'));
+    await writeFile(join(defaultProject, 'default.jsonl'), usage('2026-07-09T12:00:00Z', 'default', '/work/default'));
+
+    const { buildLocalReport } = await import('../report.js');
+    const report = await buildLocalReport('all', { tools: ['claude-code'] });
+
+    expect(report.daily.map(day => day.usageDate)).toEqual(['2026-07-09', '2026-07-21']);
+    expect(report.totals.eventCount).toBe(2);
+  });
+
   it('discovers Gemini logs, Copilot VS Code workspace sessions, and Antigravity metadata in all-history reports', async () => {
     await mkdir(join(homeDir, '.gemini', 'tmp', 'project-a'), { recursive: true });
     await writeFile(

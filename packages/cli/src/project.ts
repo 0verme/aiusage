@@ -4,6 +4,7 @@ import { homedir } from 'node:os';
 import { getCodexBaseDir } from './scanners/codex.js';
 import { resolveKimiCodeHome } from './scanners/kimi.js';
 import { resolveTraeNativeCacheDir } from './scanners/trae.js';
+import { getClaudeProjectDirs } from './scanners/claude-paths.js';
 
 export interface DiscoveredProject {
   /** 原始项目名（目录 basename） */
@@ -84,7 +85,7 @@ export async function discoverProjects(
 /** 从 Claude 项目目录中读取 jsonl 首行的 cwd 来获取真实项目名 */
 async function discoverClaudeProjects(): Promise<string[]> {
   const names: string[] = [];
-  for (const baseDir of getClaudeDirs()) {
+  for (const baseDir of getClaudeProjectDirs()) {
     let entries;
     try {
       entries = await readdir(baseDir, { withFileTypes: true });
@@ -444,16 +445,4 @@ function pathFromFileUri(raw?: string): string | undefined {
     }
   }
   return raw;
-}
-
-function getClaudeDirs(): string[] {
-  const envVar = process.env.CLAUDE_CONFIG_DIR?.trim();
-  if (envVar) {
-    return envVar.split(',').map(p => p.trim()).filter(Boolean).map(p => join(p, 'projects'));
-  }
-  const home = homedir();
-  return [
-    join(home, '.config', 'claude', 'projects'),
-    join(home, '.claude', 'projects'),
-  ];
 }
