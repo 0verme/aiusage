@@ -56,9 +56,9 @@ describe('pricing authority and cache freshness', () => {
     );
 
     expect(resolved.info.source).toBe('remote');
-    expect(resolved.info.url).toBe('https://token.example/api/v1/public/pricing');
+    expect(resolved.info.url).toBe('https://token.example/api/v1/public/pricing?pricingVersion=2026-08-23-pricing-truth-v1');
     expect(fetchMock).toHaveBeenCalledWith(
-      'https://token.example/api/v1/public/pricing',
+      'https://token.example/api/v1/public/pricing?pricingVersion=2026-08-23-pricing-truth-v1',
       expect.objectContaining({ headers: { Accept: 'application/json' } }),
     );
   });

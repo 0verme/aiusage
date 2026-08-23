@@ -104,7 +104,7 @@ function getPricingUrls(
   options: { explicitUrl?: string; target?: SyncTarget },
 ): string[] {
   const targetUrl = options.target?.apiBaseUrl
-    ? `${options.target.apiBaseUrl}/api/v1/public/pricing`
+    ? `${options.target.apiBaseUrl}/api/v1/public/pricing?pricingVersion=${encodeURIComponent(bundledCatalog.version)}`
     : undefined;
   const urls = [
     targetUrl,
