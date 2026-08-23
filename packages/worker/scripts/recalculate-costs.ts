@@ -122,7 +122,7 @@ async function main(): Promise<void> {
         : roundUsd(((appliedPlan.summary.before.totalCostUsd - plan.summary.before.totalCostUsd) / plan.summary.before.totalCostUsd) * 100),
       unavailableRowsAfter: appliedPlan.summary.unavailableRowsAfter,
       modelsStillUnavailable: appliedPlan.summary.modelsStillUnavailable,
-      modelCostChanges: appliedPlan.summary.modelCostChanges,
+      modelCostChanges: plan.summary.modelCostChanges,
     };
   }
 
@@ -237,7 +237,6 @@ async function exportBackup(options: Options): Promise<string> {
     '--no-schema',
     '--output',
     output,
-    '-y',
   ]);
   return output;
 }

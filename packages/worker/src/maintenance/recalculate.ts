@@ -280,7 +280,10 @@ SET estimated_cost_usd = ${sqlNumber(update.estimatedCostUsd)}, cost_status = ${
 WHERE device_id = ${sqlString(update.row.device_id)} AND usage_date = ${sqlString(update.row.usage_date)};`),
   ];
   if (statements.length === 0) return '';
-  return ['BEGIN;', ...statements, 'COMMIT;'].join('\n');
+  // D1's remote SQL endpoint rejects explicit BEGIN/COMMIT statements. The
+  // caller still batches one date at a time and every statement is idempotent,
+  // so a retry converges without touching token facts.
+  return statements.join('\n');
 }
 
 /** Stable comparison input for the post-apply token-facts safety gate. */

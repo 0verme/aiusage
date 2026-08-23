@@ -123,7 +123,7 @@ pnpm --filter @aiusage/worker run db:recalculate -- --remote --apply --yes
 ```
 
 脚本默认 dry-run；`--apply --yes` 会先导出 `daily_usage` 与
-`daily_usage_breakdown` rollback artifact，再按日期批次、事务、幂等地更新费用字段，最后验证
+`daily_usage_breakdown` rollback artifact，再按日期批次、幂等地更新费用字段，最后验证
 `event_count`、`session_count` 与所有 token facts 未变化。输出不包含项目名称，只汇总模型、费用与 unavailable 状态。
 
 ## 测试

@@ -123,8 +123,8 @@ describe('historical cost recalculation plan', () => {
 
     expect(sql).toContain('estimated_cost_usd');
     expect(sql).toContain('pricing_version');
-    expect(sql).toContain('BEGIN;');
-    expect(sql).toContain('COMMIT;');
+    expect(sql).not.toContain('BEGIN;');
+    expect(sql).not.toContain('COMMIT;');
     expect(sql).not.toMatch(/input_tokens|cached_input_tokens|cache_write_tokens|output_tokens|reasoning_output_tokens/);
   });
 });
