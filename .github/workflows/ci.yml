@@ -1,6 +1,7 @@
+---
 name: CI
 
-on:
+"on":
   push:
     branches: [main]
   pull_request:
@@ -53,13 +54,24 @@ jobs:
           const path = 'packages/worker/wrangler.jsonc';
           let config = fs.readFileSync(path, 'utf8');
           if (process.env.CLOUDFLARE_WORKER_NAME) {
-            config = config.replace(/"name":\s*"[^"]+"/, `"name": "${process.env.CLOUDFLARE_WORKER_NAME}"`);
+            config = config.replace(
+              /"name":\s*"[^"]+"/,
+              `"name": "${process.env.CLOUDFLARE_WORKER_NAME}"`,
+            );
           }
-          const databaseId = JSON.stringify(process.env.CLOUDFLARE_D1_DATABASE_ID);
+          const databaseId = JSON.stringify(
+            process.env.CLOUDFLARE_D1_DATABASE_ID,
+          );
           if (/"database_id":\s*"[^"]+"/.test(config)) {
-            config = config.replace(/"database_id":\s*"[^"]+"/, `"database_id": ${databaseId}`);
+            config = config.replace(
+              /"database_id":\s*"[^"]+"/,
+              `"database_id": ${databaseId}`,
+            );
           } else {
-            config = config.replace(/("database_name":\s*"[^"]+")/, `$1,\n      "database_id": ${databaseId}`);
+            config = config.replace(
+              /("database_name":\s*"[^"]+")/,
+              `$1,\n      "database_id": ${databaseId}`,
+            );
           }
           fs.writeFileSync(path, config);
           NODE
@@ -94,7 +106,9 @@ jobs:
       - run: pnpm install --frozen-lockfile
 
       - name: Build publishable packages
-        run: pnpm turbo build --filter @aiusage/pricing --filter @aiusage/cli
+        run: >-
+          pnpm turbo build --filter @aiusage/pricing
+          --filter @0verme/aiusage-cli
 
       - name: Publish packages (if versions are new)
         run: |
@@ -105,19 +119,27 @@ jobs:
             local local_version
             local npm_version
             pkg_name=$(node -p "require('./${pkg_dir}/package.json').name")
-            local_version=$(node -p "require('./${pkg_dir}/package.json').version")
-            if npm view "${pkg_name}@${local_version}" version >/dev/null 2>&1; then
+            local_version=$(
+              node -p "require('./${pkg_dir}/package.json').version"
+            )
+            if npm view \
+              "${pkg_name}@${local_version}" version >/dev/null 2>&1; then
               echo "${pkg_name} v${local_version} already published, skipping"
               return 0
             fi
 
-            npm_version=$(npm view "${pkg_name}" version 2>/dev/null || echo "none")
-            if [ "${npm_version}" = "none" ] && [ "${allow_first_publish}" != "true" ]; then
-              echo "${pkg_name} has not been published before; skipping until npm package permissions are created"
+            npm_version=$(
+              npm view "${pkg_name}" version 2>/dev/null || echo "none"
+            )
+            if [ "${npm_version}" = "none" ] \
+              && [ "${allow_first_publish}" != "true" ]; then
+              echo "${pkg_name} has not been published before;" \
+                "skipping until npm package permissions are created"
               return 0
             fi
 
-            echo "Publishing ${pkg_name}@${local_version} (npm latest is ${npm_version})"
+            echo "Publishing ${pkg_name}@${local_version}" \
+              "(npm latest is ${npm_version})"
             (cd "${pkg_dir}" && npm publish --access public)
           }
 

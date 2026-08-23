@@ -20,7 +20,7 @@ You are setting up the AIUsage controller CLI on the user's device so it can sca
 ## Step 1: Install the controller
 
 ```bash
-npm install -g @aiusage/cli
+npm install -g @0verme/aiusage-cli
 ```
 
 Verify:
@@ -83,7 +83,7 @@ All checks should show `✓`. The dashboard URL should now display data.
 The controller automatically scans all installed tools. No configuration needed:
 
 | Tool | Log Location |
-|------|-------------|
+| ------ | ------------- |
 | Claude Code | `~/.claude/projects/` |
 | Codex CLI | `~/.codex/sessions/` |
 | Copilot CLI | `~/.copilot/session-state/` |
@@ -117,7 +117,7 @@ aiusage config set privacy.projectVisibility plain    # real names (private depl
 ## Useful Commands
 
 | Command | Description |
-|---------|-------------|
+| --------- | ------------- |
 | `aiusage report --range 7d` | Local usage report (no server needed) |
 | `aiusage scan --date 2026-04-01` | Scan a specific day |
 | `aiusage sync --lookback 30` | Sync last 30 days |
@@ -130,5 +130,5 @@ aiusage config set privacy.projectVisibility plain    # real names (private depl
 - **"缺少 siteId"** → Run `aiusage enroll` first with server URL and credentials
 - **"缺少 deviceToken"** → Enrollment failed or config lost; re-run `aiusage enroll`
 - **"请求失败 (401)"** → ENROLL_TOKEN mismatch or device was disabled; verify with server admin
-- **"检测到通过 npx 运行"** → Schedule requires global install: `npm i -g @aiusage/cli`
+- **"检测到通过 npx 运行"** → Schedule requires global install: `npm i -g @0verme/aiusage-cli`
 - **No data after sync** → Check `aiusage scan` locally first; verify tool log directories exist

@@ -5,8 +5,8 @@
 AIUsage — 跨设备 AI 工具用量统计平台。Monorepo 结构，pnpm workspace + Turborepo 管理。
 
 | 包 | 职责 | 技术栈 |
-|---|---|---|
-| `@aiusage/cli` | 本地扫描 AI 工具用量并上报 | Node 18+, esbuild, ESM |
+| --- | --- | --- |
+| `@0verme/aiusage-cli` | 本地扫描 AI 工具用量并上报 | Node 18+, esbuild, ESM |
 | `@aiusage/dashboard` | 数据可视化前端 | React 18, Vite, Tailwind CSS |
 | `@aiusage/worker` | API 后端 + 静态资源宿主 | Cloudflare Workers, D1 (SQLite) |
 | `@aiusage/shared` | 共享类型与常量 | TypeScript 5 |
@@ -37,8 +37,8 @@ AIUsage — 跨设备 AI 工具用量统计平台。Monorepo 结构，pnpm works
 
 ```bash
 pnpm install                          # 安装依赖
-pnpm --filter @aiusage/cli build      # 构建 CLI
-pnpm --filter @aiusage/cli test       # 测试 CLI（vitest）
+pnpm --filter @0verme/aiusage-cli build      # 构建 CLI
+pnpm --filter @0verme/aiusage-cli test       # 测试 CLI（vitest）
 pnpm --filter @aiusage/dashboard dev  # Dashboard 开发服务器
 pnpm --filter @aiusage/dashboard build # 构建 Dashboard
 pnpm --filter @aiusage/worker deploy  # 部署 Worker（含预编译）
@@ -81,6 +81,7 @@ pnpm --filter @aiusage/worker deploy  # 部署 Worker（含预编译）
 CLI 扫描器位于 `packages/cli/src/scanners/`，每个 AI 工具一个文件。
 
 新增 scanner 需同步更新：
+
 1. `scanners/` 下新增扫描器文件及测试
 2. `scan.ts` — 导入并注册
 3. `project.ts` — 项目发现逻辑
@@ -90,6 +91,7 @@ CLI 扫描器位于 `packages/cli/src/scanners/`，每个 AI 工具一个文件�
 共享类型定义在 `packages/shared/src/types.ts`，新增字段需同步更新 worker 的 ingest 路由。
 
 部分 scanner 的数据源不提供 token 信息，仅输出 eventCount，token 和费用为 0，这是预期行为：
+
 - **copilot-vscode** — VS Code 日志和 chatSessions JSON 中无 token 字段（`~/.copilot/session-state/` 的 token 数据属于 Copilot CLI，由 `copilot.ts` 扫描）
 - **antigravity** — 本地仅存时间戳和文档内容，token 统计在 Google 服务端，protobuf 文件中亦无 token 相关数据
 
@@ -102,6 +104,7 @@ CLI 扫描器位于 `packages/cli/src/scanners/`，每个 AI 工具一个文件�
 - 详见 [`docs/pricing.md`](docs/pricing.md)
 
 特性：
+
 - 支持多币种（USD / CNY，统一折算到 USD）
 - 支持阶梯定价（按 input token 数命中档位，Qwen / Gemini 2.5 Pro / GLM 用到）
 - 显式 alias 命中算 `exact`；前缀回退算 `estimated`

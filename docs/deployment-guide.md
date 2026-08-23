@@ -34,6 +34,7 @@ pnpm setup
 ```
 
 The setup wizard will:
+
 1. Check prerequisites
 2. Ask for Worker name, database name, and other options
 3. Generate all required secrets (SITE_ID, ENROLL_TOKEN, etc.)
@@ -42,6 +43,7 @@ The setup wizard will:
 6. Deploy to Cloudflare Workers
 
 After completion, you'll see:
+
 - **Dashboard URL** — your public dashboard
 - **SITE_ID** — your deployment identifier
 - **ENROLL_TOKEN** — the secret for registering devices
@@ -84,6 +86,7 @@ cp packages/worker/wrangler.jsonc.example packages/worker/wrangler.jsonc
 ```
 
 Edit `packages/worker/wrangler.jsonc`:
+
 - Replace `your-worker-name` with your preferred name
 - Replace `your-d1-database-id` with the UUID from step 3
 
@@ -121,7 +124,7 @@ npx wrangler deploy
 ### Install the controller
 
 ```bash
-npm install -g @aiusage/cli
+npm install -g @0verme/aiusage-cli
 ```
 
 ### Register the device
@@ -160,7 +163,7 @@ Repeat on every machine you want to track.
 ## CLI Reference
 
 | Command | Description |
-|---------|-------------|
+| --------- | ------------- |
 | `aiusage report [--tool TOOL] [--range 7d\|1m\|3m\|6m\|all] [--json]` | Local usage report with cost estimates |
 | `aiusage scan [--tool TOOL] [--date YYYY-MM-DD\|--range 6m] [--json]` | Scan one tool, date, or range |
 | `aiusage trae sync [--edition cn\|intl\|all] [--since 180]` | Cache Trae CN local or international account usage |
@@ -175,7 +178,7 @@ Repeat on every machine you want to track.
 ### Config keys
 
 | Key | Example | Description |
-|-----|---------|-------------|
+| ----- | --------- | ------------- |
 | `device.alias` | `"MacBook Pro"` | Device display name |
 | `privacy.projectVisibility` | `masked` | `masked` / `hidden` / `plain` |
 | `project.alias <path> <name>` | `/path/to/proj MyProj` | Map path to readable name |
@@ -189,12 +192,13 @@ Only aggregated token counts are uploaded — never conversation content.
 Project names on the public dashboard support three modes:
 
 | Mode | Behavior |
-|------|----------|
+| ------ | ---------- |
 | `masked` (default) | Stable pseudonyms like `Project A1F4` via HMAC |
 | `hidden` | Project dimension not shown |
 | `plain` | Real project names (private deployments only) |
 
 Configure at two levels:
+
 - **Server-wide**: `PUBLIC_PROJECT_VISIBILITY` in `wrangler.jsonc`
 - **Per-device**: `aiusage config set privacy.projectVisibility <mode>`
 
@@ -205,7 +209,7 @@ Configure at two levels:
 ### Device API (authenticated)
 
 | Method | Path | Description |
-|--------|------|-------------|
+| -------- | ------ | ------------- |
 | GET | `/api/v1/health` | Connectivity check |
 | POST | `/api/v1/enroll` | Register a new device |
 | POST | `/api/v1/ingest/daily` | Upload daily usage data |
@@ -226,7 +230,7 @@ Grok Build (xAI) is supported from `~/.grok/sessions/` (or `GROK_HOME`). The sca
 The controller automatically detects and scans all installed tools:
 
 | Tool | Provider | Usage Source |
-|------|----------|--------------|
+| ------ | ---------- | -------------- |
 | Claude Code | Anthropic / compatible wrappers | `~/.config/claude/projects/`, `~/.claude/projects/` |
 | Codex CLI | OpenAI | `~/.codex/sessions/`, `~/.codex/archived_sessions/` |
 | Cursor | Cursor | Local `state.vscdb` credential + Cursor usage CSV API |

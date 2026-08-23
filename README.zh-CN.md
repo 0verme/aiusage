@@ -1,4 +1,4 @@
-<p align="center"><code>npm i -g @aiusage/cli</code></p>
+<p align="center"><code>npm i -g @0verme/aiusage-cli</code></p>
 
 <p align="center">
   <strong>AIUsage</strong> 追踪所有 AI 工具在所有设备上的 Token 用量与成本，<br>
@@ -10,7 +10,7 @@
 </p>
 
 <p align="center">
-  <a href="https://www.npmjs.com/package/@aiusage/cli"><img src="https://img.shields.io/npm/v/@aiusage/cli?label=npm&color=cb0000&logo=npm" alt="npm" /></a>
+  <a href="https://www.npmjs.com/package/@0verme/aiusage-cli"><img src="https://img.shields.io/npm/v/@0verme/aiusage-cli?label=npm&color=cb0000&logo=npm" alt="npm" /></a>
   <a href="https://workers.cloudflare.com"><img src="https://img.shields.io/badge/Cloudflare-Workers-F38020?logo=cloudflare&logoColor=white" alt="Cloudflare Workers" /></a>
   <a href="https://developers.cloudflare.com/d1"><img src="https://img.shields.io/badge/Cloudflare-D1-F38020?logo=cloudflare&logoColor=white" alt="Cloudflare D1" /></a>
   <a href="LICENSE"><img src="https://img.shields.io/badge/license-MIT-blue" alt="MIT License" /></a>
@@ -84,7 +84,7 @@ pnpm setup
 ### 本地报告（无需服务端）
 
 ```bash
-npm i -g @aiusage/cli
+npm i -g @0verme/aiusage-cli
 aiusage report --range 7d
 ```
 
@@ -97,18 +97,17 @@ AIUsage 采用 **Fork 更新模式** — Fork 本仓库，将你的 Fork 连接�
 3. 通过 GitHub 的 "Sync fork" 按钮或 `git merge upstream/main` **同步**上游更新
 4. Cloudflare 在每次推送到你的 Fork 时**自动重新部署**
 
-CLI 更新需单独执行：`npm update -g @aiusage/cli`
+CLI 更新需单独执行：`npm update -g @0verme/aiusage-cli`
 
 详见 [**更新指南**](./docs/update-guide.md)，包含通过 GitHub Actions 实现全自动同步的方案。
 
 ## 文档
 
 | 文档 | 说明 |
-|------|------|
+| ------ | ------ |
 | [**部署指南**](./docs/deployment-guide.md) | 完整部署流程、CLI 参考、API 文档 |
 | [**更新指南**](./docs/update-guide.md) | Fork 更新机制与自动部署设置 |
 | [**CLI 文档**](./packages/cli/README.zh-CN.md) | CLI 工具详情与全部命令 |
-
 
 ## 许可证
 

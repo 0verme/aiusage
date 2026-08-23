@@ -3,7 +3,13 @@ import { readFile } from 'node:fs/promises';
 import { test } from 'node:test';
 
 test('catalog.json exposes the public pricing catalog', async () => {
-  const catalog = JSON.parse(await readFile(new URL('../catalog.json', import.meta.url), 'utf-8'));
+  let raw;
+  try {
+    raw = await readFile(new URL('../catalog.json', import.meta.url), 'utf-8');
+  } catch (error) {
+    assert.fail(`Unable to read catalog.json: ${error instanceof Error ? error.message : String(error)}`);
+  }
+  const catalog = JSON.parse(raw);
   assert.match(catalog.version, /^\d{4}-\d{2}-\d{2}/);
   assert.ok(catalog.providers?.openai?.codex);
   assert.ok(catalog.providers?.anthropic?.['claude-code']);

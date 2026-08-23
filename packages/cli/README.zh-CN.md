@@ -1,6 +1,6 @@
-# @aiusage/cli
+# @0verme/aiusage-cli
 
-`@aiusage/cli` 是 AIUsage 命令行工具，用于：
+`@0verme/aiusage-cli` 是 AIUsage 命令行工具，用于：
 
 - 发现和管理本机 AI 工具项目
 - 扫描本地 AI 编程工具的 Token 用量（Claude Code、Codex、Cursor、Copilot CLI、Copilot VS Code、Gemini CLI、Antigravity、Amp、Kimi Code、Qwen Code、Droid、OpenCode、Pi、Trae）
@@ -32,13 +32,13 @@ Trae CN 通过 `aiusage trae sync --edition cn` 调用 Trae 自己的本地 `ai-
 ## 安装
 
 ```bash
-npm install -g @aiusage/cli
+npm install -g @0verme/aiusage-cli
 ```
 
 或通过 `npx` 直接运行：
 
 ```bash
-npx @aiusage/cli --help
+npx @0verme/aiusage-cli --help
 ```
 
 安装后：

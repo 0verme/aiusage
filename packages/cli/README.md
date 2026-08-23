@@ -1,6 +1,6 @@
-# @aiusage/cli
+# @0verme/aiusage-cli
 
-`@aiusage/cli` is the AIUsage command-line tool for:
+`@0verme/aiusage-cli` is the AIUsage command-line tool for:
 
 - discovering and managing projects across AI tools
 - scanning local Claude Code, Codex, Cursor, Copilot CLI, Copilot for VS Code, Gemini CLI, Antigravity, Amp, Kimi Code, Qwen Code, Droid, OpenCode, Pi, and Trae usage
@@ -17,7 +17,7 @@ differ, rather than treating every local record as billable token usage.
 ## Local scanner coverage
 
 | Tool | Sources and compatibility behavior |
-|------|------------------------------------|
+| ------ | ------------------------------------ |
 | Claude Code | `~/.config/claude/projects/` and `~/.claude/projects/` JSONL; deduplicates parent/sidechain replays, merges streaming snapshots per token field, and honors wrapper providers. Aggregate `stats-cache.json` is intentionally not converted into guessed per-message usage. |
 | Codex CLI | Active and archived `~/.codex` sessions; fork-aware replay boundaries, inherited baselines, `last_token_usage`, and total-delta fallback. |
 | Cursor | Reads the local `state.vscdb` credential and requests Cursor's token-strategy usage CSV; the database is snapshotted when locked. |
@@ -40,13 +40,13 @@ content and local credentials are never uploaded.
 ## Install
 
 ```bash
-npm install -g @aiusage/cli
+npm install -g @0verme/aiusage-cli
 ```
 
 Or run it directly with `npx`:
 
 ```bash
-npx @aiusage/cli --help
+npx @0verme/aiusage-cli --help
 ```
 
 After installation:

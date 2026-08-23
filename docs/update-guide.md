@@ -111,16 +111,16 @@ This checks for updates weekly and merges them automatically. Cloudflare then re
 
 ## Updating the CLI
 
-The CLI tool (`@aiusage/cli`) is published to npm independently. Update it on each device:
+The CLI tool (`@0verme/aiusage-cli`) is published to npm independently. Update it on each device:
 
 ```bash
-npm update -g @aiusage/cli
+npm update -g @0verme/aiusage-cli
 ```
 
 Or install a specific version:
 
 ```bash
-npm install -g @aiusage/cli@latest
+npm install -g @0verme/aiusage-cli@latest
 ```
 
 The CLI and server are backwards-compatible — a newer CLI works with an older server and vice versa, as long as the `schemaVersion` matches.
@@ -141,10 +141,10 @@ Migration files are numbered sequentially (e.g., `0001_init.sql`, `0002_add_inde
 ## What Gets Updated
 
 | Component | Update Method | Automatic? |
-|-----------|--------------|------------|
+| ----------- | -------------- | ------------ |
 | **Worker API** | Fork sync → Cloudflare redeploy | Yes (with Git integration) |
 | **Dashboard UI** | Fork sync → Cloudflare redeploy | Yes (with Git integration) |
-| **CLI tool** | `npm update -g @aiusage/cli` | No (manual per device) |
+| **CLI tool** | `npm update -g @0verme/aiusage-cli` | No (manual per device) |
 | **D1 Schema** | `wrangler d1 migrations apply` | No (manual when needed) |
 | **Pricing catalog** | Bundled in Worker, updated via fork sync | Yes (with Git integration) |
 | **New tool scanners** | Bundled in CLI, updated via npm | No (manual per device) |
@@ -154,4 +154,4 @@ Migration files are numbered sequentially (e.g., `0001_init.sql`, `0002_add_inde
 - **Merge conflicts after sync** — If you've customized your fork (e.g., modified `wrangler.jsonc`), you may hit merge conflicts. Resolve them locally and push.
 - **Build fails after update** — Check the Cloudflare build logs. Usually caused by a Node.js version mismatch. Ensure your build environment uses Node.js >= 18.
 - **Missing new features after sync** — Verify the Cloudflare deployment completed. Check **Workers & Pages** > your worker > **Deployments**.
-- **CLI version mismatch** — Run `aiusage --version` and compare with the latest on [npm](https://www.npmjs.com/package/@aiusage/cli). Update if behind.
+- **CLI version mismatch** — Run `aiusage --version` and compare with the latest on [npm](https://www.npmjs.com/package/@0verme/aiusage-cli). Update if behind.

@@ -19,7 +19,7 @@
 import { execSync } from 'node:child_process';
 import { createInterface } from 'node:readline';
 import { randomBytes } from 'node:crypto';
-import { readFileSync, writeFileSync, existsSync } from 'node:fs';
+import { writeFileSync } from 'node:fs';
 import { resolve, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
@@ -57,34 +57,37 @@ function ask(question, defaultValue) {
 }
 
 function run(cmd, opts = {}) {
-  return execSync(cmd, { encoding: 'utf-8', stdio: 'pipe', cwd: WORKER_DIR, ...opts }).trim();
+  try {
+    return execSync(cmd, { encoding: 'utf-8', stdio: 'pipe', cwd: WORKER_DIR, ...opts }).trim();
+  } catch (error) {
+    throw error;
+  }
 }
 
 function runVisible(cmd, opts = {}) {
-  execSync(cmd, { stdio: 'inherit', cwd: WORKER_DIR, ...opts });
+  try {
+    execSync(cmd, { stdio: 'inherit', cwd: WORKER_DIR, ...opts });
+  } catch (error) {
+    throw error;
+  }
 }
 
 function runWithInput(cmd, input, opts = {}) {
-  return execSync(cmd, {
-    encoding: 'utf-8',
-    input,
-    stdio: ['pipe', 'pipe', 'pipe'],
-    cwd: WORKER_DIR,
-    ...opts,
-  }).trim();
+  try {
+    return execSync(cmd, {
+      encoding: 'utf-8',
+      input,
+      stdio: ['pipe', 'pipe', 'pipe'],
+      cwd: WORKER_DIR,
+      ...opts,
+    }).trim();
+  } catch (error) {
+    throw error;
+  }
 }
 
 function hex(bytes = 16) {
   return randomBytes(bytes).toString('hex');
-}
-
-function which(bin) {
-  try {
-    execSync(`which ${bin}`, { stdio: 'pipe' });
-    return true;
-  } catch {
-    return false;
-  }
 }
 
 // ── Main ──
@@ -326,7 +329,7 @@ async function main() {
   console.log('');
   console.log(bold('  Connect your device:'));
   console.log('');
-  console.log(cyan(`  npm i -g @aiusage/cli`));
+  console.log(cyan(`  npm i -g @0verme/aiusage-cli`));
   console.log(cyan(`  aiusage enroll \\`));
   console.log(cyan(`    --server ${url} \\`));
   console.log(cyan(`    --site-id ${siteId} \\`));

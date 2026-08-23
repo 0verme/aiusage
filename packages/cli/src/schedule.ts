@@ -69,7 +69,7 @@ export function resolveCommandPaths(): { nodePath: string; scriptPath: string } 
   const scriptPath = realpathSync(resolve(entryPath));
   if (scriptPath.includes('_npx') || scriptPath.includes('/npx-')) {
     throw new Error(
-      '检测到通过 npx 运行，定时任务需要全局安装。\n请先执行: npm install -g @aiusage/cli',
+      '检测到通过 npx 运行，定时任务需要全局安装。\n请先执行: npm install -g @0verme/aiusage-cli',
     );
   }
   return { nodePath: process.execPath, scriptPath };
@@ -107,7 +107,7 @@ async function enableLaunchd(intervalSeconds: number, includeToday: boolean): Pr
     '',
   ].join('\n');
 
-  try { await execFileAsync('launchctl', ['unload', PLIST_PATH]); } catch { /* ok */ }
+  try { await execFileAsync('launchctl', ['unload', PLIST_PATH]); } catch (error) { void error; }
   await writeFile(PLIST_PATH, plist, 'utf-8');
   await execFileAsync('launchctl', ['load', PLIST_PATH]);
 
@@ -121,8 +121,8 @@ async function enableLaunchd(intervalSeconds: number, includeToday: boolean): Pr
 }
 
 async function disableLaunchd(): Promise<void> {
-  try { await execFileAsync('launchctl', ['unload', PLIST_PATH]); } catch { /* ok */ }
-  try { await unlink(PLIST_PATH); } catch { /* ok */ }
+  try { await execFileAsync('launchctl', ['unload', PLIST_PATH]); } catch (error) { void error; }
+  try { await unlink(PLIST_PATH); } catch (error) { void error; }
 }
 
 async function getLaunchdStatus(): Promise<ScheduleStatus> {
@@ -208,7 +208,7 @@ async function disableCron(): Promise<void> {
     .trimEnd();
 
   if (!filtered) {
-    try { await execFileAsync('crontab', ['-r']); } catch { /* ok */ }
+    try { await execFileAsync('crontab', ['-r']); } catch (error) { void error; }
   } else {
     await writeCrontab(filtered + '\n');
   }
@@ -250,7 +250,7 @@ async function writeCrontab(content: string): Promise<void> {
   try {
     await execFileAsync('crontab', [tmpFile]);
   } finally {
-    try { await unlink(tmpFile); } catch { /* ok */ }
+    try { await unlink(tmpFile); } catch (error) { void error; }
   }
 }
 

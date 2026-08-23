@@ -130,4 +130,4 @@ pnpm --filter @aiusage/worker run db:recalculate -- --remote --apply --yes
 
 - `pnpm --filter @aiusage/shared test` — 校验关键模型可解析、阶梯命中、币种折算
 - `pnpm --filter @aiusage/worker test` — Worker 端 calculateCost 行为回归
-- `pnpm --filter @aiusage/cli test` — CLI report 集成测试
+- `pnpm --filter @0verme/aiusage-cli test` — CLI report 集成测试
