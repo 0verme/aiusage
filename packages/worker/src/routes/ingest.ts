@@ -1,7 +1,7 @@
 import type { IngestActivityItem, IngestPayload, CostStatus } from '@aiusage/shared';
 import { jsonNoStore, jsonError } from '../utils/response.js';
 import { verifyDeviceToken } from '../utils/token.js';
-import { calculateIngestBreakdownCost, getWorstCostStatus } from '../utils/pricing.js';
+import { calculateIngestBreakdownCost, getWorstCostStatus, PRICING_VERSION } from '../utils/pricing.js';
 import type { Env } from '../types.js';
 
 export async function handleIngest(request: Request, env: Env): Promise<Response> {
@@ -97,7 +97,7 @@ export async function handleIngest(request: Request, env: Env): Promise<Response
         tokenPayload.deviceId, day.usageDate,
         dayTotalEvents, dayTotalInput, dayTotalCachedInput, dayTotalCacheWrite,
         dayTotalOutput, dayTotalReasoning,
-        Math.round(dayTotalCost * 10000) / 10000, dayCostStatus, 'current',
+        Math.round(dayTotalCost * 10000) / 10000, dayCostStatus, PRICING_VERSION,
         'pending', 0,
         'pending', 0,
         now, now,

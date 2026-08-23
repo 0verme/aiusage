@@ -3,7 +3,7 @@ import { readdir, readFile } from 'node:fs/promises';
 import { basename, join } from 'node:path';
 import { homedir } from 'node:os';
 import { createInterface } from 'node:readline';
-import { calculateCost, type IngestBreakdown } from '@aiusage/shared';
+import { calculateCost, type IngestBreakdown, type PricingCatalog } from '@aiusage/shared';
 import { fileModifiedTs, normalizeModelName, runWithConcurrency, resolveProjectFields, type ProjectFields } from './utils.js';
 
 const FILE_CONCURRENCY = 16;
@@ -100,6 +100,7 @@ export async function scanCodexDates(
   targetDates: string[],
   codexDir?: string,
   projectAliases?: Record<string, string>,
+  pricingCatalog?: PricingCatalog,
 ): Promise<Map<string, IngestBreakdown[]>> {
   const targetDateSet = new Set(targetDates);
   const groupedByDate = new Map<string, Map<string, IngestBreakdown>>();
@@ -117,7 +118,7 @@ export async function scanCodexDates(
   // first-wins 归属不受异步完成顺序影响。
   const eventsByFile: CodexUsageEvent[][] = Array.from({ length: sessionFiles.length }, () => []);
   await runWithConcurrency(sessionFiles, FILE_CONCURRENCY, async (filePath, index) => {
-    eventsByFile[index] = await processCodexFile(filePath, projectAliases, serviceTier);
+    eventsByFile[index] = await processCodexFile(filePath, projectAliases, serviceTier, pricingCatalog);
   });
 
   // 跨文件去重，但 key 必须带 session/fork scope；纯 token 数值全局去重会误杀独立会话。
@@ -141,6 +142,7 @@ async function processCodexFile(
   filePath: string,
   projectAliases: Record<string, string> | undefined,
   serviceTier: CodexServiceTier,
+  pricingCatalog?: PricingCatalog,
 ): Promise<CodexUsageEvent[]> {
   const events: CodexUsageEvent[] = [];
   const input = createReadStream(filePath, { encoding: 'utf-8' });
@@ -282,7 +284,9 @@ async function processCodexFile(
         cacheWriteTokens: 0,
         outputTokens: output,
         reasoningOutputTokens: reasoning,
-      });
+      },
+      { catalog: pricingCatalog },
+      );
       const exactEventCost = eventCost.costStatus === 'exact' ? eventCost.estimatedCostUsd : undefined;
       events.push({
         usageDate,

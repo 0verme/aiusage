@@ -6,8 +6,12 @@ import { calculateCost as calculateSharedCost } from '@aiusage/shared';
 import type { CostCalcResult, IngestBreakdown } from '@aiusage/shared';
 
 /**
- * 优先使用 scanner 按单次请求累计的 costUSD（exact）；
- * 否则回退到共享 calculateCost（阶梯模型可传 requestCount 做平均估档）。
+ * Ingest pricing contract:
+ * 1. OpenCode / Trae International 的 costUSD 是供应商或账户 API 返回的权威费用，
+ *    只要是正数就保留，不被当前 token catalog 覆盖。
+ * 2. 其他 scanner 的 costUSD 只有在 client pricingVersion 与 Worker 当前版本一致、
+ *    且 canonical model 可定价时才是 event-level exact。
+ * 3. 其余情况统一用 shared canonical pricing 重算；版本不兼容不会混用两套结果。
  */
 export function calculateIngestBreakdownCost(breakdown: IngestBreakdown): CostCalcResult {
   const calculated = calculateSharedCost(
@@ -26,18 +30,36 @@ export function calculateIngestBreakdownCost(breakdown: IngestBreakdown): CostCa
     { requestCount: breakdown.eventCount },
   );
 
+  const reportedCost = breakdown.costUSD;
+  const hasPositiveReportedCost =
+    reportedCost != null &&
+    Number.isFinite(reportedCost) &&
+    reportedCost > 0;
+  if (!hasPositiveReportedCost || reportedCost == null) return calculated;
+
   const hasVendorReportedCost = breakdown.product === 'opencode' || breakdown.product === 'trae-intl';
+  if (hasVendorReportedCost) {
+    return {
+      ...calculated,
+      estimatedCostUsd: reportedCost,
+      costStatus: 'exact',
+      pricingVersion: calculated.pricingVersion,
+    };
+  }
 
   if (
-    breakdown.costUSD == null ||
-    !Number.isFinite(breakdown.costUSD) ||
-    breakdown.costUSD <= 0 ||
-    (!hasVendorReportedCost && breakdown.pricingVersion !== calculated.pricingVersion)
+    breakdown.pricingVersion !== calculated.pricingVersion ||
+    calculated.costStatus === 'unavailable'
   ) {
     return calculated;
   }
 
-  return { ...calculated, estimatedCostUsd: breakdown.costUSD, costStatus: 'exact' };
+  return {
+    ...calculated,
+    estimatedCostUsd: reportedCost,
+    costStatus: 'exact',
+    pricingVersion: calculated.pricingVersion,
+  };
 }
 
 export {

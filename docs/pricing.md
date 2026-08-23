@@ -2,10 +2,20 @@
 
 AIUsage 把所有模型定价数据集中维护在 **`@aiusage/shared/pricing`**，CLI 端与 Worker 端共用同一份；两端不再有独立副本。
 
+## Pricing Truth 规则
+
+- **Token facts are immutable. Pricing is versioned. Cost is derived.** 重算费用不得修改任何 token、event 或 session 字段。
+- scanner 上报的 provider/product 是 raw reporting identity，保留用于统计；`normalizePricingIdentity()` 只为 catalog lookup 生成 canonical pricing identity。例如 `openai-codex/pi` → `openai/codex`，`xai/pi` → `xai/grok-build`。
+- Worker 的 `/api/v1/public/pricing` 是当前服务端 authority。CLI 在存在 target 时优先请求该 Worker；cache 只在网络失败时 fallback，且旧于 bundled catalog 时会被忽略并显示 warning。
+- CLI report 输出 `Pricing source`、`Pricing version`；cache fallback 还输出 `fetchedAt`。Worker ingest 对供应商权威 cost 保留 exact，对版本不兼容的 scanner cost 统一回退 shared catalog 重算。
+- catalog 没有可靠的历史 effective price 时间轴时，历史费用语义是 **Current Catalog Revaluation**：按当前 catalog 估算历史 API-equivalent cost，不声称还原发生日真实账单。
+
 ```
 packages/shared/src/pricing/
 ├── types.ts          # ModelPricing / PricingTier / PricingCatalog 等类型
 ├── catalog.ts        # 总目录：version + fx + aliases + providers
+├── identity.ts       # raw identity → canonical pricing identity
+├── version.ts        # 非 semver pricing version 的日期比较
 ├── calculate.ts      # calculateCost / getWorstCostStatus
 ├── index.ts          # 对外导出
 └── data/
@@ -27,7 +37,7 @@ packages/shared/src/pricing/
 按维护成本与影响面分三档：
 
 | 档位 | 范围 | 维护责任 |
-|---|---|---|
+| --- | --- | --- |
 | **核心** | scanner 实际采集的 provider/product + 该 provider 最近 12 个月主力模型 | 必须保证准确，由 maintainer 定期核对 |
 | **扩展** | 主流 provider 全部历史模型 + 主流中文模型（Kimi / Qwen / DeepSeek / GLM） | 社区 PR best-effort，发现错误即修 |
 | **不收** | EOL > 1 年的模型；同一模型多 region 价差；私有部署 / 套餐价 | 显式拒绝 |
@@ -37,7 +47,7 @@ packages/shared/src/pricing/
 `ModelPricing` 关键字段（详见 `types.ts`）：
 
 | 字段 | 说明 |
-|---|---|
+| --- | --- |
 | `currency: 'USD' \| 'CNY'` | 价格币种。Worker 端结算时按 `catalog.fx` 折算到 USD |
 | `input_per_million` / `output_per_million` | 基础单价 / 1M tokens |
 | `cached_input_per_million` | cache hit 价（Anthropic 叫 cache_read，Kimi 叫缓存命中） |

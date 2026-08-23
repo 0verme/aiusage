@@ -25,6 +25,12 @@ export function renderReport(report: LocalReport, opts: RenderOptions): string {
   lines.push(`${s.tokens.padEnd(10)}${fmtToken(report.totals.totalTokens)}`);
   lines.push(`${s.cost.padEnd(10)}${fmtUsd(report.totals.estimatedCostUsd, opts.detail)}`);
   lines.push(`${s.pricing.padEnd(10)}${report.pricing.source} ${report.pricing.version}`);
+  if (report.pricing.fetchedAt) {
+    lines.push(`${s.pricingFetchedAt.padEnd(10)}${report.pricing.fetchedAt}`);
+  }
+  for (const warning of report.pricing.warnings ?? []) {
+    lines.push(`${opts.lang === 'zh' ? '警告' : 'Warning'}: ${warning}`);
+  }
 
   if (report.daysWithData === 0) {
     lines.push('');

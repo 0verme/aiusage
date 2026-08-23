@@ -82,6 +82,45 @@ describe('calculateCost: 基本计费', () => {
     expect(result.costStatus).toBe('exact');
   });
 
+  it('通过 shared normalization 计算 openai-codex/pi 的 GPT-5.6 Luna', () => {
+    const result = calculateIngestBreakdownCost({
+      provider: 'openai-codex',
+      product: 'pi',
+      channel: 'cli',
+      model: 'gpt-5.6-luna',
+      project: '/tmp/project',
+      eventCount: 1,
+      inputTokens: 1_000_000,
+      cachedInputTokens: 0,
+      cacheWriteTokens: 0,
+      outputTokens: 1_000_000,
+      reasoningOutputTokens: 0,
+    });
+
+    expect(result.estimatedCostUsd).toBe(11);
+    expect(result.costStatus).toBe('exact');
+    expect(result.pricingIdentity?.canonical).toMatchObject({ provider: 'openai', product: 'codex', model: 'gpt-5.6-luna' });
+  });
+
+  it('通过 shared normalization 计算 xai/pi 的 Grok 4.5', () => {
+    const result = calculateIngestBreakdownCost({
+      provider: 'xai',
+      product: 'pi',
+      channel: 'cli',
+      model: 'grok-4.5',
+      project: '/tmp/project',
+      eventCount: 1,
+      inputTokens: 1_000_000,
+      cachedInputTokens: 0,
+      cacheWriteTokens: 0,
+      outputTokens: 1_000_000,
+      reasoningOutputTokens: 0,
+    });
+
+    expect(result.estimatedCostUsd).toBe(16);
+    expect(result.costStatus).toBe('estimated');
+  });
+
   it('忽略旧 scanner 用作缺省值的零成本', () => {
     const result = calculateIngestBreakdownCost({
       provider: 'openai',

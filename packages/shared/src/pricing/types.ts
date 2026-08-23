@@ -87,6 +87,8 @@ export interface CostCalcResult {
   estimatedCostUsd: number;
   costStatus: CostStatus;
   pricingVersion: string;
+  /** 原始 identity 与 catalog lookup identity，便于审计归一化结果。 */
+  pricingIdentity?: import('./identity.js').PricingIdentity;
   /** 实际命中的模型 key（经过 alias / prefix fallback 后） */
   resolvedModel?: string;
   /** 阶梯模型命中的档位索引 */

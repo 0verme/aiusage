@@ -1,5 +1,5 @@
 {
-  "version": "2026-08-12-claude-5-deepseek-ccswitch-v1",
+  "version": "2026-08-23-pricing-truth-v1",
   "fx": {
     "CNY": 7.2
   },
@@ -1412,10 +1412,38 @@
           "grok-4.5": {
             "currency": "USD",
             "force_estimated": true,
-            "input_per_million": 2,
-            "output_per_million": 6,
-            "cached_input_per_million": 0.5,
-            "notes": "Chat API list price; primary Grok Build model"
+            "notes": "Chat API list price; primary Grok Build model; 200K long-context threshold",
+            "tiers": [
+              {
+                "threshold": 200000,
+                "input_per_million": 2,
+                "output_per_million": 6,
+                "cached_input_per_million": 0.3
+              },
+              {
+                "input_per_million": 4,
+                "output_per_million": 12,
+                "cached_input_per_million": 0.6
+              }
+            ]
+          },
+          "grok-4.6": {
+            "currency": "USD",
+            "force_estimated": true,
+            "notes": "Official xAI API list price; 200K long-context threshold",
+            "tiers": [
+              {
+                "threshold": 200000,
+                "input_per_million": 2,
+                "output_per_million": 6,
+                "cached_input_per_million": 0.5
+              },
+              {
+                "input_per_million": 4,
+                "output_per_million": 12,
+                "cached_input_per_million": 1
+              }
+            ]
           },
           "grok-4.3": {
             "currency": "USD",

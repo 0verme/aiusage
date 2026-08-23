@@ -11,7 +11,7 @@ import { sourcegraph } from './data/sourcegraph.js';
 import { inflection, cursor, droid, opencode } from './data/placeholders.js';
 import { xai } from './data/xai.js';
 
-export const PRICING_VERSION = '2026-08-12-claude-5-deepseek-ccswitch-v1';
+export const PRICING_VERSION = '2026-08-23-pricing-truth-v1';
 
 /**
  * 模型别名（精确匹配优先于前缀回退）。

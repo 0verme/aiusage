@@ -1,17 +1,16 @@
 import { mkdir, readFile, writeFile } from 'node:fs/promises';
 import { homedir } from 'node:os';
 import { join } from 'node:path';
-import { catalog as bundledCatalog, type PricingCatalog } from '@aiusage/shared';
+import {
+  catalog as bundledCatalog,
+  isPricingVersionOlder,
+  type PricingCatalog,
+} from '@aiusage/shared';
 import type { AIUsageConfig, SyncTarget } from './config.js';
 
 const CACHE_DIR = join(homedir(), '.aiusage');
 const CACHE_PATH = join(CACHE_DIR, 'pricing-cache.json');
-const DEFAULT_CACHE_TTL_HOURS = 24;
 const FETCH_TIMEOUT_MS = 5000;
-const NPM_CDN_URLS = [
-  'https://cdn.jsdelivr.net/npm/@aiusage/pricing@latest/catalog.json',
-  'https://unpkg.com/@aiusage/pricing@latest/catalog.json',
-];
 
 export type PricingSource = 'remote' | 'cache' | 'bundled';
 
@@ -20,6 +19,7 @@ export interface PricingInfo {
   version: string;
   url?: string;
   fetchedAt?: string;
+  warnings?: string[];
 }
 
 export interface ResolvedPricingCatalog {
@@ -43,28 +43,44 @@ export async function resolvePricingCatalog(
 ): Promise<ResolvedPricingCatalog> {
   const mode = config.pricing?.mode ?? 'auto';
   const cache = await readPricingCache();
-  const ttlHours = config.pricing?.cacheTtlHours ?? DEFAULT_CACHE_TTL_HOURS;
 
-  if (!options.forceRefresh && cache && (
-    mode === 'manual' || mode === 'offline' || isCacheFresh(cache, ttlHours)
-  )) {
-    return fromCache(cache);
-  }
-
-  if ((mode !== 'offline' || options.forceRefresh) && (mode === 'auto' || options.forceRefresh)) {
+  // A target Worker is the authority. Never let a fresh cache silently mask it;
+  // cache is only a fallback after the network path has failed.
+  if (mode !== 'offline' || options.forceRefresh) {
     for (const url of getPricingUrls(config, options)) {
       try {
         const catalog = await fetchPricingCatalog(url);
         const fetchedAt = new Date().toISOString();
         await writePricingCache({ fetchedAt, sourceUrl: url, catalog });
-        return { catalog, info: { source: 'remote', version: catalog.version, url, fetchedAt } };
+        const warnings = isPricingVersionOlder(catalog.version, bundledCatalog.version)
+          ? [`Remote pricing ${catalog.version} is older than bundled ${bundledCatalog.version}.`]
+          : [];
+        return {
+          catalog,
+          info: withWarnings({ source: 'remote', version: catalog.version, url, fetchedAt }, warnings),
+        };
       } catch {
         // Pricing refresh is best-effort; reporting must remain available offline.
       }
     }
   }
 
-  if (cache) return fromCache(cache);
+  if (cache) {
+    if (isPricingVersionOlder(cache.catalog.version, bundledCatalog.version)) {
+      return {
+        catalog: bundledCatalog,
+        info: withWarnings(
+          { source: 'bundled', version: bundledCatalog.version },
+          [`Ignored stale pricing cache ${cache.catalog.version}; bundled catalog ${bundledCatalog.version} is newer.`],
+        ),
+      };
+    }
+    const warnings = mode === 'offline'
+      ? ['Offline mode selected; using the cached catalog without a network refresh.']
+      : ['Pricing network refresh failed; using cached catalog.'];
+    return { catalog: cache.catalog, info: fromCacheInfo(cache, warnings) };
+  }
+
   return { catalog: bundledCatalog, info: { source: 'bundled', version: bundledCatalog.version } };
 }
 
@@ -87,30 +103,28 @@ function getPricingUrls(
   config: AIUsageConfig,
   options: { explicitUrl?: string; target?: SyncTarget },
 ): string[] {
+  const targetUrl = options.target?.apiBaseUrl
+    ? `${options.target.apiBaseUrl}/api/v1/public/pricing`
+    : undefined;
   const urls = [
+    targetUrl,
     options.explicitUrl,
     config.pricing?.url,
-    options.target?.apiBaseUrl ? `${options.target.apiBaseUrl}/api/v1/public/pricing` : undefined,
-    ...NPM_CDN_URLS,
   ].filter((url): url is string => Boolean(url));
   return [...new Set(urls.map(url => url.trim()).filter(Boolean))];
 }
 
-function isCacheFresh(cache: PricingCacheFile, ttlHours: number): boolean {
-  const fetched = new Date(cache.fetchedAt).getTime();
-  return Number.isFinite(fetched) && Date.now() - fetched < ttlHours * 60 * 60 * 1000;
+function fromCacheInfo(cache: PricingCacheFile, warnings: string[] = []): PricingInfo {
+  return withWarnings({
+    source: 'cache',
+    version: cache.catalog.version,
+    url: cache.sourceUrl,
+    fetchedAt: cache.fetchedAt,
+  }, warnings);
 }
 
-function fromCache(cache: PricingCacheFile): ResolvedPricingCatalog {
-  return {
-    catalog: cache.catalog,
-    info: {
-      source: 'cache',
-      version: cache.catalog.version,
-      url: cache.sourceUrl,
-      fetchedAt: cache.fetchedAt,
-    },
-  };
+function withWarnings<T extends PricingInfo>(info: T, warnings: string[]): T {
+  return warnings.length > 0 ? { ...info, warnings } : info;
 }
 
 async function readPricingCache(): Promise<PricingCacheFile | null> {

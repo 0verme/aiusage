@@ -14,7 +14,7 @@ import { scanPiDates } from './scanners/pi.js';
 import { scanGrokBuildDates } from './scanners/grok-build.js';
 import { scanTraeDates } from './scanners/trae.js';
 
-import type { IngestBreakdown } from '@aiusage/shared';
+import type { IngestBreakdown, PricingCatalog } from '@aiusage/shared';
 
 export interface ScanResult {
   usageDate: string;
@@ -32,6 +32,8 @@ export interface ScanResult {
 export interface ScanOptions {
   projectAliases?: Record<string, string>;
   opencodeDbPaths?: readonly string[];
+  /** Pricing catalog used by scanners that can emit event-level exact costs. */
+  pricingCatalog?: PricingCatalog;
   /** Product ids selected by the user-facing --tool filter. */
   tools?: readonly string[];
 }
@@ -104,7 +106,10 @@ export async function scanDates(targetDates: string[], options: ScanOptions = {}
   const scannerDefinitions: Array<{ products: string[]; scan: () => Promise<Map<string, IngestBreakdown[]>> }> = [
     { products: ['antigravity'], scan: () => scanAntigravityDates(uniqueDates) },
     { products: ['claude-code'], scan: () => scanClaudeDates(uniqueDates, undefined, options.projectAliases) },
-    { products: ['codex'], scan: () => scanCodexDates(uniqueDates, undefined, options.projectAliases) },
+    {
+      products: ['codex'],
+      scan: () => scanCodexDates(uniqueDates, undefined, options.projectAliases, options.pricingCatalog),
+    },
     { products: ['copilot-cli'], scan: () => scanCopilotDates(uniqueDates, undefined, options.projectAliases) },
     { products: ['copilot-vscode'], scan: () => scanCopilotVscodeDates(uniqueDates, undefined, options.projectAliases) },
     { products: ['cursor'], scan: () => scanCursorDates(uniqueDates) },

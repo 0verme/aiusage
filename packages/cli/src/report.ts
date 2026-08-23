@@ -12,6 +12,7 @@ import {
   resolveTraeNativeCacheDir,
 } from './scanners/trae.js';
 import { discoverOpenCodeUsageDates } from './scanners/opencode.js';
+import { resolvePiSessionDirs } from './scanners/pi.js';
 import { getClaudeProjectDirs } from './scanners/claude-paths.js';
 import type { PricingInfo } from './pricing.js';
 
@@ -83,7 +84,7 @@ export async function buildLocalReport(
   const totals = createEmptyTotals();
   const bySource = new Map<string, Totals>();
   const byModel = new Map<string, Totals>();
-  const pricingWarnings = new Set<string>();
+  const pricingWarnings = new Set<string>(options.pricingInfo?.warnings ?? []);
   let daysWithData = 0;
 
   const results = await scanDates(requestedDates, {
@@ -211,8 +212,9 @@ async function discoverAllDates(tools?: readonly string[], opencodeDbPaths?: rea
   if (includes('droid')) discoveries.push(discoverGenericJsonDates(join(home, '.factory', 'sessions'), dates));
   if (includes('opencode')) discoveries.push(discoverOpenCodeUsageDates({ dbPaths: opencodeDbPaths }).then(found => { found.forEach(date => dates.add(date)); }));
   if (includes('pi')) {
-    discoveries.push(discoverGenericJsonlDates(join(home, '.pi', 'agent', 'sessions'), dates));
-    discoveries.push(discoverGenericJsonlDates(join(home, '.omp', 'agent', 'sessions'), dates));
+    for (const sessionDir of resolvePiSessionDirs()) {
+      discoveries.push(discoverGenericJsonlDates(sessionDir, dates));
+    }
   }
   if (includes('grok-build')) discoveries.push(discoverGenericJsonlDates(join(process.env.GROK_HOME?.trim() ?? join(home, '.grok'), 'sessions'), dates));
   if (includes('trae-cn', 'trae')) discoveries.push(discoverGenericJsonDates(resolveTraeNativeCacheDir(home), dates));

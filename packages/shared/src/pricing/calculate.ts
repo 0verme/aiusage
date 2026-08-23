@@ -6,6 +6,12 @@ import type {
   CostCalcInput,
   CostCalcResult,
 } from './types.js';
+import {
+  normalizePricingIdentity,
+  normalizePricingModel,
+  splitPricingServiceTier,
+  type PricingServiceTier,
+} from './identity.js';
 import { catalog as defaultCatalog } from './catalog.js';
 
 /**
@@ -19,8 +25,6 @@ const ANTHROPIC_FAST_MULTIPLIERS: Record<string, number> = {
   'claude-opus-4-7': 6,
 };
 
-type ServiceTierSuffix = 'fast' | 'priority' | null;
-
 const OPENAI_CODEX_TIER_MULTIPLIERS: Record<string, number> = {
   'gpt-5.6-sol': 2,
   'gpt-5.6-terra': 2,
@@ -29,21 +33,11 @@ const OPENAI_CODEX_TIER_MULTIPLIERS: Record<string, number> = {
   'gpt-5.4': 2,
 };
 
-function splitServiceTierSuffix(model: string): { baseModel: string; tier: ServiceTierSuffix } {
-  if (model.endsWith('-priority')) {
-    return { baseModel: model.replace(/-priority$/, ''), tier: 'priority' };
-  }
-  if (model.endsWith('-fast')) {
-    return { baseModel: model.replace(/-fast$/, ''), tier: 'fast' };
-  }
-  return { baseModel: model, tier: null };
-}
-
 function getServiceTierMultiplier(
   provider: string,
   product: string,
   resolvedModel: string,
-  tier: ServiceTierSuffix,
+  tier: PricingServiceTier,
 ): number {
   if (!tier) return 1;
 
@@ -68,19 +62,12 @@ function getServiceTierMultiplier(
  * 这样可确保未来出现 `claude-opus-4-8` 等新版本被显式登记前，会返回 unavailable
  * 而不是默默按旧版本计算（旧版本可能贵 3 倍）。
  */
-/** 剥离 Claude Code 上下文窗口标记（如 deepseek-v4-flash[1M] → deepseek-v4-flash）。 */
-function stripContextWindowSuffix(model: string): string {
-  return model.replace(/\[\d+[a-zA-Z]*\]$/, '');
-}
-
 function resolveModelInProduct(
   catalog: PricingCatalog,
   models: Record<string, ModelPricing>,
   model: string,
 ): { resolvedModel: string; pricing: ModelPricing; normalized: boolean } | null {
-  // 带上下文窗口后缀的模型名（deepseek-v4-flash[1M]）统一剥离后再匹配，
-  // 否则 exact/前缀回退都命中不了，会被计为 unavailable（0 元）。
-  const normalizedModel = stripContextWindowSuffix(model);
+  const normalizedModel = normalizePricingModel(model, catalog).model;
   const aliasResolved = catalog.aliases[normalizedModel];
   if (aliasResolved && models[aliasResolved]) {
     // Alias 是 catalog 显式声明的等价名（如 claude-opus-4-7-20260201 → claude-opus-4-7），
@@ -143,13 +130,13 @@ export function resolveProviderForModel(
     return fallbackProvider;
   }
 
-  const { baseModel } = splitServiceTierSuffix(model);
+  const { model: normalizedModel } = normalizePricingModel(model, catalog);
   const providers = Object.entries(catalog.providers)
     // These entries mirror a canonical provider for gateway/client records;
     // they must not make model ownership ambiguous during inference.
     .filter(([provider]) => provider !== 'custom' && provider !== 'opencode-go')
     .filter(([, products]) => Object.values(products).some(
-      product => resolveModelInProduct(catalog, product.models, baseModel) !== null,
+      product => resolveModelInProduct(catalog, product.models, normalizedModel) !== null,
     ))
     .map(([provider]) => provider);
 
@@ -194,6 +181,11 @@ export function calculateCost(
   options: CalculateCostOptions = {},
 ): CostCalcResult {
   const cat = options.catalog ?? defaultCatalog;
+  const pricingIdentity = normalizePricingIdentity({ provider, product, model }, cat);
+  const { baseModel } = splitPricingServiceTier(pricingIdentity.canonical.model);
+  const serviceTier = pricingIdentity.canonical.serviceTier;
+  const pricingProvider = pricingIdentity.canonical.provider;
+  const pricingProduct = pricingIdentity.canonical.product;
 
   const reasoningTokens = tokens.reasoningOutputTokens ?? 0;
   const totalTokens =
@@ -204,20 +196,24 @@ export function calculateCost(
     reasoningTokens;
 
   if (totalTokens === 0) {
-    const resolved = resolveModelPricing(cat, provider, product, model);
+    const resolved = resolveModelPricing(cat, pricingProvider, pricingProduct, baseModel);
     return {
       estimatedCostUsd: 0,
       costStatus: resolved?.pricing.force_estimated ? 'estimated' : 'exact',
       pricingVersion: cat.version,
+      pricingIdentity,
       resolvedModel: resolved?.resolvedModel,
     };
   }
 
-  const { baseModel, tier } = splitServiceTierSuffix(model);
-
-  const resolved = resolveModelPricing(cat, provider, product, baseModel);
+  const resolved = resolveModelPricing(cat, pricingProvider, pricingProduct, baseModel);
   if (!resolved) {
-    return { estimatedCostUsd: 0, costStatus: 'unavailable', pricingVersion: cat.version };
+    return {
+      estimatedCostUsd: 0,
+      costStatus: 'unavailable',
+      pricingVersion: cat.version,
+      pricingIdentity,
+    };
   }
 
   const { resolvedModel, pricing, normalized } = resolved;
@@ -270,12 +266,13 @@ export function calculateCost(
   // 折算 currency → USD
   raw = toUsd(raw, pricing.currency, cat);
 
-  const finalCost = raw * getServiceTierMultiplier(provider, product, resolvedModel, tier);
+  const finalCost = raw * getServiceTierMultiplier(pricingProvider, pricingProduct, resolvedModel, serviceTier);
 
   return {
     estimatedCostUsd: Math.round(finalCost * 10000) / 10000,
     costStatus,
     pricingVersion: cat.version,
+    pricingIdentity,
     resolvedModel,
     matchedTierIndex,
   };

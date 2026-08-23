@@ -1,4 +1,3 @@
-import { existsSync } from 'node:fs';
 import { createInterface } from 'node:readline';
 import { hostname } from 'node:os';
 import { parseToolSelection, scanDate, scanDates } from './scan.js';
@@ -20,7 +19,7 @@ import {
   writeConfig,
 } from './config.js';
 import { defaultLookbackDays, enrollDevice, fetchHealth, uploadDailyUsage } from './api.js';
-import { disableSchedule, enableSchedule, formatInterval, getScheduleStatus, parseInterval } from './schedule.js';
+import { disableSchedule, enableSchedule, getScheduleStatus, parseInterval } from './schedule.js';
 import { runDoctor } from './doctor.js';
 import { getVersion } from './version.js';
 import { discoverProjects } from './project.js';
@@ -332,7 +331,7 @@ async function runEnroll(flags: Record<string, string | boolean>) {
     lastSuccessfulUploadAt: undefined,
   };
 
-  let next = upsertTarget(config, target);
+  const next = upsertTarget(config, target);
   next.deviceId = deviceId;
   next.deviceAlias = deviceAlias;
   next.lookbackDays = config.lookbackDays ?? 7;
@@ -379,6 +378,7 @@ async function runSync(flags: Record<string, string | boolean>, positionals: str
   const targets = targetName
     ? [findTargetOrThrow(config, targetName)]
     : allTargets;
+  const pricing = await resolvePricingCatalog(config, { target: targets[0] });
 
   // ── 日期解析 ──
   const { dates: targetDates } = resolveDateParams(flags, config);
@@ -387,12 +387,15 @@ async function runSync(flags: Record<string, string | boolean>, positionals: str
   }
 
   // 扫描一次，所有 target 共享结果
+  console.log(`定价: ${pricing.info.source} ${pricing.info.version}${pricing.info.fetchedAt ? ` (${pricing.info.fetchedAt})` : ''}`);
+  for (const warning of pricing.info.warnings ?? []) console.warn(`警告: ${warning}`);
   console.log(`扫描 ${targetDates.length} 天 (${targetDates[0]} ~ ${targetDates[targetDates.length - 1]}) ...`);
 
   const [results, activityReport] = await Promise.all([
     scanDates(targetDates, {
       projectAliases: config.projectAliases,
       opencodeDbPaths: config.scanner?.opencodeDbPaths,
+      pricingCatalog: pricing.catalog,
     }),
     buildActivityReport('all', { dates: targetDates, projectAliases: config.projectAliases }),
   ]);
@@ -455,6 +458,7 @@ async function runSync(flags: Record<string, string | boolean>, positionals: str
   await writeConfig(config);
 
   console.log(JSON.stringify({
+    pricing: pricing.info,
     targets: uploadResults.map(r => r.target),
     uploadedDays: allDays.map(day => day.usageDate),
     results: uploadResults,
@@ -1165,12 +1169,6 @@ function deriveTargetName(url: string): string {
   } catch {
     return 'default';
   }
-}
-
-function resolveServer(flagValue: string | boolean | undefined, configValue?: string): string {
-  const value = resolveOptionalString(flagValue, configValue);
-  if (!value) throw new Error('缺少服务端地址，请传 --server 或先执行 init');
-  return normalizeServerUrl(value);
 }
 
 function resolveRequiredString(

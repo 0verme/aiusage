@@ -7,6 +7,7 @@ interface Strings {
   tokens: string;
   cost: string;
   pricing: string;
+  pricingFetchedAt: string;
   sources: string;
   daily: string;
   topModels: string;
@@ -38,6 +39,7 @@ const en: Strings = {
   tokens: 'Tokens',
   cost: 'Cost',
   pricing: 'Pricing',
+  pricingFetchedAt: 'Fetched at',
   sources: 'Sources',
   daily: 'Daily',
   topModels: 'Top Models',
@@ -69,6 +71,7 @@ const zh: Strings = {
   tokens: '令牌',
   cost: '费用',
   pricing: '定价',
+  pricingFetchedAt: '获取时间',
   sources: '来源',
   daily: '每日',
   topModels: '模型排行',

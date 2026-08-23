@@ -1,5 +1,10 @@
 import { describe, it, expect } from 'vitest';
-import { calculateCost, catalog, resolveProviderForModel } from '../pricing/index.js';
+import {
+  calculateCost,
+  catalog,
+  normalizePricingIdentity,
+  resolveProviderForModel,
+} from '../pricing/index.js';
 
 // ─── 结构完整性 ───
 
@@ -32,6 +37,38 @@ describe('catalog 结构', () => {
 });
 
 // ─── 关键模型定价能解析 ───
+
+describe('pricing identity normalization', () => {
+  it.each([
+    ['openai-codex', 'pi', 'gpt-5.6-luna', 'openai', 'codex', 'gpt-5.6-luna'],
+    ['openai-codex', 'pi', 'gpt-5.6-sol', 'openai', 'codex', 'gpt-5.6-sol'],
+    ['xai', 'pi', 'grok-4.5', 'xai', 'grok-build', 'grok-4.5'],
+    ['xai', 'grok-build', 'grok-4.5', 'xai', 'grok-build', 'grok-4.5'],
+    ['opencode-go', 'pi', 'deepseek-v4-flash', 'opencode-go', 'deepseek-chat', 'deepseek-v4-flash'],
+    ['custom', 'claude-code', 'deepseek-v4-flash[1M]', 'custom', 'deepseek-chat', 'deepseek-v4-flash'],
+    ['openai', 'codex', 'gpt-5.5-priority', 'openai', 'codex', 'gpt-5.5'],
+    ['anthropic', 'claude-code', 'claude-sonnet-4.6', 'anthropic', 'claude-code', 'claude-sonnet-4-6'],
+  ])('%s/%s/%s -> %s/%s/%s', (provider, product, model, canonicalProvider, canonicalProduct, canonicalModel) => {
+    const result = normalizePricingIdentity({ provider, product, model });
+    expect(result.raw).toEqual({ provider, product, model });
+    expect(result.canonical).toMatchObject({
+      provider: canonicalProvider,
+      product: canonicalProduct,
+      model: canonicalModel,
+    });
+  });
+
+  it('does not map unknown OpenCode Go subscription models to vendor API pricing', () => {
+    const result = normalizePricingIdentity({ provider: 'opencode-go', product: 'pi', model: 'gpt-5.6-luna' });
+    expect(result.canonical).toMatchObject({ provider: 'opencode-go', product: 'pi', model: 'gpt-5.6-luna' });
+    expect(calculateCost('opencode-go', 'pi', 'gpt-5.6-luna', {
+      inputTokens: 1_000_000,
+      cachedInputTokens: 0,
+      cacheWriteTokens: 0,
+      outputTokens: 1_000_000,
+    }).costStatus).toBe('unavailable');
+  });
+});
 
 describe('calculateCost — 关键模型', () => {
   const tokens = {
@@ -73,7 +110,14 @@ describe('calculateCost — 关键模型', () => {
   it('calculates Grok Build with estimated status', () => {
     const r = calculateCost('xai', 'grok-build', 'grok-4.5-latest', tokens);
     expect(r.resolvedModel).toBe('grok-4.5');
-    expect(r.estimatedCostUsd).toBeCloseTo(8, 4);
+    expect(r.estimatedCostUsd).toBeCloseTo(16, 4);
+    expect(r.costStatus).toBe('estimated');
+  });
+
+  it('calculates Grok 4.6 with the official long-context rates', () => {
+    const r = calculateCost('xai', 'pi', 'grok-4.6', tokens);
+    expect(r.pricingIdentity?.canonical).toMatchObject({ provider: 'xai', product: 'grok-build', model: 'grok-4.6' });
+    expect(r.estimatedCostUsd).toBeCloseTo(16, 4);
     expect(r.costStatus).toBe('estimated');
   });
 
@@ -89,8 +133,8 @@ describe('calculateCost — 关键模型', () => {
       cacheWriteTokens: 0,
       outputTokens: 0,
     });
-    // 0.5M * $2 + 0.5M * $0.5 = $1 + $0.25 = $1.25
-    expect(r.estimatedCostUsd).toBeCloseTo(1.25, 4);
+    // 1M total input uses the long-context tier: 0.5M * $4 + 0.5M * $0.6 = $2.3
+    expect(r.estimatedCostUsd).toBeCloseTo(2.3, 4);
     expect(r.costStatus).toBe('estimated');
   });
 
@@ -144,6 +188,36 @@ describe('calculateCost — 关键模型', () => {
   it('纯日期后缀视为独立版本，未登记则 unavailable（不再静默回退）', () => {
     const r = calculateCost('anthropic', 'claude-code', 'claude-sonnet-4-6-20260101', tokens);
     expect(r.costStatus).toBe('unavailable');
+  });
+});
+
+describe('production-realistic pricing coverage', () => {
+  const tokens = {
+    inputTokens: 1_000_000,
+    cachedInputTokens: 0,
+    cacheWriteTokens: 0,
+    outputTokens: 1_000_000,
+    reasoningOutputTokens: 0,
+  };
+
+  it.each([
+    ['openai-codex', 'pi', 'gpt-5.6-luna', 'exact', 11],
+    ['openai-codex', 'pi', 'gpt-5.6-sol', 'exact', 55],
+    ['openai', 'codex', 'gpt-5.6-terra', 'exact', 27.5],
+    ['openai', 'codex', 'gpt-5.5', 'exact', 55],
+    ['openai', 'codex', 'gpt-5.4', 'exact', 27.5],
+    ['xai', 'pi', 'grok-4.5', 'estimated', 16],
+    ['xai', 'grok-build', 'grok-4.6', 'estimated', 16],
+    ['deepseek', 'claude-code', 'deepseek-v4-flash', 'exact', 0.42],
+    ['deepseek', 'claude-code', 'deepseek-v4-pro', 'exact', 1.305],
+    ['custom', 'claude-code', 'deepseek-v4-flash', 'exact', 0.42],
+    ['anthropic', 'claude-code', 'claude-opus-4-8', 'exact', 30],
+    ['anthropic', 'claude-code', 'claude-sonnet-4-6', 'exact', 18],
+    ['zhipu', 'glm-chat', 'glm-4.7-flash', 'exact', 0],
+  ])('%s/%s/%s has an intentional pricing result', (provider, product, model, status, expected) => {
+    const result = calculateCost(provider, product, model, tokens);
+    expect(result.costStatus).toBe(status);
+    expect(result.estimatedCostUsd).toBeCloseTo(expected, 4);
   });
 });
 
