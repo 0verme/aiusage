@@ -57,7 +57,7 @@ export async function scanPiDates(
   projectAliases?: Record<string, string>,
 ): Promise<Map<string, IngestBreakdown[]>> {
   const dates = new Set(targetDates);
-  const sessionDirs = baseDir ? [baseDir] : getSessionDirs();
+  const sessionDirs = resolvePiSessionDirs(baseDir);
   const files = [...new Set((await Promise.all(sessionDirs.map(dir => walkFiles(dir, '.jsonl')))).flat())];
   if (files.length === 0) return emptyResult(dates);
 
@@ -154,12 +154,14 @@ export async function scanPiDates(
   return finalize(grouped);
 }
 
-function getSessionDirs(): string[] {
-  const envDir = process.env.PI_CODING_AGENT_DIR;
+export function resolvePiSessionDirs(baseDir?: string): string[] {
+  if (baseDir) return [baseDir];
+
+  const envDir = process.env.PI_CODING_AGENT_DIR?.trim();
   const piDir = envDir
     ? join(envDir, 'sessions')
     : join(homedir(), '.pi', 'agent', 'sessions');
-  return [piDir, join(homedir(), '.omp', 'agent', 'sessions')];
+  return [...new Set([piDir, join(homedir(), '.omp', 'agent', 'sessions')])];
 }
 
 function extractProjectFromEncoded(encoded: string): string {

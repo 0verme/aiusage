@@ -21,6 +21,7 @@ beforeEach(async () => {
   vi.stubEnv('CLAUDE_CONFIG_DIR', '');
   vi.stubEnv('CODEX_HOME', '');
   vi.stubEnv('CODEX_CONFIG_DIR', '');
+  vi.stubEnv('PI_CODING_AGENT_DIR', '');
   await mkdir(homeDir, { recursive: true });
 });
 
@@ -55,6 +56,34 @@ describe('buildLocalReport', () => {
 
     expect(report.daily.map(day => day.usageDate)).toEqual(['2026-07-09', '2026-07-21']);
     expect(report.totals.eventCount).toBe(2);
+  });
+
+  it('discovers custom Pi and Oh My Pi session roots for all-history reports', async () => {
+    const customPiRoot = join(homeDir, 'custom-pi');
+    const customSessions = join(customPiRoot, 'sessions', 'encoded-custom');
+    const ompSessions = join(homeDir, '.omp', 'agent', 'sessions', 'encoded-omp');
+    vi.stubEnv('PI_CODING_AGENT_DIR', customPiRoot);
+    await mkdir(customSessions, { recursive: true });
+    await mkdir(ompSessions, { recursive: true });
+
+    const usage = (id: string, timestamp: string, cwd: string) => [
+      JSON.stringify({ type: 'session', id: `${id}-session`, cwd }),
+      JSON.stringify({
+        type: 'message',
+        id,
+        timestamp,
+        message: { role: 'assistant', model: 'gpt-5.6-luna', provider: 'openai-codex', usage: { input: 100, output: 20 } },
+      }),
+    ].join('\n');
+    await writeFile(join(customSessions, 'custom.jsonl'), usage('custom', '2026-07-21T12:00:00Z', '/work/custom'));
+    await writeFile(join(ompSessions, 'omp.jsonl'), usage('omp', '2026-07-22T12:00:00Z', '/work/omp'));
+
+    const { buildLocalReport } = await import('../report.js');
+    const report = await buildLocalReport('all', { tools: ['pi'] });
+
+    expect(report.daily.map(day => day.usageDate)).toEqual(['2026-07-21', '2026-07-22']);
+    expect(report.totals.eventCount).toBe(2);
+    expect(report.totals.totalTokens).toBe(240);
   });
 
   it('discovers Gemini logs, Copilot VS Code workspace sessions, and Antigravity metadata in all-history reports', async () => {

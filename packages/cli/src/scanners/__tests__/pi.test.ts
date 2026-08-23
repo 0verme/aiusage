@@ -1,8 +1,8 @@
-import { afterEach, beforeEach, describe, expect, it } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { mkdir, rm, writeFile } from 'node:fs/promises';
 import { dirname, join } from 'node:path';
-import { tmpdir } from 'node:os';
-import { scanPiDates } from '../pi.js';
+import { homedir, tmpdir } from 'node:os';
+import { resolvePiSessionDirs, scanPiDates } from '../pi.js';
 
 let tmpDir: string;
 
@@ -12,6 +12,7 @@ beforeEach(async () => {
 });
 
 afterEach(async () => {
+  vi.unstubAllEnvs();
   await rm(tmpDir, { recursive: true, force: true });
 });
 
@@ -19,6 +20,17 @@ async function writeJsonl(path: string, rows: unknown[]): Promise<void> {
   await mkdir(dirname(path), { recursive: true });
   await writeFile(path, rows.map(row => JSON.stringify(row)).join('\n'));
 }
+
+describe('Pi session directory resolver', () => {
+  it('uses PI_CODING_AGENT_DIR and still includes Oh My Pi sessions', () => {
+    const customRoot = join(tmpDir, 'custom-pi-root');
+    vi.stubEnv('PI_CODING_AGENT_DIR', customRoot);
+    expect(resolvePiSessionDirs()).toEqual([
+      join(customRoot, 'sessions'),
+      join(homedir(), '.omp', 'agent', 'sessions'),
+    ]);
+  });
+});
 
 describe('scanPiDates', () => {
   it('兼容 title 前置记录，保留 cache write，并优先使用消息 provider', async () => {
