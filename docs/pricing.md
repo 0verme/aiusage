@@ -112,6 +112,20 @@ tiers: [
 
 未来若有需要，可在 `ModelPricing` 加 `is_shadow_price: true`，让 calculateCost 自动把 `costStatus` 标为 `estimated`。
 
+## 历史费用重算
+
+历史 D1 重算由受保护的 maintenance script 执行，不暴露公开 API：
+
+```bash
+pnpm --filter @aiusage/worker run db:recalculate -- --remote
+pnpm --filter @aiusage/worker run db:recalculate -- --remote --from 2026-01-01 --to 2026-01-31
+pnpm --filter @aiusage/worker run db:recalculate -- --remote --apply --yes
+```
+
+脚本默认 dry-run；`--apply --yes` 会先导出 `daily_usage` 与
+`daily_usage_breakdown` rollback artifact，再按日期批次、事务、幂等地更新费用字段，最后验证
+`event_count`、`session_count` 与所有 token facts 未变化。输出不包含项目名称，只汇总模型、费用与 unavailable 状态。
+
 ## 测试
 
 - `pnpm --filter @aiusage/shared test` — 校验关键模型可解析、阶梯命中、币种折算
