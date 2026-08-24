@@ -138,6 +138,8 @@ function SegmentedControl({
   );
 }
 
+type InteractionListTone = 'tool' | 'skill' | 'subagent';
+
 function InteractionMetricTile({
   label,
   value,
@@ -148,13 +150,13 @@ function InteractionMetricTile({
   suffix?: string;
 }) {
   return (
-    <div className="min-w-0 border-b border-slate-100 pb-3 last:border-b-0 dark:border-white/[0.08] sm:border-b-0 sm:pb-0">
-      <div className="text-[11px] font-medium uppercase tracking-[0.06em] text-slate-400 dark:text-slate-500">
+    <div className="min-w-0 border-b border-[var(--border)] pb-4 last:border-b-0 sm:border-b-0 sm:pb-0">
+      <div className="text-[11px] font-medium uppercase tracking-[0.06em] text-[var(--fg2)]">
         {label}
       </div>
-      <div className="mt-1.5 text-[20px] font-semibold leading-none tracking-tight text-slate-900 dark:text-slate-300">
+      <div className="mt-2 whitespace-nowrap font-mono text-[24px] font-bold leading-none tracking-tight tabular-nums text-[var(--fg)] sm:text-[27px]">
         {value}
-        {suffix && <span className="text-slate-300 dark:text-slate-600">{suffix}</span>}
+        {suffix && <span className="text-[14px] font-medium tracking-normal text-[var(--fg3)]">{suffix}</span>}
       </div>
     </div>
   );
@@ -165,18 +167,20 @@ function InteractionTopList({
   items,
   locale,
   proxyLabel,
+  tone,
 }: {
   title: string;
   items: InteractionMetricItem[];
   locale: Locale;
   proxyLabel: string;
+  tone: InteractionListTone;
 }) {
   if (!items.length) return null;
   const max = Math.max(...items.map((item) => item.eventCount), 1);
   return (
-    <div className="min-w-0">
-      <h3 className="mb-3 text-[13px] font-semibold text-slate-900 dark:text-slate-300">{title}</h3>
-      <div className="grid gap-2.5">
+    <div className={`min-w-0 interaction-tone-${tone}`}>
+      <h3 className="interaction-list-title mb-3 text-[13px] font-semibold text-[var(--fg)]">{title}</h3>
+      <div className="grid gap-3">
         {items.slice(0, 6).map((item) => {
           const proxy = item.proxyCount ?? 0;
           const exact = Math.max(0, item.eventCount - proxy);
@@ -186,14 +190,22 @@ function InteractionTopList({
             ? `${formatCompact(proxy, locale)} ${proxyLabel}`
             : formatCompact(item.eventCount, locale);
           return (
-            <div key={item.value} className="min-w-0">
-              <div className="mb-1 flex items-baseline justify-between gap-3 text-[12px]">
-                <span className="truncate font-medium text-slate-600 dark:text-slate-400">{item.label}</span>
-                <span className="shrink-0 tabular-nums text-slate-400 dark:text-slate-500">{value}</span>
+            <div key={item.value} className="interaction-list-row min-w-0 rounded-lg px-1.5 py-1">
+              <div className="mb-1.5 flex items-baseline justify-between gap-3 text-[12px]">
+                <span className="interaction-list-label truncate font-medium text-[var(--fg2)]">{item.label}</span>
+                <span className="interaction-list-value shrink-0 font-mono text-[12px] font-semibold tabular-nums">{value}</span>
               </div>
-              <div className="h-1.5 overflow-hidden rounded-full bg-slate-100 dark:bg-[#1a1a1a]">
+              <div
+                className="interaction-progress-track h-1 overflow-hidden rounded-full"
+                role="progressbar"
+                aria-label={item.label}
+                aria-valuemin={0}
+                aria-valuemax={max}
+                aria-valuenow={item.eventCount}
+                aria-valuetext={value}
+              >
                 <div
-                  className="h-full rounded-full bg-slate-800 transition-all duration-500 dark:bg-slate-300"
+                  className="interaction-progress-fill h-full rounded-full"
                   style={{ width: `${Math.max(4, (item.eventCount / max) * 100)}%` }}
                 />
               </div>
@@ -220,9 +232,10 @@ function InteractionMetricsSection({
     <div className="card fade-up p-6" style={{ animationDelay }}>
       <SectionHeader
         title={t.interactionMetrics}
-        stat={`${formatCompact(metrics.exactCount, locale)} ${t.exactEvents}`}
+        stat={formatCompact(metrics.exactCount, locale)}
+        statLabel={t.exactEvents}
       />
-      <div className="mt-5 grid gap-4 sm:grid-cols-4">
+      <div className="mt-6 grid gap-x-6 gap-y-5 sm:grid-cols-4">
         <InteractionMetricTile label={t.functionCalls} value={formatCompact(metrics.functionCallCount, locale)} />
         <InteractionMetricTile label={t.toolCalls} value={formatCompact(metrics.toolCallCount, locale)} />
         <InteractionMetricTile
@@ -232,10 +245,10 @@ function InteractionMetricsSection({
         />
         <InteractionMetricTile label={t.subagents} value={formatCompact(metrics.subagentCount, locale)} />
       </div>
-      <div className="mt-6 grid gap-6 lg:grid-cols-3">
-        <InteractionTopList title={t.topTools} items={metrics.topTools} locale={locale} proxyLabel={t.proxy} />
-        <InteractionTopList title={t.topSkills} items={metrics.topSkills} locale={locale} proxyLabel={t.proxy} />
-        <InteractionTopList title={t.topSubagents} items={metrics.topAgents} locale={locale} proxyLabel={t.proxy} />
+      <div className="mt-7 grid gap-7 lg:grid-cols-3 lg:gap-8">
+        <InteractionTopList title={t.topTools} items={metrics.topTools} locale={locale} proxyLabel={t.proxy} tone="tool" />
+        <InteractionTopList title={t.topSkills} items={metrics.topSkills} locale={locale} proxyLabel={t.proxy} tone="skill" />
+        <InteractionTopList title={t.topSubagents} items={metrics.topAgents} locale={locale} proxyLabel={t.proxy} tone="subagent" />
       </div>
     </div>
   );

@@ -181,6 +181,45 @@ body::before {
   flex: 0 0 auto;
 }
 
+/* ── Interaction metrics ── */
+.interaction-tone-tool { --interaction-accent: var(--accent); }
+.interaction-tone-skill { --interaction-accent: var(--violet); }
+.interaction-tone-subagent { --interaction-accent: var(--green); }
+
+.interaction-list-title {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.interaction-list-title::before {
+  content: "";
+  width: 3px;
+  height: 14px;
+  flex: 0 0 auto;
+  border-radius: 999px;
+  background: var(--interaction-accent);
+}
+.interaction-list-row {
+  transition: background-color 0.2s ease;
+}
+.interaction-list-row:hover {
+  background: var(--panel-soft);
+}
+.interaction-list-row:hover .interaction-list-label {
+  color: var(--fg);
+}
+.interaction-list-value {
+  color: var(--interaction-accent);
+}
+.interaction-progress-track {
+  background: var(--track);
+}
+.interaction-progress-fill {
+  background: var(--interaction-accent);
+  box-shadow: 0 0 6px color-mix(in srgb, var(--interaction-accent) 28%, transparent);
+  transition: width 0.5s ease;
+}
+
 /* ── Pill controls ── */
 .pill-group {
   display: inline-flex;
@@ -292,6 +331,9 @@ body.embed-transparent .card {
   .card, .kpi {
     transition: none !important;
     transform: none !important;
+  }
+  .interaction-list-row, .interaction-progress-fill {
+    transition: none !important;
   }
 }
 
