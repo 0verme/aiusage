@@ -103,6 +103,29 @@ describe('OpenCode message parsing and deduplication', () => {
     ]);
   });
 
+  it.each([
+    ['opencode-go', 'deepseek-v4-flash', 'deepseek'],
+    ['opencode', 'claude-sonnet-4-6', 'anthropic'],
+    ['opencode', 'gpt-5.6-sol', 'openai'],
+    ['custom', 'deepseek-v4-flash', 'deepseek'],
+  ])('uses model ownership for %s/%s', (providerID, modelID, expectedProvider) => {
+    const records = parseOpenCodeSqliteRows([{
+      id: `row-${providerID}-${modelID}`,
+      session_id: 'ses-provider',
+      data: JSON.stringify({
+        id: `msg-${providerID}-${modelID}`,
+        role: 'assistant',
+        modelID,
+        providerID,
+        time: { created: Date.parse('2026-07-18T08:15:00Z') },
+        tokens: { input: 10, output: 2 },
+      }),
+    }]);
+
+    expect(records[0]?.provider).toBe(expectedProvider);
+    expect(records[0]?.model).toBe(modelID);
+  });
+
   it('keeps provider-reported cost when a valid assistant message has zero tokens', () => {
     const records = parseOpenCodeSqliteRows([{
       id: 'row-cost-only',

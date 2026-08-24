@@ -1,8 +1,70 @@
-import type { IngestActivityItem, IngestPayload, CostStatus } from '@aiusage/shared';
+import {
+	canonicalizeProvider,
+	type CostStatus,
+	type IngestActivityItem,
+	type IngestBreakdown,
+	type IngestPayload,
+} from '@aiusage/shared';
 import { jsonNoStore, jsonError } from '../utils/response.js';
 import { verifyDeviceToken } from '../utils/token.js';
 import { calculateIngestBreakdownCost, getWorstCostStatus, PRICING_VERSION } from '../utils/pricing.js';
 import type { Env } from '../types.js';
+
+interface PreparedBreakdown {
+	breakdown: IngestBreakdown;
+	cost: ReturnType<typeof calculateIngestBreakdownCost>;
+	cacheWrite5mTokens: number;
+	cacheWrite1hTokens: number;
+	rawProviders: Set<string>;
+}
+
+/** 服务端落库前统一 provider，防御旧版 CLI 上传 alias。 */
+export function canonicalizeIngestBreakdown(breakdown: IngestBreakdown): IngestBreakdown {
+	return {
+		...breakdown,
+		provider: canonicalizeProvider({
+			provider: breakdown.provider,
+			product: breakdown.product,
+			model: breakdown.model,
+		}),
+	};
+}
+
+function normalizeRawProvider(provider?: string | null): string {
+	const value = provider?.trim().toLowerCase() ?? '';
+	return value || 'unknown';
+}
+
+function mergePreparedBreakdown(target: PreparedBreakdown, incoming: PreparedBreakdown): void {
+	const current = target.breakdown;
+	const next = incoming.breakdown;
+	current.eventCount += next.eventCount;
+	current.sessionCount = (current.sessionCount ?? 0) + (next.sessionCount ?? 0);
+	current.inputTokens += next.inputTokens;
+	current.cachedInputTokens += next.cachedInputTokens;
+	current.cacheWriteTokens += next.cacheWriteTokens;
+	current.cacheWrite5mTokens = (current.cacheWrite5mTokens ?? 0) + (next.cacheWrite5mTokens ?? 0);
+	current.cacheWrite1hTokens = (current.cacheWrite1hTokens ?? 0) + (next.cacheWrite1hTokens ?? 0);
+	current.outputTokens += next.outputTokens;
+	current.reasoningOutputTokens += next.reasoningOutputTokens;
+	if (current.costUSD != null || next.costUSD != null) {
+		current.costUSD = (current.costUSD ?? 0) + (next.costUSD ?? 0);
+	}
+
+	target.cacheWrite5mTokens += incoming.cacheWrite5mTokens;
+	target.cacheWrite1hTokens += incoming.cacheWrite1hTokens;
+	target.cost = {
+		...target.cost,
+		estimatedCostUsd: Math.round(
+			(target.cost.estimatedCostUsd + incoming.cost.estimatedCostUsd) * 10000,
+		) / 10000,
+		costStatus: getWorstCostStatus([
+			target.cost.costStatus,
+			incoming.cost.costStatus,
+		]),
+	};
+	for (const provider of incoming.rawProviders) target.rawProviders.add(provider);
+}
 
 export async function handleIngest(request: Request, env: Env): Promise<Response> {
   // 校验 DEVICE_TOKEN
@@ -38,7 +100,7 @@ export async function handleIngest(request: Request, env: Env): Promise<Response
 
   for (const day of body.days) {
     const costStatuses: CostStatus[] = [];
-    const breakdownsWithCost = [];
+    const breakdownsByKey = new Map<string, PreparedBreakdown>();
     let dayTotalCost = 0;
     let dayTotalEvents = 0;
     let dayTotalInput = 0;
@@ -53,6 +115,19 @@ export async function handleIngest(request: Request, env: Env): Promise<Response
       const cacheWrite1hTokens = b.cacheWrite1hTokens ?? 0;
       // 优先采用 scanner 侧按 event 精确累计的 costUSD（GPT-5.6 长上下文档）
       const cost = calculateIngestBreakdownCost(b);
+      const canonicalBreakdown = canonicalizeIngestBreakdown({
+        ...b,
+        model: b.model || 'unknown',
+        project: b.project || 'unknown',
+      });
+      const key = [
+        canonicalBreakdown.provider,
+        canonicalBreakdown.product,
+        canonicalBreakdown.channel,
+        canonicalBreakdown.model,
+        canonicalBreakdown.project,
+      ].join('\0');
+      const existing = breakdownsByKey.get(key);
 
       costStatuses.push(cost.costStatus);
       dayTotalCost += cost.estimatedCostUsd;
@@ -62,7 +137,24 @@ export async function handleIngest(request: Request, env: Env): Promise<Response
       dayTotalCacheWrite += b.cacheWriteTokens;
       dayTotalOutput += b.outputTokens;
       dayTotalReasoning += b.reasoningOutputTokens;
-      breakdownsWithCost.push({ breakdown: b, cost, cacheWrite5mTokens, cacheWrite1hTokens });
+
+      if (existing) {
+        mergePreparedBreakdown(existing, {
+          breakdown: canonicalBreakdown,
+          cost,
+          cacheWrite5mTokens,
+          cacheWrite1hTokens,
+          rawProviders: new Set([normalizeRawProvider(b.provider)]),
+        });
+      } else {
+        breakdownsByKey.set(key, {
+          breakdown: canonicalBreakdown,
+          cost,
+          cacheWrite5mTokens,
+          cacheWrite1hTokens,
+          rawProviders: new Set([normalizeRawProvider(b.provider)]),
+        });
+      }
     }
 
     const dayCostStatus = getWorstCostStatus(costStatuses);
@@ -111,8 +203,16 @@ export async function handleIngest(request: Request, env: Env): Promise<Response
       WHERE device_id = ? AND usage_date = ?
     `).bind(tokenPayload.deviceId, day.usageDate).run();
 
-    for (const { breakdown: b, cost, cacheWrite5mTokens, cacheWrite1hTokens } of breakdownsWithCost) {
+    for (const { breakdown: b, cost, cacheWrite5mTokens, cacheWrite1hTokens, rawProviders } of breakdownsByKey.values()) {
       const rawProject = b.project || 'unknown';
+      const extraMetrics: Record<string, unknown> = {
+        cache_write_5m_tokens: cacheWrite5mTokens,
+        cache_write_1h_tokens: cacheWrite1hTokens,
+      };
+      const rawProviderList = [...rawProviders];
+      if (rawProviderList.some((provider) => provider !== b.provider)) {
+        extraMetrics.raw_providers = rawProviderList;
+      }
       const isFullPath = rawProject.startsWith('/') || /^[A-Z]:\\/i.test(rawProject);
       const projectDisplay = b.projectDisplay ?? (isFullPath ? rawProject.split('/').filter(Boolean).pop() || 'unknown' : rawProject);
       const projectAlias = b.projectAlias ?? null;
@@ -149,10 +249,7 @@ export async function handleIngest(request: Request, env: Env): Promise<Response
           b.eventCount, b.sessionCount ?? 0, b.inputTokens, b.cachedInputTokens, b.cacheWriteTokens,
           b.outputTokens, b.reasoningOutputTokens,
           cost.estimatedCostUsd, cost.costStatus, cost.pricingVersion,
-          JSON.stringify({
-            cache_write_5m_tokens: cacheWrite5mTokens,
-            cache_write_1h_tokens: cacheWrite1hTokens,
-          }),
+          JSON.stringify(extraMetrics),
           now, now,
         )
         .run();
@@ -223,6 +320,8 @@ async function replaceActivityMetrics(
     for (const item of items) {
       const count = Math.max(0, Math.floor(Number(item.count ?? 0)));
       if (count === 0) continue;
+      const provider = canonicalizeProvider({ provider: item.provider, product: item.product });
+      const product = item.product || 'unknown';
       const rawProject = item.project || 'unknown';
       const isFullPath = rawProject.startsWith('/') || /^[A-Z]:\\/i.test(rawProject);
       const projectDisplay = item.projectDisplay ?? (isFullPath ? rawProject.split('/').filter(Boolean).pop() || 'unknown' : rawProject);
@@ -237,9 +336,9 @@ async function replaceActivityMetrics(
         .bind(
           deviceId,
           usageDate,
-          item.provider || 'unknown',
-          item.product || 'unknown',
-          item.source || `${item.provider || 'unknown'}/${item.product || 'unknown'}`,
+          provider,
+          product,
+          item.source || `${provider}/${product}`,
           rawProject,
           projectDisplay,
           item.projectAlias ?? null,

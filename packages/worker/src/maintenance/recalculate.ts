@@ -204,7 +204,7 @@ function calculateBreakdownUpdate(row: DatabaseBreakdownRow, catalog: PricingCat
       costStatus: 'exact' as const,
     }
     : calculateCost(
-      row.provider,
+      pricingProviderForRow(row),
       row.product,
       row.model,
       {
@@ -451,6 +451,16 @@ function cacheWriteTokens(row: DatabaseBreakdownRow, key: string): number {
   const extra = parseExtraMetrics(row);
   const value = extra?.[key];
   return value == null ? number(row.cache_write_tokens) : number(value as number);
+}
+
+function pricingProviderForRow(row: DatabaseBreakdownRow): string {
+  const extra = parseExtraMetrics(row);
+  const rawProviders = extra?.raw_providers;
+  if (Array.isArray(rawProviders) && typeof rawProviders[0] === 'string') {
+    return rawProviders[0];
+  }
+  const rawProvider = extra?.raw_provider;
+  return typeof rawProvider === 'string' ? rawProvider : row.provider;
 }
 
 function isVendorReportedProduct(product: string): boolean {
