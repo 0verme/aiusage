@@ -8,10 +8,16 @@ import { TOKEN_SERIES, getChartColors, getTokenColor, providerLabel, formatProdu
 import { useIsDark } from './hooks/use-dark';
 import {
   formatUsd, formatUsdFull, formatCompact, formatNumber, formatPercent, formatTokens,
-  formatModelName, shortDate, longDate, arrSum,
+  formatModelName, arrSum,
 } from './utils/format';
-import type { FiltersState, FacetOption } from './hooks/use-overview';
+import type { FiltersState } from './hooks/use-overview';
 import { useOverview } from './hooks/use-overview';
+import {
+  MultiSelectFilter,
+  deviceIcon,
+  modelIcon,
+  productIcon,
+} from './components/filters/multi-select-filter';
 import { ChartBoundary, EmptyState, Skeleton, SectionHeader, ChartLegend } from './components/chart-helpers';
 import { KpiCard, CostKpiCard } from './components/kpi-card';
 import { useFetchCnyRate, useCurrencyStore } from './hooks/use-cny-rate';
@@ -128,158 +134,6 @@ function SegmentedControl({
           {o.label}
         </button>
       ))}
-    </div>
-  );
-}
-
-function MultiFilterTabs({
-  value,
-  options,
-  onChange,
-  allLabel = 'All',
-  tooltips,
-}: {
-  value: string[];
-  options: FacetOption[];
-  onChange: (v: string[]) => void;
-  allLabel?: string;
-  tooltips?: Record<string, string>;
-}) {
-  if (!options.length) return null;
-  return (
-    <div className="pill-group flex-nowrap">
-      <button
-        onClick={() => onChange([])}
-        className={`pill shrink-0 px-3.5 py-1.5 text-[13px] ${value.length === 0 ? 'pill-active' : ''}`}
-      >
-        {allLabel}
-      </button>
-      {options.map((o) => {
-        const tip = tooltips?.[o.value];
-        return (
-          <span key={o.value} className={tip ? 'group relative' : ''}>
-            <button
-              onClick={() => onChange(value.includes(o.value)
-                ? value.filter((item) => item !== o.value)
-                : [...value, o.value])}
-              className={`pill shrink-0 px-3.5 py-1.5 text-[13px] ${value.includes(o.value) ? 'pill-active' : ''}`}
-            >
-              {formatProductLabel(o.label)}
-            </button>
-            {tip && (
-              <span className="pointer-events-none absolute left-1/2 top-full z-50 mt-2 w-64 -translate-x-1/2 rounded-lg bg-slate-800 px-3 py-2 text-[11px] leading-relaxed text-slate-200 opacity-0 shadow-lg transition-opacity duration-150 group-hover:opacity-100 dark:bg-slate-700">
-                {tip}
-              </span>
-            )}
-          </span>
-        );
-      })}
-    </div>
-  );
-}
-
-function FilterChips({
-  label,
-  value,
-  options,
-  onChange,
-  allLabel = 'All',
-  tooltips,
-}: {
-  label: string;
-  value: string;
-  options: FacetOption[];
-  onChange: (v: string) => void;
-  allLabel?: string;
-  tooltips?: Record<string, string>;
-}) {
-  if (!options.length) return null;
-  return (
-    <div className="flex items-center gap-2 min-w-0">
-      {label && <span className="shrink-0 text-[12px] font-medium" style={{ color: 'var(--fg3)' }}>{label}</span>}
-      <div className="relative min-w-0 flex-1">
-        <div className="overflow-x-auto scrollbar-hide">
-          <div className="pill-group w-max flex-nowrap">
-            {allLabel && (
-              <button
-                onClick={() => onChange('')}
-                className={`pill shrink-0 px-3 py-1 text-[12px] ${!value ? 'pill-active' : ''}`}
-              >
-                {allLabel}
-              </button>
-            )}
-            {options.map((o) => {
-              const tip = tooltips?.[o.value];
-              return (
-                <span key={o.value} className={tip ? 'group relative' : ''}>
-                  <button
-                    onClick={() => onChange(o.value === value ? '' : o.value)}
-                    className={`pill shrink-0 px-3 py-1 text-[12px] ${value === o.value ? 'pill-active' : ''}`}
-                  >
-                    {formatProductLabel(o.label)}
-                  </button>
-                  {tip && (
-                    <span className="pointer-events-none absolute left-1/2 top-full z-50 mt-2 w-64 -translate-x-1/2 rounded-lg bg-slate-800 px-3 py-2 text-[11px] leading-relaxed text-slate-200 opacity-0 shadow-lg transition-opacity duration-150 group-hover:opacity-100 dark:bg-slate-700">
-                      {tip}
-                    </span>
-                  )}
-                </span>
-              );
-            })}
-          </div>
-        </div>
-      </div>
-    </div>
-  );
-}
-
-function MultiFilterChips({
-  value,
-  options,
-  onChange,
-  allLabel = 'All',
-  tooltips,
-}: {
-  value: string[];
-  options: FacetOption[];
-  onChange: (v: string[]) => void;
-  allLabel?: string;
-  tooltips?: Record<string, string>;
-}) {
-  if (!options.length) return null;
-  return (
-    <div className="relative min-w-0 flex-1">
-      <div className="overflow-x-auto scrollbar-hide">
-        <div className="pill-group w-max flex-nowrap">
-          <button
-            onClick={() => onChange([])}
-            className={`pill shrink-0 px-3 py-1 text-[12px] ${value.length === 0 ? 'pill-active' : ''}`}
-          >
-            {allLabel}
-          </button>
-          {options.map((option) => {
-            const selected = value.includes(option.value);
-            const tip = tooltips?.[option.value];
-            return (
-              <span key={option.value} className={tip ? 'group relative' : ''}>
-                <button
-                  onClick={() => onChange(selected
-                    ? value.filter((item) => item !== option.value)
-                    : [...value, option.value])}
-                  className={`pill shrink-0 px-3 py-1 text-[12px] ${selected ? 'pill-active' : ''}`}
-                >
-                  {formatProductLabel(option.label)}
-                </button>
-                {tip && (
-                  <span className="pointer-events-none absolute left-1/2 top-full z-50 mt-2 w-64 -translate-x-1/2 rounded-lg bg-slate-800 px-3 py-2 text-[11px] leading-relaxed text-slate-200 opacity-0 shadow-lg transition-opacity duration-150 group-hover:opacity-100 dark:bg-slate-700">
-                    {tip}
-                  </span>
-                )}
-              </span>
-            );
-          })}
-        </div>
-      </div>
     </div>
   );
 }
@@ -437,7 +291,7 @@ export function App() {
   const [locale, setLocaleState] = useState<Locale>(getStoredLocale);
   const setLocale = useCallback((l: Locale) => {
     setLocaleState(l);
-    try { localStorage.setItem('aiusage-locale', l); } catch {}
+    try { localStorage.setItem('aiusage-locale', l); } catch { /* localStorage is optional */ }
   }, []);
   const t: T = I18N[locale];
   const rangeSub = getRanges(t).find((r) => r.value === filters.range)?.label;
@@ -524,73 +378,48 @@ export function App() {
         </div>
       )}
 
-        {/* ── Range + Filters (desktop) ── */}
-        <div className="mt-2 mb-6 hidden sm:flex sm:flex-wrap sm:items-center sm:gap-2.5">
-          <SegmentedControl
-            value={filters.range}
-            options={getRanges(t)}
-            onChange={(v) => setFilters((f) => ({ ...f, range: v }))}
-          />
-          {overview && fOpts.products.length > 1 && (
-            <MultiFilterTabs
-              value={filters.products ?? []}
-              options={fOpts.products}
-              allLabel={t.all}
-              onChange={(v) => setFilters((f) => ({ ...f, products: v }))}
-              tooltips={{ 'claude-code': t.claudeCodeDataNotice }}
+        {/* ── Range + Filters ── */}
+        <div className="relative z-30 mt-2 mb-6 flex flex-col gap-2.5 sm:flex-row sm:flex-wrap sm:items-center">
+          <div className="min-w-0 overflow-x-auto scrollbar-hide">
+            <SegmentedControl
+              value={filters.range}
+              options={getRanges(t)}
+              onChange={(v) => setFilters((f) => ({ ...f, range: v }))}
             />
-          )}
-          {overview && fOpts.models.length > 1 && (
-            <MultiFilterTabs
-              value={filters.models ?? []}
-              options={fOpts.models}
-              allLabel={t.all}
-              onChange={(v) => setFilters((f) => ({ ...f, models: v }))}
-            />
-          )}
-          {overview && fOpts.devices.length >= 1 && (
-            <MultiFilterTabs
-              value={filters.deviceIds ?? []}
-              options={fOpts.devices}
-              allLabel={t.all}
-              onChange={(v) => setFilters((f) => ({ ...f, deviceIds: v }))}
-            />
-          )}
-        </div>
-
-        {/* ── Filters (mobile) ── */}
-        <div className="mt-1 mb-5 flex flex-col gap-3 sm:hidden">
-          <FilterChips
-            label=""
-            value={filters.range}
-            options={getRanges(t).map((r) => ({ value: r.value, label: r.label, eventCount: 0, estimatedCostUsd: 0 }))}
-            allLabel=""
-            onChange={(v) => setFilters((f) => ({ ...f, range: v || '30d' }))}
-          />
-          {overview && fOpts.products.length > 1 && (
-            <MultiFilterChips
-              value={filters.products ?? []}
-              options={fOpts.products}
-              allLabel={t.all}
-              onChange={(v) => setFilters((f) => ({ ...f, products: v }))}
-              tooltips={{ 'claude-code': t.claudeCodeDataNotice }}
-            />
-          )}
-          {overview && fOpts.models.length > 1 && (
-            <MultiFilterChips
-              value={filters.models ?? []}
-              options={fOpts.models}
-              allLabel={t.all}
-              onChange={(v) => setFilters((f) => ({ ...f, models: v }))}
-            />
-          )}
-          {overview && fOpts.devices.length >= 1 && (
-            <MultiFilterChips
-              value={filters.deviceIds ?? []}
-              options={fOpts.devices}
-              allLabel={t.all}
-              onChange={(v) => setFilters((f) => ({ ...f, deviceIds: v }))}
-            />
+          </div>
+          {overview && (
+            <div className="flex min-w-0 flex-wrap items-center gap-2">
+              <MultiSelectFilter
+                label={t.tool}
+                value={filters.products ?? []}
+                options={fOpts.products}
+                allLabel={t.all}
+                locale={locale}
+                formatLabel={(label) => formatProductLabel(label)}
+                getIcon={(option) => productIcon(option.value)}
+                onChange={(values) => setFilters((f) => ({ ...f, products: values }))}
+                tooltips={{ 'claude-code': t.claudeCodeDataNotice }}
+              />
+              <MultiSelectFilter
+                label={t.model}
+                value={filters.models ?? []}
+                options={fOpts.models}
+                allLabel={t.all}
+                locale={locale}
+                formatLabel={(label) => formatModelName(label, isMobile)}
+                getIcon={(option) => modelIcon(option.value, option.label)}
+                onChange={(values) => setFilters((f) => ({ ...f, models: values }))}
+              />
+              <MultiSelectFilter
+                label={t.device}
+                value={filters.deviceIds ?? []}
+                options={fOpts.devices}
+                allLabel={t.all}
+                locale={locale}
+                getIcon={() => deviceIcon()}
+                onChange={(values) => setFilters((f) => ({ ...f, deviceIds: values }))}
+              />
+            </div>
           )}
         </div>
 

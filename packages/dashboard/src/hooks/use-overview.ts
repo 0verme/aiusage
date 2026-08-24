@@ -19,7 +19,12 @@ export interface FiltersState {
 
 export interface HealthPayload { ok: boolean; siteId: string; version: string; siteTitle?: string }
 export interface OverviewPayload extends OverviewResponse { ok: boolean }
-export interface FacetOption { value: string; label: string }
+export interface FacetOption {
+  value: string;
+  label: string;
+  estimatedCostUsd?: number;
+  eventCount?: number;
+}
 
 // ── Fetch helper ──
 
