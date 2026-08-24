@@ -1,17 +1,23 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { calculateActivityStreak, type ActivityHeatmapDay } from '../utils/activity-heatmap-data';
+import {
+  ACTIVITY_HEATMAP_WEEKS,
+  calculateActivityStreak,
+  calculateLongestActivityStreak,
+  type ActivityHeatmapDay,
+} from '../utils/activity-heatmap-data';
 import type { Locale } from '../i18n';
 
 // ── 常量 ──
 
-const CELL = 11;  // 格子固定尺寸 px
-const GAP = 2;    // 间距 px
+const CELL = 13;  // 格子固定尺寸 px
+const GAP = 3;    // 间距 px
 const STEP = CELL + GAP;
 const DAYS = 7;
+const DAY_LABEL_W = 34;
 const MONTH_LABELS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
 const GAMMA = 0.7;
-const MONTH_ROW = 14;
-const LEGEND_ROW = 30;
+const MONTH_ROW = 22;
+const LEGEND_ROW = 34;
 // Less(~22px) gap 5格 gap More(~26px)
 const LEGEND_W = 22 + GAP + 5 * STEP - GAP + GAP + 26;
 
@@ -23,7 +29,7 @@ const LABEL_FILL = 'var(--fg3)';
 
 function colorForValue(value: number, max: number): string {
   if (value <= 0 || max <= 0) return LEVELS[0];
-  const ratio = Math.pow(value / max, GAMMA);
+  const ratio = (value / max) ** GAMMA;
   const idx = Math.max(1, Math.min(4, Math.ceil(ratio * 4)));
   return LEVELS[idx];
 }
@@ -75,18 +81,20 @@ export function ActivityHeatmap({ days, metricLabel = 'tokens', locale = 'en', c
   locale?: Locale;
   className?: string;
 }) {
+  const rootRef = useRef<HTMLDivElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
+  const hasAutoScrolledRef = useRef(false);
   const containerWidth = useContainerWidth(containerRef);
 
-  // 由容器宽度决定列数（至少 4 列）
-  const weeks = containerWidth > 0 ? Math.max(4, Math.floor(containerWidth / STEP)) : 53;
+  // 固定展示近一年 53 周，不随容器宽度增加历史空白。
+  const weeks = ACTIVITY_HEATMAP_WEEKS;
 
   const [tooltip, setTooltip] = useState<{
     x: number; y: number;
     date: string; activityValue: number; cost: number;
   } | null>(null);
 
-  const { grid, monthMarks, maxActivity, activeDays, streak, totalActivity } = useMemo(() => {
+  const { grid, monthMarks, maxActivity, activeDays, streak, longestStreak, totalActivity } = useMemo(() => {
     const byDate = new Map<string, ActivityHeatmapDay>();
     for (const d of days) byDate.set(d.usageDate, d);
 
@@ -105,10 +113,12 @@ export function ActivityHeatmap({ days, metricLabel = 'tokens', locale = 'en', c
     const activeDays = visibleDays.filter(d => d.activityValue > 0).length;
 
     const streak = calculateActivityStreak(days, today);
+    const longestStreak = calculateLongestActivityStreak(days, startDate, today);
 
     const grid: Array<Array<{ dateStr: string; data?: ActivityHeatmapDay }>> = [];
     const monthMarks: Array<{ weekIdx: number; label: string }> = [];
-    let lastMonth = -1;
+    const markedMonthKeys = new Set<string>();
+    const markedLabels = new Set<string>();
 
     for (let w = 0; w < weeks; w++) {
       const col: Array<{ dateStr: string; data?: ActivityHeatmapDay }> = [];
@@ -116,149 +126,234 @@ export function ActivityHeatmap({ days, metricLabel = 'tokens', locale = 'en', c
         const date = addDays(startDate, w * DAYS + d);
         const ds = toDateStr(date);
         col.push({ dateStr: ds, data: byDate.get(ds) });
-        if (date.getDate() === 1 && date.getMonth() !== lastMonth) {
-          monthMarks.push({ weekIdx: w, label: MONTH_LABELS[date.getMonth()] });
-          lastMonth = date.getMonth();
+        if (date.getDate() === 1) {
+          const monthKey = `${date.getFullYear()}-${date.getMonth()}`;
+          const label = MONTH_LABELS[date.getMonth()];
+          if (!markedMonthKeys.has(monthKey)) {
+            markedMonthKeys.add(monthKey);
+            if (!markedLabels.has(label)) {
+              monthMarks.push({ weekIdx: w, label });
+              markedLabels.add(label);
+            }
+          }
         }
       }
       grid.push(col);
     }
 
-    return { grid, monthMarks, maxActivity, activeDays, streak, totalActivity };
+    return { grid, monthMarks, maxActivity, activeDays, streak, longestStreak, totalActivity };
   }, [days, weeks]);
 
-  // 内容宽度（格子部分，左对齐内坐标）
+  // 热力图保持固定尺寸；窄屏由外层滚动容器承载。
   const svgInnerW = weeks * STEP - GAP;
+  const svgW = DAY_LABEL_W + svgInnerW;
   const svgH = DAYS * STEP - GAP;
   const totalH = MONTH_ROW + svgH + LEGEND_ROW;
+  const legendX = Math.max(DAY_LABEL_W, svgW - LEGEND_W);
+  let lastMonthLabelX = -Infinity;
+  const monthLabelMarks = monthMarks.map((mark) => {
+    const x = Math.max(mark.weekIdx * STEP, lastMonthLabelX + 32);
+    lastMonthLabelX = x;
+    return { ...mark, x };
+  });
+  const dayUnit = locale === 'zh' ? '天' : 'd';
+  const currentStreakLabel = locale === 'zh' ? '当前连续天数' : 'Current streak';
+  const longestStreakLabel = locale === 'zh' ? '最长连续天数' : 'Longest streak';
+  const activeDaysLabel = locale === 'zh' ? '个活跃日' : 'active days';
+  const totalLabel = locale === 'zh'
+    ? `${metricLabel === 'tokens' ? 'Token' : '会话'}总计`
+    : `${metricLabel} total`;
+  const tooltipWidth = 140;
+  const tooltipHeight = 64;
+  const tooltipMaxX = Math.max(4, (rootRef.current?.clientWidth ?? containerWidth) - tooltipWidth - 4);
+  const tooltipMaxY = Math.max(4, (rootRef.current?.clientHeight ?? totalH) - tooltipHeight - 4);
 
-  // 右对齐偏移：让最新一列（最右格子）始终贴近容器右边
-  const offsetX = containerWidth > 0 ? containerWidth - svgInnerW : 0;
+  useEffect(() => {
+    const element = containerRef.current;
+    if (!element || containerWidth <= 0) return;
+    if (element.scrollWidth <= element.clientWidth) {
+      hasAutoScrolledRef.current = false;
+      return;
+    }
+    if (!hasAutoScrolledRef.current) {
+      element.scrollLeft = element.scrollWidth;
+      hasAutoScrolledRef.current = true;
+    }
+  }, [containerWidth, svgW]);
+
+  const tooltipLeft = tooltip
+    ? Math.min(Math.max(tooltip.x - tooltipWidth / 2, 4), tooltipMaxX)
+    : 0;
+  const tooltipTop = tooltip
+    ? Math.min(Math.max(tooltip.y < 66 ? tooltip.y + CELL + 8 : tooltip.y - 52, 4), tooltipMaxY)
+    : 0;
 
   return (
-    <div className={`flex flex-col gap-3 ${className}`}>
-      {/* 统计摘要 */}
-      <div className="flex flex-wrap items-center gap-5 font-mono text-[12px]" style={{ color: 'var(--fg)' }}>
-        <span>
-          <span className="font-bold" style={{ color: 'var(--accent)' }}>{activeDays}</span> {locale === 'zh' ? '个活跃日' : 'active days'}
-        </span>
-        <span>
-          <span className="font-bold" style={{ color: 'var(--accent)' }}>{streak}</span> {locale === 'zh' ? '天连续活跃' : 'day streak'}
-        </span>
-        <span>
-          <span className="font-bold" style={{ color: 'var(--accent)' }}>{fmtCompact(totalActivity)}</span> {locale === 'zh' ? `${metricLabel === 'tokens' ? 'Token' : '会话'}总计` : `${metricLabel} total`}
-        </span>
+    <div ref={rootRef} className={`relative grid gap-5 lg:grid-cols-[150px_minmax(0,1fr)] lg:items-center ${className}`}>
+      {/* 连续活跃信息：桌面端置于热力图左侧，窄屏转为两列 */}
+      <div
+        className="grid grid-cols-2 gap-3 border-b pb-4 lg:flex lg:flex-col lg:gap-5 lg:border-b-0 lg:border-r lg:pb-0 lg:pr-6"
+        style={{ borderColor: 'var(--border)' }}
+      >
+        <div className="min-w-0 rounded-lg bg-[var(--panel-soft)] px-3 py-3 lg:bg-transparent lg:p-0">
+          <div className="font-mono text-[28px] font-bold leading-none tracking-tight" style={{ color: 'var(--fg)' }}>
+            {streak} <span className="font-sans text-base font-semibold" style={{ color: 'var(--fg3)' }}>{dayUnit}</span>
+          </div>
+          <div className="mt-2 font-sans text-xs font-medium" style={{ color: 'var(--fg2)' }}>{currentStreakLabel}</div>
+        </div>
+        <div className="min-w-0 rounded-lg bg-[var(--panel-soft)] px-3 py-3 lg:bg-transparent lg:p-0">
+          <div className="font-mono text-[28px] font-bold leading-none tracking-tight" style={{ color: 'var(--fg)' }}>
+            {longestStreak} <span className="font-sans text-base font-semibold" style={{ color: 'var(--fg3)' }}>{dayUnit}</span>
+          </div>
+          <div className="mt-2 font-sans text-xs font-medium" style={{ color: 'var(--fg2)' }}>{longestStreakLabel}</div>
+        </div>
       </div>
 
-      {/* SVG 热力图 */}
-      <div ref={containerRef} className="relative w-full">
-        {containerWidth > 0 && (
-          <svg
-            width={containerWidth}
-            height={totalH}
-            style={{ display: 'block' }}
-            aria-label="Activity heatmap"
-          >
-            {/* 所有格子内容右对齐 */}
-            <g transform={`translate(${offsetX}, 0)`}>
-              {/* 月份标签 */}
-              {monthMarks.map(({ weekIdx, label }) => (
+      <div className="min-w-0">
+        {/* 统计摘要 */}
+        <div className="mb-3 flex flex-wrap items-center gap-5 font-sans text-xs" style={{ color: 'var(--fg2)' }}>
+          <span>
+            <span className="font-mono font-semibold" style={{ color: 'var(--accent)' }}>{activeDays}</span> {activeDaysLabel}
+          </span>
+          <span>
+            <span className="font-mono font-semibold" style={{ color: 'var(--accent)' }}>{fmtCompact(totalActivity)}</span> {totalLabel}
+          </span>
+        </div>
+
+        {/* SVG 热力图 */}
+        <div ref={containerRef} className="scrollbar-hide relative w-full overflow-x-auto pb-1">
+          {containerWidth > 0 && (
+            <svg
+              width={svgW}
+              height={totalH}
+              style={{ display: 'block' }}
+              aria-label="Activity heatmap"
+            >
+              {/* 星期标签 */}
+              {[1, 3, 5].map((dayIdx) => (
                 <text
-                  key={label + weekIdx}
-                  x={weekIdx * STEP}
-                  y={MONTH_ROW - 4}
-                  fontSize={9}
+                  key={dayIdx}
+                  x={DAY_LABEL_W - 6}
+                  y={MONTH_ROW + dayIdx * STEP + CELL / 2}
+                  fontSize={10}
                   fill={LABEL_FILL}
-                  fontFamily="'JetBrains Mono', monospace"
+                  fontFamily="system-ui, sans-serif"
+                  textAnchor="end"
+                  dominantBaseline="middle"
                 >
-                  {label}
+                  {dayIdx === 1 ? 'Mon' : dayIdx === 3 ? 'Wed' : 'Fri'}
                 </text>
               ))}
 
-              {/* 格子 */}
-              <g transform={`translate(0, ${MONTH_ROW})`}>
-                {grid.map((col, wi) =>
-                  col.map(({ dateStr, data }, di) => {
-                    const activityValue = data?.activityValue ?? 0;
-                    const cost = data?.estimatedCostUsd ?? 0;
-                    const fill = colorForValue(activityValue, maxActivity);
-                    const x = wi * STEP;
-                    const y = di * STEP;
-                    return (
-                      <rect
-                        key={dateStr}
-                        x={x}
-                        y={y}
-                        width={CELL}
-                        height={CELL}
-                        rx={2}
-                        fill={fill}
-                        style={{ cursor: activityValue > 0 ? 'pointer' : 'default' }}
-                        onMouseEnter={() => {
-                          setTooltip({
-                            x: offsetX + x + CELL / 2,
-                            y: MONTH_ROW + y,
-                            date: dateStr,
-                            activityValue,
-                            cost,
-                          });
-                        }}
-                        onMouseLeave={() => setTooltip(null)}
-                      />
-                    );
-                  })
-                )}
+              <g transform={`translate(${DAY_LABEL_W}, 0)`}>
+                {/* 月份标签 */}
+                {monthLabelMarks.map(({ weekIdx, label, x }) => (
+                  <text
+                    key={label + weekIdx}
+                    x={x}
+                    y={MONTH_ROW - 4}
+                    fontSize={10}
+                    fill={LABEL_FILL}
+                    fontFamily="system-ui, sans-serif"
+                  >
+                    {label}
+                  </text>
+                ))}
+
+                {/* 格子 */}
+                <g transform={`translate(0, ${MONTH_ROW})`}>
+                  {grid.map((col, wi) =>
+                    col.map(({ dateStr, data }, di) => {
+                      const activityValue = data?.activityValue ?? 0;
+                      const cost = data?.estimatedCostUsd ?? 0;
+                      const fill = colorForValue(activityValue, maxActivity);
+                      const x = wi * STEP;
+                      const y = di * STEP;
+                      return (
+                        <rect
+                          key={dateStr}
+                          x={x}
+                          y={y}
+                          width={CELL}
+                          height={CELL}
+                          rx={2}
+                          fill={fill}
+                          stroke="var(--grid)"
+                          strokeWidth={1}
+                          style={{ cursor: activityValue > 0 ? 'pointer' : 'default' }}
+                          onMouseEnter={() => {
+                            const scrollLeft = containerRef.current?.scrollLeft ?? 0;
+                            const containerRect = containerRef.current?.getBoundingClientRect();
+                            const rootRect = rootRef.current?.getBoundingClientRect();
+                            const originX = containerRect && rootRect ? containerRect.left - rootRect.left : 0;
+                            const originY = containerRect && rootRect ? containerRect.top - rootRect.top : 0;
+                            setTooltip({
+                              x: originX + DAY_LABEL_W + x + CELL / 2 - scrollLeft,
+                              y: originY + MONTH_ROW + y,
+                              date: dateStr,
+                              activityValue,
+                              cost,
+                            });
+                          }}
+                          onMouseLeave={() => setTooltip(null)}
+                        />
+                      );
+                    })
+                  )}
+                </g>
               </g>
-            </g>
 
-            {/* 图例：居中，与热力图保持间距 */}
-            <g transform={`translate(${(containerWidth - LEGEND_W) / 2}, ${totalH - LEGEND_ROW + 10})`}>
-              <text x={0} y={9} fontSize={9} fill={LABEL_FILL} fontFamily="'JetBrains Mono', monospace">{locale === 'zh' ? '少' : 'Less'}</text>
-              {[0, 1, 2, 3, 4].map((lvl) => (
-                <rect
-                  key={lvl}
-                  x={24 + lvl * STEP}
-                  y={0}
-                  width={CELL}
-                  height={CELL}
-                  rx={2}
-                  fill={LEVELS[lvl]}
-                />
-              ))}
-              <text x={24 + 5 * STEP} y={9} fontSize={9} fill={LABEL_FILL} fontFamily="'JetBrains Mono', monospace">{locale === 'zh' ? '多' : 'More'}</text>
-            </g>
-          </svg>
-        )}
+              {/* 图例：右下角，不抢热力图主体焦点 */}
+              <g transform={`translate(${legendX}, ${totalH - LEGEND_ROW + 10})`}>
+                <text x={0} y={10} fontSize={10} fill={LABEL_FILL} fontFamily="system-ui, sans-serif">{locale === 'zh' ? '少' : 'Less'}</text>
+                {[0, 1, 2, 3, 4].map((lvl) => (
+                  <rect
+                    key={lvl}
+                    x={24 + lvl * STEP}
+                    y={0}
+                    width={CELL}
+                    height={CELL}
+                    rx={2}
+                    fill={LEVELS[lvl]}
+                    stroke="var(--grid)"
+                    strokeWidth={1}
+                  />
+                ))}
+                <text x={24 + 5 * STEP} y={10} fontSize={10} fill={LABEL_FILL} fontFamily="system-ui, sans-serif">{locale === 'zh' ? '多' : 'More'}</text>
+              </g>
+            </svg>
+          )}
+        </div>
 
-        {/* Tooltip */}
-        {tooltip && (
-          <div
-            className="pointer-events-none absolute z-10 rounded-lg border px-2.5 py-1.5 font-mono text-xs shadow-lg"
-            style={{
-              left: Math.min(tooltip.x, containerWidth - 130),
-              top: tooltip.y - 52,
-              background: 'var(--panel)',
-              borderColor: 'var(--border)',
-            }}
-          >
-            <div className="font-semibold" style={{ color: 'var(--fg)' }}>{tooltip.date}</div>
-            {tooltip.activityValue > 0 ? (
-              <>
-                <div style={{ color: 'var(--fg2)' }}>{fmtCompact(tooltip.activityValue)} {metricLabel}</div>
-                {metricLabel === 'tokens' && (
-                  <div style={{ color: 'var(--fg2)' }}>${tooltip.cost.toFixed(4)}</div>
-                )}
-              </>
-            ) : (
-              <div style={{ color: 'var(--fg3)' }}>{locale === 'zh' ? '无活动' : 'No activity'}</div>
-            )}
-          </div>
+        {/* 空状态 */}
+        {days.length === 0 && (
+          <p className="mt-2 font-sans text-xs" style={{ color: 'var(--fg3)' }}>{locale === 'zh' ? '过去一年暂无活动数据。' : 'No activity data in the past year.'}</p>
         )}
       </div>
 
-      {/* 空状态 */}
-      {days.length === 0 && (
-        <p className="font-mono text-xs" style={{ color: 'var(--fg3)' }}>{locale === 'zh' ? '过去一年暂无活动数据。' : 'No activity data in the past year.'}</p>
+      {/* Tooltip */}
+      {tooltip && (
+        <div
+          className="pointer-events-none absolute z-50 rounded-lg border px-2.5 py-1.5 font-mono text-xs shadow-lg"
+          style={{
+            left: tooltipLeft,
+            top: tooltipTop,
+            background: 'var(--panel)',
+            borderColor: 'var(--border)',
+          }}
+        >
+          <div className="font-semibold" style={{ color: 'var(--fg)' }}>{tooltip.date}</div>
+          {tooltip.activityValue > 0 ? (
+            <>
+              <div style={{ color: 'var(--fg2)' }}>{fmtCompact(tooltip.activityValue)} {metricLabel}</div>
+              {metricLabel === 'tokens' && (
+                <div style={{ color: 'var(--fg2)' }}>${tooltip.cost.toFixed(4)}</div>
+              )}
+            </>
+          ) : (
+            <div style={{ color: 'var(--fg3)' }}>{locale === 'zh' ? '无活动' : 'No activity'}</div>
+          )}
+        </div>
       )}
     </div>
   );

@@ -1,6 +1,12 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { buildActivityHeatmapData, calculateActivityStreak, type ActivityHeatmapDay } from './activity-heatmap-data';
+import {
+  ACTIVITY_HEATMAP_WEEKS,
+  buildActivityHeatmapData,
+  calculateActivityStreak,
+  calculateLongestActivityStreak,
+  type ActivityHeatmapDay,
+} from './activity-heatmap-data';
 
 function activityDay(usageDate: string, activityValue: number): ActivityHeatmapDay {
   return { usageDate, activityValue, estimatedCostUsd: 0, totalTokens: activityValue, eventCount: 1 };
@@ -71,4 +77,23 @@ test('returns zero when neither today nor yesterday is active', () => {
   ];
 
   assert.equal(calculateActivityStreak(days, today), 0);
+});
+
+test('keeps the annual heatmap window at 53 weeks', () => {
+  assert.equal(ACTIVITY_HEATMAP_WEEKS, 53);
+});
+
+test('calculates the longest active run within the visible window', () => {
+  const days = [
+    activityDay('2026-08-01', 10),
+    activityDay('2026-08-02', 10),
+    activityDay('2026-08-03', 10),
+    activityDay('2026-08-05', 10),
+    activityDay('2026-08-06', 10),
+  ];
+
+  assert.equal(
+    calculateLongestActivityStreak(days, new Date(2026, 7, 1, 12), new Date(2026, 7, 13, 12)),
+    3,
+  );
 });

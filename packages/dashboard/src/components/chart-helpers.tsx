@@ -30,20 +30,37 @@ export function Skeleton({ className = '' }: { className?: string }) {
   return <div className={`animate-pulse rounded-lg ${className}`} style={{ background: 'var(--cell)' }} />;
 }
 
-export function SectionHeader({ title, stat, statTone = 'accent' }: { title: string; stat?: string; statTone?: 'accent' | 'green' }) {
+export function SectionHeader({
+  title,
+  stat,
+  statLabel,
+  statTone = 'accent',
+}: {
+  title: string;
+  stat?: string;
+  statLabel?: string;
+  statTone?: 'accent' | 'green';
+}) {
   return (
-    <div className="mb-[18px] flex items-center justify-between">
+    <div className="mb-[18px] flex flex-wrap items-center justify-between gap-x-4 gap-y-2">
       <div className="flex items-center gap-2.5">
         <span className="section-bar" aria-hidden="true" />
         <h2 className="m-0 whitespace-nowrap text-[17px] font-bold" style={{ color: 'var(--fg)' }}>{title}</h2>
       </div>
       {stat && (
-        <span
-          className="font-mono text-[20px] font-bold tabular-nums"
-          style={{ color: statTone === 'green' ? 'var(--green)' : 'var(--accent)' }}
-        >
-          {stat}
-        </span>
+        <div className="flex shrink-0 items-baseline gap-2">
+          <span
+            className="font-mono text-[20px] font-bold tabular-nums"
+            style={{ color: statTone === 'green' ? 'var(--green)' : 'var(--accent)' }}
+          >
+            {stat}
+          </span>
+          {statLabel && (
+            <span className="whitespace-nowrap text-[11px] font-medium" style={{ color: 'var(--fg3)' }}>
+              {statLabel}
+            </span>
+          )}
+        </div>
       )}
     </div>
   );
