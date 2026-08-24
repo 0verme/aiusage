@@ -1,4 +1,4 @@
-import type { SankeyGraph } from '@aiusage/shared';
+import { canonicalizeProvider, type SankeyGraph } from '@aiusage/shared';
 import type { OverviewPayload, FiltersState } from '../hooks/use-overview';
 import { arrSum } from './format';
 import { scaleModelShares } from './share-data';
@@ -209,9 +209,10 @@ export function pivotProviderTrend(
   const dateMap = new Map<string, Record<string, number>>();
 
   for (const r of providerTrend ?? []) {
-    providerSet.add(r.provider);
+    const provider = canonicalizeProvider({ provider: r.provider });
+    providerSet.add(provider);
     const existing = dateMap.get(r.usageDate) ?? {};
-    existing[r.provider] = r.estimatedCostUsd;
+    existing[provider] = (existing[provider] ?? 0) + r.estimatedCostUsd;
     dateMap.set(r.usageDate, existing);
   }
 

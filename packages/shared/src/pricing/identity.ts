@@ -74,8 +74,9 @@ export function normalizePricingModel(
 /**
  * 统一处理 scanner 的 raw provider/product 与 catalog 的 pricing identity。
  *
- * 统计始终保留 raw identity。例如 `openai-codex/pi` 仍会显示为
- * `openai-codex/pi`，但定价 lookup 使用 `openai/codex`。
+ * pricing raw identity 仅用于定价审计；统计落库由 provider.ts 单独归一化。
+ * 例如 `openai-codex/pi` 的 pricing lookup 使用 `openai/codex`，而不改变
+ * `custom` / `opencode-go` 的特殊 pricing provider entry。
  */
 export function normalizePricingIdentity(
   input: PricingIdentityInput,
@@ -89,7 +90,7 @@ export function normalizePricingIdentity(
   let product = rawProduct;
   const rules = model.normalization ? [model.normalization] : [];
 
-  if (provider === 'openai-codex') {
+  if (provider === 'openai-codex' || provider === 'openai_codex') {
     provider = 'openai';
     rules.push(`provider:${rawProvider}->${provider}`);
     if (product === 'pi' || product === 'codex') {

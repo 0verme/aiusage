@@ -5,7 +5,11 @@ import {
 	toPublicProjectIdentity,
 } from "../utils/privacy.js";
 import type { Env } from "../types.js";
-import type { OverviewComparisonPayload } from "@aiusage/shared";
+import {
+	canonicalProviderSqlExpression,
+	canonicalizeProvider,
+	type OverviewComparisonPayload,
+} from "@aiusage/shared";
 
 export const TOTAL_TOKENS_SQL = `
   COALESCE(b.input_tokens, 0) +
@@ -17,6 +21,8 @@ export const TOTAL_TOKENS_SQL = `
 
 const PROJECT_DISPLAY_SQL = `COALESCE(b.project_alias, b.project_display)`;
 const ACTIVITY_PROJECT_DISPLAY_SQL = `COALESCE(a.project_alias, a.project_display)`;
+const PROVIDER_SQL = canonicalProviderSqlExpression("b.provider", "b.model");
+const ACTIVITY_PROVIDER_SQL = canonicalProviderSqlExpression("a.provider");
 
 type FilterKey =
 	| "deviceId"
@@ -133,17 +139,19 @@ export async function handleOverview(url: URL, env: Env): Promise<Response> {
 		env.DB.prepare(`
       SELECT
         b.usage_date,
-        b.provider,
+        ${PROVIDER_SQL} AS provider,
+        b.model,
         COALESCE(SUM(b.estimated_cost_usd), 0) AS estimated_cost_usd
       FROM daily_usage_breakdown b
       ${where.whereClause}
-      GROUP BY b.usage_date, b.provider
-      ORDER BY b.usage_date, b.provider
+      GROUP BY b.usage_date, ${PROVIDER_SQL}, b.model
+      ORDER BY b.usage_date, provider
     `)
 			.bind(...where.params)
 			.all<{
 				usage_date: string;
 				provider: string;
+				model?: string;
 				estimated_cost_usd: number;
 			}>(),
 		env.DB.prepare(`
@@ -270,11 +278,7 @@ export async function handleOverview(url: URL, env: Env): Promise<Response> {
 				eventCount: Number(row.event_count ?? 0),
 				estimatedCostUsd: roundUsd(row.estimated_cost_usd ?? 0),
 			})),
-			providerDailyTrend: (providerTrendRows.results ?? []).map((row) => ({
-				usageDate: row.usage_date,
-				provider: row.provider,
-				estimatedCostUsd: roundUsd(row.estimated_cost_usd ?? 0),
-			})),
+			providerDailyTrend: mergeProviderTrendRows(providerTrendRows.results ?? []),
 			tokenComposition: (tokenRows.results ?? []).map((row) => ({
 				usageDate: row.usage_date,
 				inputTokens: Number(row.input_tokens ?? 0),
@@ -346,7 +350,9 @@ export function parseFilters(url: URL): DashboardFilters | null {
 		rangeDays: window.days,
 		range,
 		deviceId: readTextParams(url, "deviceId"),
-		provider: readTextParams(url, "provider"),
+		provider: [...new Set(
+			readTextParams(url, "provider").map((value) => canonicalizeProvider({ provider: value })),
+		)],
 		product: readTextParams(url, "product"),
 		channel: readTextParams(url, "channel"),
 		model: readTextParams(url, "model"),
@@ -404,7 +410,7 @@ export function buildWhere(
 	if (omit !== "deviceId")
 		addValueFilter(clauses, params, "b.device_id", filters.deviceId);
 	if (omit !== "provider")
-		addValueFilter(clauses, params, "b.provider", filters.provider);
+		addValueFilter(clauses, params, PROVIDER_SQL, filters.provider);
 	if (omit !== "product")
 		addProductFilter(clauses, params, "b", filters.product);
 	if (omit !== "channel")
@@ -427,22 +433,31 @@ async function loadFacetOptions(
 ): Promise<FacetItem[]> {
 	const omit = toFilterKey(column);
 	const where = buildWhere(filters, omit);
-	const columnExpr = column === "project" ? PROJECT_DISPLAY_SQL : `b.${column}`;
+	const columnExpr = column === "project"
+		? PROJECT_DISPLAY_SQL
+		: column === "provider"
+			? PROVIDER_SQL
+			: `b.${column}`;
+	const modelSelect = column === "provider" ? "b.model AS model," : "";
+	const groupExpr = column === "provider" ? `${columnExpr}, b.model` : columnExpr;
+	const limitClause = column === "provider" ? "" : "LIMIT 80";
 	const rows = await env.DB.prepare(`
     SELECT
       ${columnExpr} AS value,
+      ${modelSelect}
       COALESCE(SUM(b.estimated_cost_usd), 0) AS estimated_cost_usd,
       COALESCE(SUM(b.event_count), 0) AS event_count
     FROM daily_usage_breakdown b
     ${where.whereClause}
-    GROUP BY ${columnExpr}
+    GROUP BY ${groupExpr}
     HAVING value IS NOT NULL AND value != ''
     ORDER BY estimated_cost_usd DESC, value ASC
-    LIMIT 80
+    ${limitClause}
   `)
 		.bind(...where.params)
 		.all<{
 			value: string;
+			model?: string;
 			estimated_cost_usd: number;
 			event_count: number;
 		}>();
@@ -457,12 +472,15 @@ async function loadFacetOptions(
 
 	const items = await Promise.all(
 		(rows.results ?? []).map(async (row) => {
+			const provider = column === "provider"
+				? canonicalizeProvider({ provider: row.value, model: row.model })
+				: row.value;
 			const identity =
 				column === "project"
 					? await toPublicProjectIdentity(row.value, env)
 					: null;
 			return {
-				value: identity?.value ?? row.value,
+				value: identity?.value ?? provider,
 				label:
 					identity?.label ??
 					(column === "device_id"
@@ -476,10 +494,46 @@ async function loadFacetOptions(
 		}),
 	);
 	if (column === "project") return mergeFacetItems(items);
+	if (column === "provider") return mergeProviderFacetItems(items);
 	return column === "product" ? addCombinedTraeFacet(items) : items;
 }
 
-function mergeFacetItems(items: FacetItem[]): FacetItem[] {
+export function mergeProviderTrendRows(
+	rows: Array<{
+		usage_date: string;
+		provider: string;
+		model?: string;
+		estimated_cost_usd: number;
+	}>,
+): Array<{ usageDate: string; provider: string; estimatedCostUsd: number }> {
+	const merged = new Map<string, { usageDate: string; provider: string; estimatedCostUsd: number }>();
+	for (const row of rows) {
+		const provider = canonicalizeProvider({ provider: row.provider, model: row.model });
+		const key = `${row.usage_date}\0${provider}`;
+		const existing = merged.get(key);
+		if (existing) {
+			existing.estimatedCostUsd += Number(row.estimated_cost_usd ?? 0);
+		} else {
+			merged.set(key, {
+				usageDate: row.usage_date,
+				provider,
+				estimatedCostUsd: Number(row.estimated_cost_usd ?? 0),
+			});
+		}
+	}
+	return [...merged.values()]
+		.map((row) => ({ ...row, estimatedCostUsd: roundUsd(row.estimatedCostUsd) }))
+		.sort((a, b) => a.usageDate.localeCompare(b.usageDate) || a.provider.localeCompare(b.provider));
+}
+
+export function mergeProviderFacetItems(items: FacetItem[]): FacetItem[] {
+	return mergeFacetItems(items.map((item) => ({
+		...item,
+		value: canonicalizeProvider({ provider: item.value }),
+	})));
+}
+
+export function mergeFacetItems(items: FacetItem[]): FacetItem[] {
 	const merged = new Map<string, FacetItem>();
 	for (const item of items) {
 		const existing = merged.get(item.value);
@@ -773,7 +827,7 @@ function buildActivityWhere(filters: DashboardFilters): WhereParts {
 		params.push(filters.maxDate);
 	}
 	addValueFilter(clauses, params, "a.device_id", filters.deviceId);
-	addValueFilter(clauses, params, "a.provider", filters.provider);
+	addValueFilter(clauses, params, ACTIVITY_PROVIDER_SQL, filters.provider);
 	addProductFilter(clauses, params, "a", filters.product);
 	if (filters.channel.length > 0 && !filters.channel.includes("cli")) {
 		clauses.push("1 = 0");

@@ -1,5 +1,44 @@
 import { describe, expect, it } from 'vitest';
-import { buildDateWindow, buildWhere, parseFilters } from './overview.js';
+import {
+  buildDateWindow,
+  buildWhere,
+  mergeProviderFacetItems,
+  mergeProviderTrendRows,
+  parseFilters,
+} from './overview.js';
+
+describe('provider canonical aggregation', () => {
+  it('merges OpenAI aliases into one provider facet', () => {
+    expect(mergeProviderFacetItems([
+      { value: 'openai', label: 'openai', estimatedCostUsd: 10, eventCount: 1 },
+      { value: 'openai-codex', label: 'openai-codex', estimatedCostUsd: 5, eventCount: 2 },
+    ])).toEqual([
+      { value: 'openai', label: 'openai', estimatedCostUsd: 15, eventCount: 3 },
+    ]);
+  });
+
+  it('merges aliases and model-driven gateway providers in the daily trend', () => {
+    expect(mergeProviderTrendRows([
+      { usage_date: '2026-08-20', provider: 'openai', model: 'gpt-5.6', estimated_cost_usd: 10 },
+      { usage_date: '2026-08-20', provider: 'openai-codex', model: 'gpt-5.6-sol', estimated_cost_usd: 5 },
+      { usage_date: '2026-08-20', provider: 'opencode-go', model: 'deepseek-v4-flash', estimated_cost_usd: 2 },
+    ])).toEqual([
+      { usageDate: '2026-08-20', provider: 'deepseek', estimatedCostUsd: 2 },
+      { usageDate: '2026-08-20', provider: 'openai', estimatedCostUsd: 15 },
+    ]);
+  });
+
+  it('uses canonical provider SQL for provider filters', () => {
+    const filters = parseFilters(new URL(
+      'https://example.com/api/v1/public/overview?range=all&provider=openai-codex',
+    ))!;
+    const where = buildWhere(filters);
+
+    expect(filters.provider).toEqual(['openai']);
+    expect(where.whereClause).toContain("'openai-codex'");
+    expect(where.whereClause).toContain("'deepseek'");
+  });
+});
 
 describe('overview date windows', () => {
   it('builds inclusive windows that include today exactly once', () => {

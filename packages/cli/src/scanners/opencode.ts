@@ -2,7 +2,7 @@ import { execFile } from 'node:child_process';
 import { readdir, readFile, realpath, stat } from 'node:fs/promises';
 import { homedir } from 'node:os';
 import { basename, dirname, isAbsolute, join, resolve } from 'node:path';
-import type { IngestBreakdown } from '@aiusage/shared';
+import { canonicalizeProvider, type IngestBreakdown } from '@aiusage/shared';
 import {
   parseTs,
   dateKey,
@@ -12,7 +12,6 @@ import {
   accumulate,
   finalize,
   emptyResult,
-  inferProviderFromModel,
 } from './utils.js';
 
 /**
@@ -396,8 +395,12 @@ async function runSqliteQuery(dbPath: string, query: string): Promise<OpenCodeSq
   }
 
   const stdout = await runExternalSqlite(['-readonly', '-json', dbPath, query]);
-  const rows = JSON.parse(stdout || '[]') as unknown;
-  return Array.isArray(rows) ? rows.filter(isSqliteRow) : [];
+  try {
+    const rows = JSON.parse(stdout || '[]') as unknown;
+    return Array.isArray(rows) ? rows.filter(isSqliteRow) : [];
+  } catch {
+    return [];
+  }
 }
 
 async function loadNodeSqlite(): Promise<NodeSqliteModule | null> {
@@ -440,8 +443,11 @@ function parseOpenCodeMessage(
   const model = cleanString(message.modelID) || cleanString(message.model?.id);
   if (!model) return undefined;
   const rawProvider = cleanString(message.providerID) || cleanString(message.model?.providerID);
-  const provider = canonicalizeOpenCodeProvider(rawProvider)
-    || inferProviderFromModel(model, 'opencode');
+  const provider = canonicalizeProvider({
+    provider: rawProvider ?? 'opencode',
+    product: 'opencode',
+    model,
+  });
   const tokens = {
     input: clamp(message.tokens.input),
     cached: clamp(message.tokens.cache?.read),
@@ -546,30 +552,12 @@ function deduplicateOpenCodeSources(records: ParsedOpenCodeRecord[]): ParsedOpen
   });
 }
 
-function canonicalizeOpenCodeProvider(raw?: string): string | undefined {
+/**
+ * 兼容旧调用点；实际 alias/model 规则统一由 shared 提供。
+ */
+export function canonicalizeOpenCodeProvider(raw?: string, model?: string): string | undefined {
   if (!raw) return undefined;
-  const normalized = raw.trim().replace(/\/+$/, '').toLowerCase().replaceAll('-', '_');
-  if (!normalized || normalized === 'unknown' || (normalized.startsWith('<') && normalized.endsWith('>'))) {
-    return undefined;
-  }
-  const first = normalized.split('/')[0].split('.')[0];
-  const aliases: Record<string, string> = {
-    x_ai: 'xai',
-    z_ai: 'zai',
-    moonshotai: 'moonshot',
-    meta: 'meta_llama',
-    azure: 'azure_ai',
-    vertex: 'anthropic',
-    vertex_ai: 'anthropic',
-    together: 'together_ai',
-    fireworks: 'fireworks_ai',
-    gemini: 'google',
-    openai_codex: 'openai',
-    minimaxai: 'minimax',
-    minimax_ai: 'minimax',
-    mistral: 'mistralai',
-  };
-  return aliases[first] ?? first;
+  return canonicalizeProvider({ provider: raw, product: 'opencode', model });
 }
 
 function expandConfiguredPath(rawPath: string, home: string): string | undefined {

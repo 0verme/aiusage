@@ -1,4 +1,9 @@
-import { DEFAULT_BREAKDOWN_LIMIT, MAX_BREAKDOWN_LIMIT } from "@aiusage/shared";
+import {
+	canonicalProviderSqlExpression,
+	canonicalizeProvider,
+	DEFAULT_BREAKDOWN_LIMIT,
+	MAX_BREAKDOWN_LIMIT,
+} from "@aiusage/shared";
 import { CACHE_PRESETS, jsonCached, jsonError } from "../utils/response.js";
 import {
 	resolvePublicProjectFilter,
@@ -6,10 +11,12 @@ import {
 } from "../utils/privacy.js";
 import type { Env } from "../types.js";
 
+const PROVIDER_SQL = canonicalProviderSqlExpression("b.provider", "b.model");
+
 const SORT_FIELDS: Record<string, string> = {
 	usage_date: "b.usage_date",
 	device_id: "b.device_id",
-	provider: "b.provider",
+	provider: PROVIDER_SQL,
 	product: "b.product",
 	channel: "b.channel",
 	model: "b.model",
@@ -35,6 +42,9 @@ export async function handleBreakdowns(url: URL, env: Env): Promise<Response> {
 	const date = readTextParam(url, "date");
 	const deviceId = readTextParam(url, "deviceId");
 	const provider = readTextParam(url, "provider");
+	const canonicalProvider = provider
+		? canonicalizeProvider({ provider })
+		: null;
 	const product = readTextParam(url, "product");
 	const model = readTextParam(url, "model");
 	const channel = readTextParam(url, "channel");
@@ -71,9 +81,9 @@ export async function handleBreakdowns(url: URL, env: Env): Promise<Response> {
 		conditions.push("b.device_id = ?");
 		params.push(deviceId);
 	}
-	if (provider) {
-		conditions.push("b.provider = ?");
-		params.push(provider);
+	if (canonicalProvider) {
+		conditions.push(`${PROVIDER_SQL} = ?`);
+		params.push(canonicalProvider);
 	}
 	if (product) {
 		if (product === "trae") {
@@ -119,7 +129,7 @@ export async function handleBreakdowns(url: URL, env: Env): Promise<Response> {
     SELECT
       b.device_id,
       b.usage_date,
-      b.provider,
+      ${PROVIDER_SQL} AS provider,
       b.product,
       b.channel,
       b.model,
@@ -161,6 +171,7 @@ export async function handleBreakdowns(url: URL, env: Env): Promise<Response> {
 	const data = await Promise.all(
 		(rows.results ?? []).map(async (row) => ({
 			...row,
+			provider: canonicalizeProvider({ provider: row.provider, model: row.model }),
 			estimated_cost_usd: roundUsd(row.estimated_cost_usd),
 			total_tokens: Number(row.total_tokens ?? 0),
 			project: (

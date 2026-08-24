@@ -41,6 +41,7 @@ describe('catalog 结构', () => {
 describe('pricing identity normalization', () => {
   it.each([
     ['openai-codex', 'pi', 'gpt-5.6-luna', 'openai', 'codex', 'gpt-5.6-luna'],
+    ['openai_codex', 'pi', 'gpt-5.6-luna', 'openai', 'codex', 'gpt-5.6-luna'],
     ['openai-codex', 'pi', 'gpt-5.6-sol', 'openai', 'codex', 'gpt-5.6-sol'],
     ['xai', 'pi', 'grok-4.5', 'xai', 'grok-build', 'grok-4.5'],
     ['xai', 'grok-build', 'grok-4.5', 'xai', 'grok-build', 'grok-4.5'],
