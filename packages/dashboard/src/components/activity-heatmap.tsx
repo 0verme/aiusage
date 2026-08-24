@@ -9,17 +9,17 @@ import type { Locale } from '../i18n';
 
 // ── 常量 ──
 
-const CELL = 13;  // 格子固定尺寸 px
-const GAP = 3;    // 间距 px
-const STEP = CELL + GAP;
+const MIN_CELL = 11;
+const MAX_CELL = 16;
+const DEFAULT_CELL = 13;
+const GAP = 3;
 const DAYS = 7;
 const DAY_LABEL_W = 34;
 const MONTH_LABELS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
 const GAMMA = 0.7;
 const MONTH_ROW = 22;
 const LEGEND_ROW = 34;
-// Less(~22px) gap 5格 gap More(~26px)
-const LEGEND_W = 22 + GAP + 5 * STEP - GAP + GAP + 26;
+// Less(~22px) gap 5格 gap More(~26px)；宽度随格子尺寸同步变化
 
 // ── 颜色配置 ──
 // CSS variables auto-switch between light/dark, so a single level array suffices.
@@ -144,15 +144,21 @@ export function ActivityHeatmap({ days, metricLabel = 'tokens', locale = 'en', c
     return { grid, monthMarks, maxActivity, activeDays, streak, longestStreak, totalActivity };
   }, [days, weeks]);
 
-  // 热力图保持固定尺寸；窄屏由外层滚动容器承载。
-  const svgInnerW = weeks * STEP - GAP;
+  // 让格子在热力图主体可用宽度内自然放大；低于最小尺寸时保留横向滚动。
+  const responsiveCell = (containerWidth - DAY_LABEL_W - (weeks - 1) * GAP) / weeks;
+  const cellSize = containerWidth > 0
+    ? Math.min(MAX_CELL, Math.max(MIN_CELL, responsiveCell))
+    : DEFAULT_CELL;
+  const step = cellSize + GAP;
+  const svgInnerW = weeks * step - GAP;
   const svgW = DAY_LABEL_W + svgInnerW;
-  const svgH = DAYS * STEP - GAP;
+  const svgH = DAYS * step - GAP;
   const totalH = MONTH_ROW + svgH + LEGEND_ROW;
-  const legendX = Math.max(DAY_LABEL_W, svgW - LEGEND_W);
+  const legendW = 22 + 5 * step + GAP + 26;
+  const legendX = Math.max(DAY_LABEL_W, svgW - legendW);
   let lastMonthLabelX = -Infinity;
   const monthLabelMarks = monthMarks.map((mark) => {
-    const x = Math.max(mark.weekIdx * STEP, lastMonthLabelX + 32);
+    const x = Math.max(mark.weekIdx * step, lastMonthLabelX + 32);
     lastMonthLabelX = x;
     return { ...mark, x };
   });
@@ -185,7 +191,7 @@ export function ActivityHeatmap({ days, metricLabel = 'tokens', locale = 'en', c
     ? Math.min(Math.max(tooltip.x - tooltipWidth / 2, 4), tooltipMaxX)
     : 0;
   const tooltipTop = tooltip
-    ? Math.min(Math.max(tooltip.y < 66 ? tooltip.y + CELL + 8 : tooltip.y - 52, 4), tooltipMaxY)
+    ? Math.min(Math.max(tooltip.y < 66 ? tooltip.y + cellSize + 8 : tooltip.y - 52, 4), tooltipMaxY)
     : 0;
 
   return (
@@ -234,7 +240,7 @@ export function ActivityHeatmap({ days, metricLabel = 'tokens', locale = 'en', c
                 <text
                   key={dayIdx}
                   x={DAY_LABEL_W - 6}
-                  y={MONTH_ROW + dayIdx * STEP + CELL / 2}
+                  y={MONTH_ROW + dayIdx * step + cellSize / 2}
                   fontSize={10}
                   fill={LABEL_FILL}
                   fontFamily="system-ui, sans-serif"
@@ -267,15 +273,15 @@ export function ActivityHeatmap({ days, metricLabel = 'tokens', locale = 'en', c
                       const activityValue = data?.activityValue ?? 0;
                       const cost = data?.estimatedCostUsd ?? 0;
                       const fill = colorForValue(activityValue, maxActivity);
-                      const x = wi * STEP;
-                      const y = di * STEP;
+                      const x = wi * step;
+                      const y = di * step;
                       return (
                         <rect
                           key={dateStr}
                           x={x}
                           y={y}
-                          width={CELL}
-                          height={CELL}
+                          width={cellSize}
+                          height={cellSize}
                           rx={2}
                           fill={fill}
                           stroke="var(--grid)"
@@ -288,7 +294,7 @@ export function ActivityHeatmap({ days, metricLabel = 'tokens', locale = 'en', c
                             const originX = containerRect && rootRect ? containerRect.left - rootRect.left : 0;
                             const originY = containerRect && rootRect ? containerRect.top - rootRect.top : 0;
                             setTooltip({
-                              x: originX + DAY_LABEL_W + x + CELL / 2 - scrollLeft,
+                              x: originX + DAY_LABEL_W + x + cellSize / 2 - scrollLeft,
                               y: originY + MONTH_ROW + y,
                               date: dateStr,
                               activityValue,
@@ -309,17 +315,17 @@ export function ActivityHeatmap({ days, metricLabel = 'tokens', locale = 'en', c
                 {[0, 1, 2, 3, 4].map((lvl) => (
                   <rect
                     key={lvl}
-                    x={24 + lvl * STEP}
+                    x={24 + lvl * step}
                     y={0}
-                    width={CELL}
-                    height={CELL}
+                    width={cellSize}
+                    height={cellSize}
                     rx={2}
                     fill={LEVELS[lvl]}
                     stroke="var(--grid)"
                     strokeWidth={1}
                   />
                 ))}
-                <text x={24 + 5 * STEP} y={10} fontSize={10} fill={LABEL_FILL} fontFamily="system-ui, sans-serif">{locale === 'zh' ? '多' : 'More'}</text>
+                <text x={24 + 5 * step} y={10} fontSize={10} fill={LABEL_FILL} fontFamily="system-ui, sans-serif">{locale === 'zh' ? '多' : 'More'}</text>
               </g>
             </svg>
           )}
