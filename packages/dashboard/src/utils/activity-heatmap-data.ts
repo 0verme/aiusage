@@ -1,5 +1,7 @@
 import type { DailyTrendItem, HeatmapDay } from '@aiusage/shared';
 
+export const ACTIVITY_HEATMAP_WEEKS = 53;
+
 export interface ActivityHeatmapDay {
   usageDate: string;
   activityValue: number;
@@ -36,6 +38,32 @@ export function calculateActivityStreak(days: ActivityHeatmapDay[], today = new 
   }
 
   return streak;
+}
+
+export function calculateLongestActivityStreak(
+  days: ActivityHeatmapDay[],
+  startDate: Date,
+  endDate = new Date(),
+): number {
+  const activityByDate = new Map(days.map(day => [day.usageDate, day.activityValue]));
+  const start = new Date(startDate);
+  const end = new Date(endDate);
+  start.setHours(0, 0, 0, 0);
+  end.setHours(0, 0, 0, 0);
+
+  let longestStreak = 0;
+  let currentStreak = 0;
+  for (let date = start; date <= end; date = addLocalDays(date, 1)) {
+    const activity = activityByDate.get(toLocalDateString(date)) ?? 0;
+    if (activity > 0) {
+      currentStreak++;
+      longestStreak = Math.max(longestStreak, currentStreak);
+    } else {
+      currentStreak = 0;
+    }
+  }
+
+  return longestStreak;
 }
 
 export function buildActivityHeatmapData({
