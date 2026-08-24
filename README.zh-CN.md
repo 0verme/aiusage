@@ -1,4 +1,4 @@
-<p align="center"><code>npm i -g @0verme/aiusage-cli</code></p>
+<p align="center"><strong>AIUsage 0verme Fork v1.0.0</strong></p>
 
 <p align="center">
   <strong>AIUsage</strong> 追踪所有 AI 工具在所有设备上的 Token 用量与成本，<br>
@@ -81,10 +81,36 @@ npx wrangler login
 pnpm setup
 ```
 
-### 本地报告（无需服务端）
+### 0verme Fork
+
+本仓库是 0verme fork，并提供独立的 CLI package：
+`@0verme/aiusage-cli`。
+
+本次 v1.0.0 尚未完成 npm registry 发布。当前可从源码构建，用于 NAS 或其他
+vendor 安装：
 
 ```bash
-npm i -g @0verme/aiusage-cli
+pnpm install
+pnpm --filter @0verme/aiusage-cli build
+cd packages/cli
+npm pack
+npm install -g ./0verme-aiusage-cli-1.0.0.tgz
+```
+
+本 fork 重点包含：
+
+- Public API privacy hardening
+- Pricing Truth normalization
+- Historical cost recalculation
+- Pi 自定义 session / `--range all` 支持
+- NAS/self-host 部署改进
+
+### 本地报告（无需服务端）
+
+从源码或 vendor tarball 安装 CLI 后：
+
+```bash
+aiusage --version
 aiusage report --range 7d
 ```
 
@@ -97,7 +123,8 @@ AIUsage 采用 **Fork 更新模式** — Fork 本仓库，将你的 Fork 连接�
 3. 通过 GitHub 的 "Sync fork" 按钮或 `git merge upstream/main` **同步**上游更新
 4. Cloudflare 在每次推送到你的 Fork 时**自动重新部署**
 
-CLI 更新需单独执行：`npm update -g @0verme/aiusage-cli`
+CLI 需要单独更新。在 npm 发布前请重新构建源码或 vendor 包；正式发布后建议固定版本，
+例如 `npm install -g @0verme/aiusage-cli@1.0.0`，不要默认使用 `@latest`。
 
 详见 [**更新指南**](./docs/update-guide.md)，包含通过 GitHub Actions 实现全自动同步的方案。
 
