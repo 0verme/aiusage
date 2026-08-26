@@ -42,8 +42,8 @@ function getRanges(t: T) {
     { value: '7d', label: t.range7d },
     { value: '30d', label: t.range30d },
     { value: '90d', label: t.range90d },
-    { value: 'month', label: t.thisMonth },
     { value: '180d', label: t.range180d },
+    { value: 'month', label: t.thisMonth },
   ] as const;
 }
 
