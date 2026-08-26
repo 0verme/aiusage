@@ -44,52 +44,33 @@ jobs:
 
       - run: pnpm install --frozen-lockfile
 
-      - name: Inject Cloudflare deployment config
-        run: |
-          if [ -z "$CLOUDFLARE_D1_DATABASE_ID" ]; then
-            echo "::error::Missing GitHub secret CLOUDFLARE_D1_DATABASE_ID"
-            exit 1
-          fi
-          node - <<'NODE'
-          const fs = require('node:fs');
-          const path = 'packages/worker/wrangler.jsonc';
-          let config = fs.readFileSync(path, 'utf8');
-          if (process.env.CLOUDFLARE_WORKER_NAME) {
-            config = config.replace(
-              /"name":\s*"[^"]+"/,
-              `"name": "${process.env.CLOUDFLARE_WORKER_NAME}"`,
-            );
-          }
-          const databaseId = JSON.stringify(
-            process.env.CLOUDFLARE_D1_DATABASE_ID,
-          );
-          if (/"database_id":\s*"[^"]+"/.test(config)) {
-            config = config.replace(
-              /"database_id":\s*"[^"]+"/,
-              `"database_id": ${databaseId}`,
-            );
-          } else {
-            config = config.replace(
-              /("database_name":\s*"[^"]+")/,
-              `$1,\n      "database_id": ${databaseId}`,
-            );
-          }
-          fs.writeFileSync(path, config);
-          NODE
-        env:
-          CLOUDFLARE_WORKER_NAME: ${{ secrets.CLOUDFLARE_WORKER_NAME }}
-          CLOUDFLARE_D1_DATABASE_ID: ${{ secrets.CLOUDFLARE_D1_DATABASE_ID }}
-
-      - name: Build Dashboard & Deploy Worker
+      # Worker name (aiusage) and D1 database identity (aiusage-db /
+      # 9afb8ff2-a46b-4edb-ac9e-ea5471f19eb7) live in packages/worker/wrangler.jsonc.
+      # (Removed the old inject step: it referenced CLOUDFLARE_WORKER_NAME /
+      # CLOUDFLARE_D1_DATABASE_ID secrets that do not exist on this repository.)
+      - name: Build Dashboard & prepare Worker public assets
         run: |
           pnpm --filter @aiusage/dashboard build
           cp -r packages/dashboard/dist packages/worker/public
-          cd packages/worker
-          npx wrangler d1 migrations apply aiusage-db --remote
-          npx wrangler deploy
+
+      - name: Apply D1 migrations (aiusage-db, remote)
+        run: npx wrangler d1 migrations apply aiusage-db --remote
+        working-directory: packages/worker
         env:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+
+      - name: Deploy Worker (shared primitive)
+        uses: 0verme/ci-workflows/.github/actions/cloudflare-worker-deploy@v1
+        with:
+          working_directory: packages/worker
+          command: deploy
+          # Match the project-pinned wrangler (devDependency 4.80.0) used by the
+          # D1 migration step above; the Action default (3.90.0) predates the
+          # ratelimits/cache/assets config shapes in this repository.
+          wrangler_version: 4.80.0
+          api_token: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          account_id: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
 
   publish:
     needs: build
@@ -148,87 +129,3 @@ jobs:
           publish_if_new packages/pricing false
         env:
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
-
-  # TEMPORARY diagnostic job — read-only D1 auth investigation.
-  # Will be removed before merge; not part of the final CI chain.
-  d1-diagnostic:
-    if: github.event_name == 'workflow_dispatch'
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v6
-      - uses: pnpm/action-setup@v5
-      - uses: actions/setup-node@v6
-        with:
-          node-version: 22
-          cache: pnpm
-
-      - run: pnpm install --frozen-lockfile
-
-      - name: Token identity (read-only verify endpoint)
-        run: |
-          echo "== GET /user/tokens/verify =="
-          curl -sS -w '\nHTTP_STATUS=%{http_code}\n' \
-            -H "Authorization: Bearer ${CLOUDFLARE_API_TOKEN}" \
-            "https://api.cloudflare.com/client/v4/user/tokens/verify"
-        env:
-          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
-
-      - name: Account resolution (read-only)
-        run: |
-          echo "== GET /accounts/{id} =="
-          curl -sS -w '\nHTTP_STATUS=%{http_code}\n' \
-            -H "Authorization: Bearer ${CLOUDFLARE_API_TOKEN}" \
-            "https://api.cloudflare.com/client/v4/accounts/${CLOUDFLARE_ACCOUNT_ID}"
-          echo
-          echo "== GET /memberships (account context of token) =="
-          curl -sS -w '\nHTTP_STATUS=%{http_code}\n' \
-            -H "Authorization: Bearer ${CLOUDFLARE_API_TOKEN}" \
-            "https://api.cloudflare.com/client/v4/memberships?per_page=5"
-        env:
-          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
-          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
-
-      - name: Control probes (read-only, same token+account)
-        run: |
-          echo "== Workers scripts list =="
-          curl -sS -w '\nHTTP_STATUS=%{http_code}\n' \
-            -H "Authorization: Bearer ${CLOUDFLARE_API_TOKEN}" \
-            "https://api.cloudflare.com/client/v4/accounts/${CLOUDFLARE_ACCOUNT_ID}/workers/scripts?per_page=1"
-          echo
-          echo "== Pages projects list =="
-          curl -sS -w '\nHTTP_STATUS=%{http_code}\n' \
-            -H "Authorization: Bearer ${CLOUDFLARE_API_TOKEN}" \
-            "https://api.cloudflare.com/client/v4/accounts/${CLOUDFLARE_ACCOUNT_ID}/pages/projects?per_page=1"
-        env:
-          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
-          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
-
-      - name: D1 list (read-only)
-        run: |
-          echo "== GET /d1/database =="
-          curl -sS -w '\nHTTP_STATUS=%{http_code}\n' \
-            -H "Authorization: Bearer ${CLOUDFLARE_API_TOKEN}" \
-            "https://api.cloudflare.com/client/v4/accounts/${CLOUDFLARE_ACCOUNT_ID}/d1/database?per_page=20"
-        env:
-          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
-          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
-
-      - name: D1 by-id (read-only, id from repo wrangler.jsonc)
-        run: |
-          DB_ID=$(node -p "JSON.parse(require('node:fs').readFileSync('packages/worker/wrangler.jsonc','utf8').replace(/\/\/.*$/gm,'')).d1_databases[0].database_id")
-          echo "database_id from repo config: ${DB_ID}"
-          echo "== GET /d1/database/{id} =="
-          curl -sS -w '\nHTTP_STATUS=%{http_code}\n' \
-            -H "Authorization: Bearer ${CLOUDFLARE_API_TOKEN}" \
-            "https://api.cloudflare.com/client/v4/accounts/${CLOUDFLARE_ACCOUNT_ID}/d1/database/${DB_ID}"
-        env:
-          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
-          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
-
-      - name: Wrangler D1 list (project-local wrangler, read-only)
-        run: |
-          cd packages/worker
-          npx wrangler d1 list
-        env:
-          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
-          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
