@@ -76,6 +76,10 @@ jobs:
     needs: build
     if: github.ref == 'refs/heads/main' && github.event_name == 'push'
     runs-on: ubuntu-latest
+    env:
+      # Guard: NPM_TOKEN is not configured on this repo (verified 2026-08-26);
+      # without it the publish step always failed with ENEEDAUTH on main push.
+      NPM_TOKEN: ${{ secrets.NPM_TOKEN }}
     steps:
       - uses: actions/checkout@v6
       - uses: pnpm/action-setup@v5
@@ -93,6 +97,7 @@ jobs:
           --filter @0verme/aiusage-cli
 
       - name: Publish packages (if versions are new)
+        if: env.NPM_TOKEN != ''
         run: |
           publish_if_new() {
             local pkg_dir="$1"
