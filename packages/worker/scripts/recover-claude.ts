@@ -261,7 +261,9 @@ export function resolveUndoBookmark(
 	preOperationCurrentBookmark: string,
 ): UndoBookmarkResolution {
 	if (!preOperationCurrentBookmark.trim()) {
-		throw new Error("缺少 pre-operation CURRENT_BOOKMARK，无法进入 fail-safe 恢复。");
+		throw new Error(
+			"缺少 pre-operation CURRENT_BOOKMARK，无法进入 fail-safe 恢复。",
+		);
 	}
 	const previousBookmark = extractAuthoritativeUndoBookmark(response);
 	if (previousBookmark) {
@@ -291,7 +293,15 @@ export function buildWranglerRestoreArgs(
 	database: string,
 	bookmark: string,
 ): string[] {
-	return ["d1", "time-travel", "restore", database, "--bookmark", bookmark, "--json"];
+	return [
+		"d1",
+		"time-travel",
+		"restore",
+		database,
+		"--bookmark",
+		bookmark,
+		"--json",
+	];
 }
 
 export async function runWithFailSafeCurrentRestore<T>(
@@ -343,9 +353,7 @@ export function buildSemanticSnapshot(
 		tables[name] = {
 			present,
 			rowCount: rows.length,
-			semanticHash: hashUtf8(
-				canonicalJson({ present, rows: canonicalRows }),
-			),
+			semanticHash: hashUtf8(canonicalJson({ present, rows: canonicalRows })),
 			rows,
 			keyFields,
 		};
@@ -368,7 +376,10 @@ export function compareSemanticSnapshots(
 	for (const name of tableNames) {
 		const expectedTable = expected.tables[name] ?? emptySemanticTable();
 		const actualTable = actual.tables[name] ?? emptySemanticTable();
-		const mismatchCount = semanticTableMismatchCount(expectedTable, actualTable);
+		const mismatchCount = semanticTableMismatchCount(
+			expectedTable,
+			actualTable,
+		);
 		const comparison = {
 			expected: semanticTableSummary(expectedTable),
 			actual: semanticTableSummary(actualTable),
@@ -430,7 +441,10 @@ function sortSemanticRows(
 }
 
 function compareSemanticValues(left: unknown, right: unknown): number {
-	return compareStrings(canonicalJson(left ?? null), canonicalJson(right ?? null));
+	return compareStrings(
+		canonicalJson(left ?? null),
+		canonicalJson(right ?? null),
+	);
 }
 
 function semanticTableMismatchCount(
@@ -471,9 +485,7 @@ function semanticRowKey(
 	keyFields: readonly string[],
 ): string {
 	return canonicalJson(
-		keyFields.length > 0
-			? keyFields.map((field) => row[field] ?? null)
-			: row,
+		keyFields.length > 0 ? keyFields.map((field) => row[field] ?? null) : row,
 	);
 }
 
@@ -615,10 +627,7 @@ async function main(): Promise<void> {
 		queryRows<BreakdownRow>(BREAKDOWN_QUERY),
 		queryOptionalRows<ActivityRow>("daily_activity_breakdown", ACTIVITY_QUERY),
 		queryRows(PRODUCT_DISTRIBUTION_QUERY),
-		queryOptionalRows(
-			"daily_activity_breakdown",
-			ACTIVITY_DISTRIBUTION_QUERY,
-		),
+		queryOptionalRows("daily_activity_breakdown", ACTIVITY_DISTRIBUTION_QUERY),
 		querySemanticSnapshot(),
 	]);
 	const currentDailyKeys = currentSemanticSnapshot.tables.daily_usage.rows;
@@ -737,7 +746,10 @@ async function main(): Promise<void> {
 				historicalDistribution,
 			);
 			await writeJson(
-				join(outputDir, "historical-activity-provider-product-distribution.json"),
+				join(
+					outputDir,
+					"historical-activity-provider-product-distribution.json",
+				),
 				historicalActivityDistribution,
 			);
 		},
@@ -749,7 +761,9 @@ async function main(): Promise<void> {
 				undoBookmarkSource = "pre-operation-current-bookmark-emergency";
 			}
 			const authoritativeUndoBookmark =
-				undoBookmarkSource === "restore.previous_bookmark" ? undoBookmark : null;
+				undoBookmarkSource === "restore.previous_bookmark"
+					? undoBookmark
+					: null;
 			writeLog(
 				`AUTHORITATIVE_UNDO_BOOKMARK=${authoritativeUndoBookmark ?? "UNAVAILABLE"}`,
 			);
@@ -772,11 +786,7 @@ async function main(): Promise<void> {
 									authoritative: false,
 									previousBookmark: null,
 								};
-					await writeUndoBookmarkArtifacts(
-						outputDir,
-						artifactResolution,
-						null,
-					);
+					await writeUndoBookmarkArtifacts(outputDir, artifactResolution, null);
 					undoBookmarkArtifactWritten = true;
 				} catch (error) {
 					writeLog(
@@ -880,7 +890,8 @@ async function main(): Promise<void> {
 		affectedDates: report.affectedDates,
 		missingDailyUsageParents,
 		safeToExecuteInsertSql:
-			validatedBaseline.semanticMatches && missingDailyUsageParents.length === 0,
+			validatedBaseline.semanticMatches &&
+			missingDailyUsageParents.length === 0,
 		sqlExecuted: false,
 	};
 
@@ -1408,7 +1419,9 @@ Options:
 
 function isMainModule(): boolean {
 	const entrypoint = process.argv[1];
-	return Boolean(entrypoint && resolve(entrypoint) === fileURLToPath(import.meta.url));
+	return Boolean(
+		entrypoint && resolve(entrypoint) === fileURLToPath(import.meta.url),
+	);
 }
 
 if (isMainModule()) await main();

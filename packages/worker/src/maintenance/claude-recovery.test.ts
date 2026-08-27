@@ -74,14 +74,17 @@ describe("Claude recovery dataset selection", () => {
 		const rows = selectClaudeRows([
 			breakdown({ provider: "anthropic" }),
 			breakdown({ provider: "deepseek" }),
-			breakdown({ provider: "openai", product: "opencode", model: "claude-sonnet-4-6" }),
+			breakdown({
+				provider: "openai",
+				product: "opencode",
+				model: "claude-sonnet-4-6",
+			}),
 		]);
 
 		expect(rows.map((row) => row.provider)).toEqual(["anthropic", "deepseek"]);
-		expect(diffClaudeRows(rows, []).missing.map((row) => row.provider)).toEqual([
-			"anthropic",
-			"deepseek",
-		]);
+		expect(diffClaudeRows(rows, []).missing.map((row) => row.provider)).toEqual(
+			["anthropic", "deepseek"],
+		);
 	});
 
 	it("rejects duplicate unique keys instead of silently changing the diff", () => {
@@ -277,17 +280,27 @@ describe("Claude recovery SQL", () => {
 		expect(sql).toContain(
 			"SELECT SUM(input_tokens) FROM daily_usage_breakdown",
 		);
-		expect(sql).toContain("SELECT SUM(cached_input_tokens) FROM daily_usage_breakdown");
-		expect(sql).toContain("SELECT SUM(cache_write_tokens) FROM daily_usage_breakdown");
-		expect(sql).toContain("SELECT SUM(output_tokens) FROM daily_usage_breakdown");
-		expect(sql).toContain("SELECT SUM(reasoning_output_tokens) FROM daily_usage_breakdown");
+		expect(sql).toContain(
+			"SELECT SUM(cached_input_tokens) FROM daily_usage_breakdown",
+		);
+		expect(sql).toContain(
+			"SELECT SUM(cache_write_tokens) FROM daily_usage_breakdown",
+		);
+		expect(sql).toContain(
+			"SELECT SUM(output_tokens) FROM daily_usage_breakdown",
+		);
+		expect(sql).toContain(
+			"SELECT SUM(reasoning_output_tokens) FROM daily_usage_breakdown",
+		);
 		expect(sql).toContain("estimated_cost_usd = ROUND(COALESCE");
 		expect(sql).toContain("cost_status = 'unavailable'");
 		expect(sql).toContain("cost_status = 'estimated'");
 		expect(sql).toContain("pricing_version = '2026-08-27-v1'");
 		expect(sql).toContain("COALESCE(project_alias, project_display)");
 		expect(sql).toContain("GROUP BY model");
-		expect(sql).toContain("WHERE device_id = 'device-a' AND usage_date = '2026-06-18'");
+		expect(sql).toContain(
+			"WHERE device_id = 'device-a' AND usage_date = '2026-06-18'",
+		);
 		expect(sql).not.toContain("DELETE FROM");
 	});
 
@@ -298,9 +311,7 @@ describe("Claude recovery SQL", () => {
 			String.raw`E:\AI生成代码\aiusage`,
 		];
 		const sql = buildRestoreMissingClaudeSql(
-			values.map((project) =>
-				breakdown({ project, project_display: project }),
-			),
+			values.map((project) => breakdown({ project, project_display: project })),
 		);
 		const readBack = Buffer.from(sql, "utf8").toString("utf8");
 
