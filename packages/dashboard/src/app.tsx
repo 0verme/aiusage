@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState, useCallback } from 'react';
-import { RotateCw, Globe, Sun, Moon, Monitor } from 'lucide-react';
+import { RotateCw, Sun, Moon, Monitor } from 'lucide-react';
 import type { Locale, T } from './i18n';
 import { I18N, getStoredLocale } from './i18n';
 import type { ThemeMode } from './theme';
@@ -28,7 +28,7 @@ import { FlowChart } from './components/flow-chart';
 import { DonutSection } from './components/donut-section';
 import { ActivityHeatmap } from './components/activity-heatmap';
 import { buildActivityHeatmapData } from './utils/activity-heatmap-data';
-import { HeaderLogo, FooterLogo, useFaviconFromLogo } from './components/site-logo';
+import { HeaderLogo, useFaviconFromLogo } from './components/site-logo';
 import { SITE_TITLE } from './site-config';
 import type { InteractionMetricItem, InteractionMetricsPayload } from '@aiusage/shared';
 
@@ -656,45 +656,16 @@ export function App() {
       )}
 
       {/* ── Footer ── */}
-      <footer className="fade-up mt-16 border-t pb-10 pt-8" style={{ borderColor: 'var(--border)' }}>
-        <div className="flex flex-col items-center gap-4">
-          <div className="flex items-center gap-3">
-            <span className="flex items-center gap-2 font-display text-[14px] font-semibold" style={{ color: 'var(--fg)' }}>
-              <FooterLogo />
-              {SITE_TITLE}
-            </span>
-            {health?.version && (
-              <span
-                className="font-mono rounded-full px-2 py-0.5 text-[10px] font-medium"
-                style={{ background: 'var(--cell)', color: 'var(--fg3)' }}
-              >
-                v{health.version}
-              </span>
-            )}
-          </div>
-          <div className="flex flex-wrap items-center justify-center gap-x-3 gap-y-2 font-mono text-[12px]" style={{ color: 'var(--fg3)' }}>
-            <a href="/pricing" className="transition-colors hover:opacity-80" style={{ color: 'var(--fg2)' }}>
-              {t.pricing}
-            </a>
-            <span style={{ opacity: 0.4 }}>·</span>
-            <a href="/embed/docs" className="transition-colors hover:opacity-80" style={{ color: 'var(--fg2)' }}>
-              {t.embedWidgets}
-            </a>
-            <span style={{ opacity: 0.4 }}>·</span>
-            <a
-              href="https://token.overme.cn"
-              target="_blank"
-              rel="noopener noreferrer"
-              className="flex items-center gap-1.5 transition-colors hover:opacity-80"
-              style={{ color: 'var(--accent)' }}
-            >
-              <Globe className="h-3.5 w-3.5" />
-              <span>token.overme.cn</span>
-            </a>
-            <span style={{ opacity: 0.4 }}>·</span>
-            <span style={{ color: 'var(--fg2)' }}>Powered by Overme</span>
-          </div>
-        </div>
+      <footer className="fade-up mt-12 flex justify-center border-t pb-6 pt-5 sm:mt-14" style={{ borderColor: 'var(--border)' }}>
+        <a
+          href="https://github.com/0verme/aiusage"
+          target="_blank"
+          rel="noopener noreferrer"
+          className="font-mono text-[11px] transition-colors hover:text-[var(--fg2)] sm:text-[12px]"
+          style={{ color: 'var(--fg3)' }}
+        >
+          0verme/aiusage ↗
+        </a>
       </footer>
     </main>
   );
