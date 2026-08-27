@@ -6,6 +6,7 @@ export const CLAUDE_PRODUCT_ALIASES = [
 	"claude",
 ] as const;
 
+/** These fields are compared as raw SQLite TEXT values; do not normalize case. */
 export const CLAUDE_BREAKDOWN_KEY_FIELDS = [
 	"device_id",
 	"usage_date",
@@ -266,7 +267,7 @@ export function summarizeProductPairs(
 	for (const row of rows) {
 		const provider = stringValue(row.provider, "unknown");
 		const product = stringValue(row.product, "unknown");
-		const key = `${provider}\0${product}`;
+		const key = JSON.stringify([provider, product]);
 		const date = stringValue(row.usage_date, "");
 		const existing = groups.get(key);
 		if (existing) {
@@ -285,9 +286,9 @@ export function summarizeProductPairs(
 	}
 	return [...groups.values()].sort(
 		(left, right) =>
-			left.firstDate?.localeCompare(right.firstDate ?? "") ||
-			left.provider.localeCompare(right.provider) ||
-			left.product.localeCompare(right.product),
+			compareStrings(left.firstDate ?? "", right.firstDate ?? "") ||
+			compareStrings(left.provider, right.provider) ||
+			compareStrings(left.product, right.product),
 	);
 }
 
@@ -443,7 +444,7 @@ export function buildDailyCoverage(
 	}
 
 	return [...groups.entries()]
-		.sort(([left], [right]) => left.localeCompare(right))
+		.sort(([left], [right]) => compareStrings(left, right))
 		.map(([date, group]) => ({
 			date,
 			rows: group.rows,
@@ -538,15 +539,15 @@ export function buildAffectedDays(
 	for (const row of rows) {
 		const deviceId = requireString(row.device_id, "device_id");
 		const usageDate = requireDate(row.usage_date);
-		days.set(`${deviceId}\0${usageDate}`, {
+		days.set(JSON.stringify([deviceId, usageDate]), {
 			device_id: deviceId,
 			usage_date: usageDate,
 		});
 	}
 	return [...days.values()].sort(
 		(left, right) =>
-			left.device_id.localeCompare(right.device_id) ||
-			left.usage_date.localeCompare(right.usage_date),
+			compareStrings(left.device_id, right.device_id) ||
+			compareStrings(left.usage_date, right.usage_date),
 	);
 }
 
@@ -665,14 +666,14 @@ export function buildAffectedDailyUsageSql(
 	const statements = [...affectedDays]
 		.sort(
 			(left, right) =>
-				left.device_id.localeCompare(right.device_id) ||
-				left.usage_date.localeCompare(right.usage_date),
+				compareStrings(left.device_id, right.device_id) ||
+				compareStrings(left.usage_date, right.usage_date),
 		)
 		.map((day) => {
 			const deviceId = sqlString(day.device_id);
 			const usageDate = sqlString(day.usage_date);
 			const scope = `device_id = ${deviceId} AND usage_date = ${usageDate}`;
-			const topProject = `(SELECT COALESCE(project_alias, project_display, 'unknown')\n          FROM daily_usage_breakdown\n          WHERE ${scope}\n          GROUP BY COALESCE(project_alias, project_display)\n          ORDER BY SUM(estimated_cost_usd) DESC, COALESCE(project_alias, project_display) ASC\n          LIMIT 1)`;
+			const topProject = `(SELECT COALESCE(project_alias, project_display)\n          FROM daily_usage_breakdown\n          WHERE ${scope}\n          GROUP BY COALESCE(project_alias, project_display)\n          ORDER BY SUM(estimated_cost_usd) DESC, COALESCE(project_alias, project_display) ASC\n          LIMIT 1)`;
 			const topModel = `(SELECT model\n          FROM daily_usage_breakdown\n          WHERE ${scope}\n          GROUP BY model\n          ORDER BY SUM(estimated_cost_usd) DESC, model ASC\n          LIMIT 1)`;
 			const topProjectCost = `(SELECT SUM(estimated_cost_usd)\n          FROM daily_usage_breakdown\n          WHERE ${scope}\n          GROUP BY COALESCE(project_alias, project_display)\n          ORDER BY SUM(estimated_cost_usd) DESC, COALESCE(project_alias, project_display) ASC\n          LIMIT 1)`;
 			const topModelCost = `(SELECT SUM(estimated_cost_usd)\n          FROM daily_usage_breakdown\n          WHERE ${scope}\n          GROUP BY model\n          ORDER BY SUM(estimated_cost_usd) DESC, model ASC\n          LIMIT 1)`;
@@ -745,7 +746,7 @@ function aggregateBy(
 			(left, right) =>
 				right.totalTokens - left.totalTokens ||
 				right.estimatedCostUsd - left.estimatedCostUsd ||
-				left.group.localeCompare(right.group),
+				compareStrings(left.group, right.group),
 		);
 }
 
@@ -808,6 +809,7 @@ function comparableValue(value: unknown, field: string): unknown {
 	return value;
 }
 
+/** JSON string keys preserve case and avoid locale-aware/case-insensitive dedupe. */
 function rowKey(row: RawDatabaseRow, fields: readonly string[]): string {
 	return JSON.stringify(fields.map((field) => row[field] ?? null));
 }
@@ -826,8 +828,10 @@ function sortRowsByFields<T extends RawDatabaseRow>(
 	return [...rows].sort((left, right) => compareObjects(left, right, fields));
 }
 
+/** SQLite's default TEXT comparison is byte/ordinal-oriented, not locale-aware. */
 function compareStrings(left: string, right: string): number {
-	return left.localeCompare(right);
+	if (left === right) return 0;
+	return left < right ? -1 : 1;
 }
 
 function compareObjects(
@@ -838,7 +842,7 @@ function compareObjects(
 	for (const field of fields) {
 		const leftValue = stringValue(left[field], "");
 		const rightValue = stringValue(right[field], "");
-		const comparison = leftValue.localeCompare(rightValue);
+		const comparison = compareStrings(leftValue, rightValue);
 		if (comparison !== 0) return comparison;
 	}
 	return 0;

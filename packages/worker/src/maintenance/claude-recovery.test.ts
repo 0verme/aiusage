@@ -6,6 +6,7 @@ import {
 	compressDateRanges,
 	diffClaudeRows,
 	isClaudeCodeProduct,
+	selectClaudeRows,
 	type ActivityRow,
 	type BreakdownRow,
 } from "./claude-recovery.js";
@@ -69,10 +70,34 @@ describe("Claude recovery dataset selection", () => {
 		expect(isClaudeCodeProduct("legacy-cli", ["legacy-cli"])).toBe(true);
 	});
 
+	it("includes Claude Code rows from any provider", () => {
+		const rows = selectClaudeRows([
+			breakdown({ provider: "anthropic" }),
+			breakdown({ provider: "deepseek" }),
+			breakdown({ provider: "openai", product: "opencode", model: "claude-sonnet-4-6" }),
+		]);
+
+		expect(rows.map((row) => row.provider)).toEqual(["anthropic", "deepseek"]);
+		expect(diffClaudeRows(rows, []).missing.map((row) => row.provider)).toEqual([
+			"anthropic",
+			"deepseek",
+		]);
+	});
+
 	it("rejects duplicate unique keys instead of silently changing the diff", () => {
 		expect(() => diffClaudeRows([breakdown(), breakdown()], [])).toThrow(
 			/Duplicate historical Claude row/,
 		);
+	});
+
+	it("treats E:\\foo and e:\\foo as distinct SQLite primary keys", () => {
+		const upper = breakdown({ project: String.raw`E:\foo` });
+		const lower = breakdown({ project: String.raw`e:\foo` });
+		const diff = diffClaudeRows([upper, lower], [upper]);
+
+		expect(diff.missing).toHaveLength(1);
+		expect(diff.missing[0].project).toBe(lower.project);
+		expect(diff.conflicts).toHaveLength(0);
 	});
 });
 
@@ -211,6 +236,33 @@ describe("Claude recovery SQL", () => {
 		expect(sql).not.toMatch(/DELETE FROM daily_usage_breakdown/i);
 	});
 
+	it("generates INSERT only for MISSING and preserves CONFLICT/CURRENT_ONLY", () => {
+		const historical = [
+			breakdown({ project: "/work/missing" }),
+			breakdown({ project: "/work/conflict", output_tokens: 40 }),
+		];
+		const current = [
+			breakdown({ project: "/work/conflict", output_tokens: 41 }),
+			breakdown({ project: "/work/current-only" }),
+		];
+		const report = buildClaudeDiffReport({
+			historicalRows: historical,
+			currentRows: current,
+			historicalActivityRows: [],
+			currentActivityRows: [],
+			claudeProducts: ["claude-code"],
+		});
+		const sql = buildRestoreMissingClaudeSql(report.missingRows);
+
+		expect(report.missingRows.map((row) => row.project)).toEqual([
+			"/work/missing",
+		]);
+		expect(sql).toContain("'/work/missing'");
+		expect(sql).not.toContain("'/work/conflict'");
+		expect(sql).not.toContain("'/work/current-only'");
+		expect(sql).not.toMatch(/^\s*(?:UPDATE|REPLACE|DELETE)\b/im);
+	});
+
 	it("recalculates only affected daily_usage pairs from breakdown sums", () => {
 		const sql = buildAffectedDailyUsageSql(
 			[
@@ -225,8 +277,36 @@ describe("Claude recovery SQL", () => {
 		expect(sql).toContain(
 			"SELECT SUM(input_tokens) FROM daily_usage_breakdown",
 		);
+		expect(sql).toContain("SELECT SUM(cached_input_tokens) FROM daily_usage_breakdown");
+		expect(sql).toContain("SELECT SUM(cache_write_tokens) FROM daily_usage_breakdown");
+		expect(sql).toContain("SELECT SUM(output_tokens) FROM daily_usage_breakdown");
+		expect(sql).toContain("SELECT SUM(reasoning_output_tokens) FROM daily_usage_breakdown");
+		expect(sql).toContain("estimated_cost_usd = ROUND(COALESCE");
 		expect(sql).toContain("cost_status = 'unavailable'");
+		expect(sql).toContain("cost_status = 'estimated'");
 		expect(sql).toContain("pricing_version = '2026-08-27-v1'");
+		expect(sql).toContain("COALESCE(project_alias, project_display)");
+		expect(sql).toContain("GROUP BY model");
+		expect(sql).toContain("WHERE device_id = 'device-a' AND usage_date = '2026-06-18'");
 		expect(sql).not.toContain("DELETE FROM");
+	});
+
+	it("round-trips Chinese project values and Windows paths through UTF-8 SQL", () => {
+		const values = [
+			"AI生成代码-130df189",
+			"个人品牌网站-5941f682",
+			String.raw`E:\AI生成代码\aiusage`,
+		];
+		const sql = buildRestoreMissingClaudeSql(
+			values.map((project) =>
+				breakdown({ project, project_display: project }),
+			),
+		);
+		const readBack = Buffer.from(sql, "utf8").toString("utf8");
+
+		for (const value of values) {
+			expect(readBack).toContain(`'${value}'`);
+		}
+		expect(readBack).toBe(sql);
 	});
 });

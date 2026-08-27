@@ -57,11 +57,83 @@ FROM daily_activity_breakdown
 GROUP BY provider, product
 ORDER BY first_date, provider, product`;
 
-const DAILY_KEYS_QUERY = `
-SELECT device_id, usage_date
-FROM daily_usage
-ORDER BY device_id, usage_date`;
 const QUERY_PAGE_SIZE = 500;
+const SEMANTIC_SCHEMA_NAMES = [
+	"devices",
+	"daily_usage",
+	"daily_usage_breakdown",
+	"daily_activity_breakdown",
+	"d1_migrations",
+] as const;
+const SEMANTIC_SCHEMA_NAMES_SQL = SEMANTIC_SCHEMA_NAMES.map(
+	(name) => `'${name}'`,
+).join(", ");
+const SCHEMA_QUERY = `
+SELECT type, name, tbl_name, sql
+FROM sqlite_master
+WHERE type IN ('table', 'index', 'trigger', 'view')
+  AND (name IN (${SEMANTIC_SCHEMA_NAMES_SQL}) OR tbl_name IN (${SEMANTIC_SCHEMA_NAMES_SQL}))
+ORDER BY type, name, tbl_name`;
+
+const SEMANTIC_TABLE_SPECS = [
+	{ name: "devices", keyFields: ["device_id"], orderBy: ["device_id"] },
+	{
+		name: "daily_usage",
+		keyFields: ["device_id", "usage_date"],
+		orderBy: ["device_id", "usage_date"],
+	},
+	{
+		name: "daily_usage_breakdown",
+		keyFields: [
+			"device_id",
+			"usage_date",
+			"provider",
+			"product",
+			"channel",
+			"model",
+			"project",
+		],
+		orderBy: [
+			"device_id",
+			"usage_date",
+			"provider",
+			"product",
+			"channel",
+			"model",
+			"project",
+		],
+	},
+	{
+		name: "daily_activity_breakdown",
+		keyFields: [
+			"device_id",
+			"usage_date",
+			"provider",
+			"product",
+			"source",
+			"project",
+			"kind",
+			"name",
+			"confidence",
+		],
+		orderBy: [
+			"device_id",
+			"usage_date",
+			"provider",
+			"product",
+			"source",
+			"project",
+			"kind",
+			"name",
+			"confidence",
+		],
+	},
+	{
+		name: "d1_migrations",
+		keyFields: ["id"],
+		orderBy: ["id"],
+	},
+] as const;
 
 interface Options {
 	remote: boolean;
@@ -79,8 +151,52 @@ interface BookmarkArtifact {
 	response: unknown;
 }
 
-interface BaselineValidation {
+export interface UndoBookmarkResolution {
+	bookmark: string;
+	source:
+		| "restore.previous_bookmark"
+		| "pre-operation-current-bookmark-emergency";
+	authoritative: boolean;
+	previousBookmark: string | null;
+}
+
+export interface SemanticTableSnapshot {
+	present: boolean;
+	rowCount: number;
+	semanticHash: string;
+	rows: RawDatabaseRow[];
+	keyFields: readonly string[];
+}
+
+export interface SemanticSnapshot {
+	tables: Record<string, SemanticTableSnapshot>;
+}
+
+export interface SemanticTableSummary {
+	present: boolean;
+	rowCount: number;
+	semanticHash: string;
+}
+
+export interface SemanticTableComparison {
+	expected: SemanticTableSummary;
+	actual: SemanticTableSummary;
+	mismatchCount: number;
+	matches: boolean;
+}
+
+export interface SemanticComparison {
+	semanticMatches: boolean;
+	semanticMismatchCount: number;
+	tables: Record<string, SemanticTableComparison>;
+}
+
+export interface BaselineValidation {
 	status: "CURRENT STATE RESTORED" | "CURRENT STATE NOT RESTORED";
+	semanticMatches: boolean;
+	semanticMismatchCount: number;
+	semanticTables: Record<string, SemanticTableComparison>;
+	rawExportShaMatches: boolean;
 	expectedSha256: string;
 	actualSha256: string | null;
 	matches: boolean;
@@ -96,13 +212,359 @@ interface RecoveryMetadata {
 	currentBookmark: string;
 	pricingVersion: string;
 	undoBookmark: string | null;
+	undoBookmarkSource: UndoBookmarkResolution["source"] | null;
 	outputDir: string;
 	baselineValidation: BaselineValidation;
+	restoreCurrentAttempted: boolean;
+	restoreCurrentSucceeded: boolean;
 	affectedDeviceDateCount: number;
 	affectedDates: string[];
 	missingDailyUsageParents: AffectedDay[];
 	safeToExecuteInsertSql: boolean;
 	sqlExecuted: false;
+}
+
+export interface SemanticTableInput {
+	present?: boolean;
+	rows?: readonly RawDatabaseRow[];
+	keyFields?: readonly string[];
+}
+
+export function extractAuthoritativeUndoBookmark(
+	value: unknown,
+): string | null {
+	if (Array.isArray(value)) {
+		for (const item of value) {
+			const bookmark = extractAuthoritativeUndoBookmark(item);
+			if (bookmark) return bookmark;
+		}
+		return null;
+	}
+	if (!value || typeof value !== "object") return null;
+	const record = value as Record<string, unknown>;
+	const previousBookmark = record.previous_bookmark;
+	if (
+		typeof previousBookmark === "string" &&
+		previousBookmark.trim().length > 0
+	) {
+		return previousBookmark;
+	}
+	for (const child of Object.values(record)) {
+		const bookmark = extractAuthoritativeUndoBookmark(child);
+		if (bookmark) return bookmark;
+	}
+	return null;
+}
+
+export function resolveUndoBookmark(
+	response: unknown,
+	preOperationCurrentBookmark: string,
+): UndoBookmarkResolution {
+	if (!preOperationCurrentBookmark.trim()) {
+		throw new Error("缺少 pre-operation CURRENT_BOOKMARK，无法进入 fail-safe 恢复。");
+	}
+	const previousBookmark = extractAuthoritativeUndoBookmark(response);
+	if (previousBookmark) {
+		return {
+			bookmark: previousBookmark,
+			source: "restore.previous_bookmark",
+			authoritative: true,
+			previousBookmark,
+		};
+	}
+	return {
+		bookmark: preOperationCurrentBookmark,
+		source: "pre-operation-current-bookmark-emergency",
+		authoritative: false,
+		previousBookmark: null,
+	};
+}
+
+export function buildWranglerExportArgs(
+	database: string,
+	output: string,
+): string[] {
+	return ["d1", "export", database, "--remote", "--output", output];
+}
+
+export function buildWranglerRestoreArgs(
+	database: string,
+	bookmark: string,
+): string[] {
+	return ["d1", "time-travel", "restore", database, "--bookmark", bookmark, "--json"];
+}
+
+export async function runWithFailSafeCurrentRestore<T>(
+	operation: () => Promise<T>,
+	restoreCurrent: () => Promise<void>,
+): Promise<T> {
+	try {
+		return await operation();
+	} finally {
+		await restoreCurrent();
+	}
+}
+
+export async function restoreCurrentStateSafely(
+	bookmark: string,
+	restore: (bookmark: string) => Promise<unknown> = restoreToBookmark,
+	authoritativeBookmark: string | null = null,
+): Promise<void> {
+	writeLog(`RESTORE_CURRENT_ATTEMPTED=true`);
+	writeLog(`RESTORE_CURRENT_TARGET_BOOKMARK=${bookmark}`);
+	try {
+		await restore(bookmark);
+		writeLog("RESTORE_CURRENT_SUCCEEDED=true");
+	} catch (error) {
+		writeLog("!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!");
+		writeLog("CRITICAL: RESTORE_CURRENT_SUCCEEDED=false");
+		writeLog(
+			`AUTHORITATIVE_UNDO_BOOKMARK=${authoritativeBookmark ?? "UNAVAILABLE"}`,
+		);
+		writeLog(
+			`MANUAL_RECOVERY_COMMAND=wrangler d1 time-travel restore ${DATABASE} --bookmark=${bookmark}`,
+		);
+		writeLog("人工恢复 current state 后才能继续任何分析或 SQL 操作。");
+		throw new Error(
+			`恢复 current state 失败；请执行手工命令恢复 bookmark ${bookmark}：${error instanceof Error ? error.message : String(error)}`,
+		);
+	}
+}
+
+export function buildSemanticSnapshot(
+	inputs: Record<string, SemanticTableInput>,
+): SemanticSnapshot {
+	const tables: Record<string, SemanticTableSnapshot> = {};
+	for (const [name, input] of Object.entries(inputs)) {
+		const present = input.present ?? true;
+		const keyFields = [...(input.keyFields ?? [])];
+		const rows = present ? sortSemanticRows(input.rows ?? [], keyFields) : [];
+		const canonicalRows = rows.map((row) => canonicalizeSemanticValue(row));
+		tables[name] = {
+			present,
+			rowCount: rows.length,
+			semanticHash: hashUtf8(
+				canonicalJson({ present, rows: canonicalRows }),
+			),
+			rows,
+			keyFields,
+		};
+	}
+	return { tables };
+}
+
+export function compareSemanticSnapshots(
+	expected: SemanticSnapshot,
+	actual: SemanticSnapshot,
+): SemanticComparison {
+	const tableNames = [
+		...new Set([
+			...Object.keys(expected.tables),
+			...Object.keys(actual.tables),
+		]),
+	].sort(compareStrings);
+	const tables: Record<string, SemanticTableComparison> = {};
+	let semanticMismatchCount = 0;
+	for (const name of tableNames) {
+		const expectedTable = expected.tables[name] ?? emptySemanticTable();
+		const actualTable = actual.tables[name] ?? emptySemanticTable();
+		const mismatchCount = semanticTableMismatchCount(expectedTable, actualTable);
+		const comparison = {
+			expected: semanticTableSummary(expectedTable),
+			actual: semanticTableSummary(actualTable),
+			mismatchCount,
+			matches: mismatchCount === 0,
+		};
+		tables[name] = comparison;
+		semanticMismatchCount += mismatchCount;
+	}
+	return {
+		semanticMatches: semanticMismatchCount === 0,
+		semanticMismatchCount,
+		tables,
+	};
+}
+
+export function buildBaselineValidation(options: {
+	expectedSemantic: SemanticSnapshot;
+	actualSemantic: SemanticSnapshot;
+	expectedSha256: string;
+	actualSha256: string | null;
+	baselineExport: string;
+	restoredExport: string | null;
+}): BaselineValidation {
+	const semantic = compareSemanticSnapshots(
+		options.expectedSemantic,
+		options.actualSemantic,
+	);
+	const rawExportShaMatches =
+		options.actualSha256 !== null &&
+		options.expectedSha256 === options.actualSha256;
+	return {
+		status: semantic.semanticMatches
+			? "CURRENT STATE RESTORED"
+			: "CURRENT STATE NOT RESTORED",
+		semanticMatches: semantic.semanticMatches,
+		semanticMismatchCount: semantic.semanticMismatchCount,
+		semanticTables: semantic.tables,
+		rawExportShaMatches,
+		expectedSha256: options.expectedSha256,
+		actualSha256: options.actualSha256,
+		matches: semantic.semanticMatches,
+		baselineExport: options.baselineExport,
+		restoredExport: options.restoredExport,
+	};
+}
+
+function sortSemanticRows(
+	rows: readonly RawDatabaseRow[],
+	keyFields: readonly string[],
+): RawDatabaseRow[] {
+	return [...rows].sort((left, right) => {
+		for (const field of keyFields) {
+			const comparison = compareSemanticValues(left[field], right[field]);
+			if (comparison !== 0) return comparison;
+		}
+		return compareStrings(canonicalJson(left), canonicalJson(right));
+	});
+}
+
+function compareSemanticValues(left: unknown, right: unknown): number {
+	return compareStrings(canonicalJson(left ?? null), canonicalJson(right ?? null));
+}
+
+function semanticTableMismatchCount(
+	expected: SemanticTableSnapshot,
+	actual: SemanticTableSnapshot,
+): number {
+	if (expected.present !== actual.present) return 1;
+	if (!expected.present) return 0;
+	if (
+		expected.rowCount === actual.rowCount &&
+		expected.semanticHash === actual.semanticHash
+	) {
+		return 0;
+	}
+	const keyFields =
+		expected.keyFields.length > 0 ? expected.keyFields : actual.keyFields;
+	const expectedRows = new Map(
+		expected.rows.map((row) => [semanticRowKey(row, keyFields), row]),
+	);
+	const actualRows = new Map(
+		actual.rows.map((row) => [semanticRowKey(row, keyFields), row]),
+	);
+	let mismatchCount = 0;
+	for (const [key, expectedRow] of expectedRows) {
+		const actualRow = actualRows.get(key);
+		if (!actualRow || canonicalJson(expectedRow) !== canonicalJson(actualRow)) {
+			mismatchCount += 1;
+		}
+	}
+	for (const key of actualRows.keys()) {
+		if (!expectedRows.has(key)) mismatchCount += 1;
+	}
+	return mismatchCount || 1;
+}
+
+function semanticRowKey(
+	row: RawDatabaseRow,
+	keyFields: readonly string[],
+): string {
+	return canonicalJson(
+		keyFields.length > 0
+			? keyFields.map((field) => row[field] ?? null)
+			: row,
+	);
+}
+
+function semanticTableSummary(
+	table: SemanticTableSnapshot,
+): SemanticTableSummary {
+	return {
+		present: table.present,
+		rowCount: table.rowCount,
+		semanticHash: table.semanticHash,
+	};
+}
+
+function emptySemanticTable(): SemanticTableSnapshot {
+	return {
+		present: false,
+		rowCount: 0,
+		semanticHash: hashUtf8(canonicalJson({ present: false, rows: [] })),
+		rows: [],
+		keyFields: [],
+	};
+}
+
+function canonicalizeSemanticValue(value: unknown): unknown {
+	if (Array.isArray(value)) return value.map(canonicalizeSemanticValue);
+	if (value && typeof value === "object") {
+		const result: Record<string, unknown> = {};
+		for (const key of Object.keys(value as Record<string, unknown>).sort(
+			compareStrings,
+		)) {
+			result[key] = canonicalizeSemanticValue(
+				(value as Record<string, unknown>)[key],
+			);
+		}
+		return result;
+	}
+	return value;
+}
+
+function canonicalJson(value: unknown): string {
+	return JSON.stringify(canonicalizeSemanticValue(value));
+}
+
+function hashUtf8(value: string): string {
+	return createHash("sha256").update(value, "utf8").digest("hex");
+}
+
+async function querySemanticSnapshot(): Promise<SemanticSnapshot> {
+	const schemaRows = await queryRows<RawDatabaseRow>(SCHEMA_QUERY);
+	const existingTables = new Set(
+		schemaRows.flatMap((row) =>
+			row.type === "table" ? [String(row.name ?? "")] : [],
+		),
+	);
+	const inputs: Record<string, SemanticTableInput> = {
+		schema: {
+			rows: schemaRows,
+			keyFields: ["type", "name", "tbl_name"],
+		},
+	};
+	for (const spec of SEMANTIC_TABLE_SPECS) {
+		inputs[spec.name] = existingTables.has(spec.name)
+			? {
+					rows: await queryRows<RawDatabaseRow>(
+						`SELECT * FROM ${spec.name} ORDER BY ${spec.orderBy.join(", ")}`,
+					),
+					keyFields: spec.keyFields,
+				}
+			: { present: false, keyFields: spec.keyFields };
+	}
+	return buildSemanticSnapshot(inputs);
+}
+
+async function writeUndoBookmarkArtifacts(
+	outputDir: string,
+	resolution: UndoBookmarkResolution,
+	response: unknown,
+): Promise<void> {
+	await writeFile(
+		join(outputDir, "UNDO_BOOKMARK"),
+		`${resolution.bookmark}\n`,
+		"utf8",
+	);
+	await writeJson(join(outputDir, "undo-bookmark.json"), {
+		bookmark: resolution.bookmark,
+		previousBookmark: resolution.previousBookmark,
+		source: resolution.source,
+		authoritative: resolution.authoritative,
+		usedForCurrentRestore: true,
+		response,
+	});
 }
 
 async function main(): Promise<void> {
@@ -127,8 +589,7 @@ async function main(): Promise<void> {
 	const restoredCurrentExport = join(outputDir, "restored-current-export.sql");
 
 	writeLog(`输出目录: ${outputDir}`);
-	writeLog("Phase A/B: 导出当前完整数据库并读取全部 breakdown/activity...");
-	await exportDatabase(currentExport);
+	writeLog("Phase A: 获取并保存操作前 CURRENT_BOOKMARK...");
 	const currentBookmarkArtifact = await resolveBookmark(
 		new Date().toISOString(),
 	);
@@ -142,19 +603,25 @@ async function main(): Promise<void> {
 		currentBookmarkArtifact,
 	);
 
+	writeLog("Phase B: 导出当前完整数据库并读取全部 breakdown/activity...");
+	await exportDatabase(currentExport);
 	const [
 		currentAllBreakdowns,
 		currentAllActivity,
 		currentDistribution,
 		currentActivityDistribution,
-		currentDailyKeys,
+		currentSemanticSnapshot,
 	] = await Promise.all([
 		queryRows<BreakdownRow>(BREAKDOWN_QUERY),
-		queryRows<ActivityRow>(ACTIVITY_QUERY),
+		queryOptionalRows<ActivityRow>("daily_activity_breakdown", ACTIVITY_QUERY),
 		queryRows(PRODUCT_DISTRIBUTION_QUERY),
-		queryRows(ACTIVITY_DISTRIBUTION_QUERY),
-		queryRows<RawDatabaseRow>(DAILY_KEYS_QUERY),
+		queryOptionalRows(
+			"daily_activity_breakdown",
+			ACTIVITY_DISTRIBUTION_QUERY,
+		),
+		querySemanticSnapshot(),
 	]);
+	const currentDailyKeys = currentSemanticSnapshot.tables.daily_usage.rows;
 	const currentClaudeRowsBeforeRestore = selectClaudeRows(
 		currentAllBreakdowns,
 		options.extraProducts,
@@ -181,79 +648,182 @@ async function main(): Promise<void> {
 	);
 
 	let temporaryRestoreStarted = false;
+	let temporaryRestoreAttempted = false;
+	let restoreCurrentAttempted = false;
+	let restoreCurrentSucceeded = false;
 	let undoBookmark: string | null = null;
-	let baselineValidation: BaselineValidation | null = null;
+	let undoBookmarkSource: UndoBookmarkResolution["source"] | null = null;
+	let undoBookmarkArtifactWritten = false;
+	let baselineValidation: BaselineValidation | undefined;
 
-	try {
-		writeLog(`Phase C: restore PRE_RESET ${options.preResetBookmark}...`);
-		temporaryRestoreStarted = true;
-		const restoreResponse = await restoreToBookmark(options.preResetBookmark);
-		undoBookmark =
-			findBookmark(restoreResponse) ?? currentBookmarkArtifact.bookmark;
-		await writeFile(
-			join(outputDir, "UNDO_BOOKMARK"),
-			`${undoBookmark}\n`,
-			"utf8",
-		);
-		await writeJson(join(outputDir, "undo-bookmark.json"), {
-			bookmark: undoBookmark,
-			response: restoreResponse,
-			fallbackToCurrentBookmark: findBookmark(restoreResponse) == null,
-		});
+	await runWithFailSafeCurrentRestore(
+		async () => {
+			writeLog(`Phase C: restore PRE_RESET ${options.preResetBookmark}...`);
+			temporaryRestoreAttempted = true;
+			const restoreResponse = await restoreToBookmark(options.preResetBookmark);
+			temporaryRestoreStarted = true;
+			writeLog(`temporaryRestoreStarted=${temporaryRestoreStarted}`);
+			const undoResolution = resolveUndoBookmark(
+				restoreResponse,
+				currentBookmarkArtifact.bookmark,
+			);
+			undoBookmark = undoResolution.bookmark;
+			undoBookmarkSource = undoResolution.source;
+			if (!undoResolution.authoritative) {
+				writeLog(
+					"FAIL-SAFE: restore response 缺少 previous_bookmark；禁止使用 response.bookmark 作为 undo。",
+				);
+				writeLog("AUTHORITATIVE_UNDO_BOOKMARK=UNAVAILABLE");
+				writeLog(
+					`EMERGENCY_CURRENT_BOOKMARK=${currentBookmarkArtifact.bookmark}`,
+				);
+			}
+			try {
+				await writeUndoBookmarkArtifacts(
+					outputDir,
+					undoResolution,
+					restoreResponse,
+				);
+				undoBookmarkArtifactWritten = true;
+			} catch (error) {
+				writeLog(
+					`UNDO_BOOKMARK artifact 写入失败；仍将执行 fail-safe current restore：${error instanceof Error ? error.message : String(error)}`,
+				);
+				throw error;
+			}
+			if (!undoResolution.authoritative) {
+				throw new Error(
+					"Time Travel restore 未返回 authoritative previous_bookmark；已停止历史分析，仅允许 finally 尝试恢复 pre-operation CURRENT_BOOKMARK。",
+				);
+			}
+			writeLog(`AUTHORITATIVE_UNDO_BOOKMARK=${undoBookmark}`);
 
-		writeLog("Phase D/E: 在历史状态读取全部 Claude breakdown/activity...");
-		const [
-			historicalAllBreakdowns,
-			historicalAllActivity,
-			historicalDistribution,
-			historicalActivityDistribution,
-		] = await Promise.all([
-			queryRows<BreakdownRow>(BREAKDOWN_QUERY),
-			queryRows<ActivityRow>(ACTIVITY_QUERY),
-			queryRows(PRODUCT_DISTRIBUTION_QUERY),
-			queryRows(ACTIVITY_DISTRIBUTION_QUERY),
-		]);
-		const historicalClaudeRows = selectClaudeRows(
-			historicalAllBreakdowns,
-			options.extraProducts,
-		);
-		const historicalClaudeActivityRows = selectClaudeRows(
-			historicalAllActivity,
-			options.extraProducts,
-		);
-		await writeJson(
-			join(outputDir, "historical-claude-all.json"),
-			historicalClaudeRows,
-		);
-		await writeJson(
-			join(outputDir, "historical-claude-activity-all.json"),
-			historicalClaudeActivityRows,
-		);
-		await writeJson(
-			join(outputDir, "historical-provider-product-distribution.json"),
-			historicalDistribution,
-		);
-		await writeJson(
-			join(outputDir, "historical-activity-provider-product-distribution.json"),
-			historicalActivityDistribution,
-		);
-	} finally {
-		if (temporaryRestoreStarted) {
+			writeLog("Phase D/E: 在历史状态读取全部 Claude breakdown/activity...");
+			const [
+				historicalAllBreakdowns,
+				historicalAllActivity,
+				historicalDistribution,
+				historicalActivityDistribution,
+			] = await Promise.all([
+				queryRows<BreakdownRow>(BREAKDOWN_QUERY),
+				queryOptionalRows<ActivityRow>(
+					"daily_activity_breakdown",
+					ACTIVITY_QUERY,
+				),
+				queryRows(PRODUCT_DISTRIBUTION_QUERY),
+				queryOptionalRows(
+					"daily_activity_breakdown",
+					ACTIVITY_DISTRIBUTION_QUERY,
+				),
+			]);
+			const historicalClaudeRows = selectClaudeRows(
+				historicalAllBreakdowns,
+				options.extraProducts,
+			);
+			const historicalClaudeActivityRows = selectClaudeRows(
+				historicalAllActivity,
+				options.extraProducts,
+			);
+			await writeJson(
+				join(outputDir, "historical-claude-all.json"),
+				historicalClaudeRows,
+			);
+			await writeJson(
+				join(outputDir, "historical-claude-activity-all.json"),
+				historicalClaudeActivityRows,
+			);
+			await writeJson(
+				join(outputDir, "historical-provider-product-distribution.json"),
+				historicalDistribution,
+			);
+			await writeJson(
+				join(outputDir, "historical-activity-provider-product-distribution.json"),
+				historicalActivityDistribution,
+			);
+		},
+		async () => {
+			if (!temporaryRestoreAttempted) return;
 			writeLog("Phase F: restore current state immediately...");
-			if (!undoBookmark) undoBookmark = currentBookmarkArtifact.bookmark;
-			await restoreToBookmark(undoBookmark);
+			if (!undoBookmark) {
+				undoBookmark = currentBookmarkArtifact.bookmark;
+				undoBookmarkSource = "pre-operation-current-bookmark-emergency";
+			}
+			const authoritativeUndoBookmark =
+				undoBookmarkSource === "restore.previous_bookmark" ? undoBookmark : null;
+			writeLog(
+				`AUTHORITATIVE_UNDO_BOOKMARK=${authoritativeUndoBookmark ?? "UNAVAILABLE"}`,
+			);
+			if (!authoritativeUndoBookmark) {
+				writeLog(`EMERGENCY_CURRENT_BOOKMARK=${undoBookmark}`);
+			}
+			if (!undoBookmarkArtifactWritten) {
+				try {
+					const artifactResolution: UndoBookmarkResolution =
+						undoBookmarkSource === "restore.previous_bookmark"
+							? {
+									bookmark: undoBookmark,
+									source: "restore.previous_bookmark",
+									authoritative: true,
+									previousBookmark: undoBookmark,
+								}
+							: {
+									bookmark: undoBookmark,
+									source: "pre-operation-current-bookmark-emergency",
+									authoritative: false,
+									previousBookmark: null,
+								};
+					await writeUndoBookmarkArtifacts(
+						outputDir,
+						artifactResolution,
+						null,
+					);
+					undoBookmarkArtifactWritten = true;
+				} catch (error) {
+					writeLog(
+						`无法写入 UNDO_BOOKMARK artifact，但仍继续尝试恢复 current：${error instanceof Error ? error.message : String(error)}`,
+					);
+				}
+			}
+			restoreCurrentAttempted = true;
+			await restoreCurrentStateSafely(
+				undoBookmark,
+				restoreToBookmark,
+				authoritativeUndoBookmark,
+			);
+			restoreCurrentSucceeded = true;
 			await exportDatabase(restoredCurrentExport);
-			baselineValidation = await validateBaseline(
+			const restoredSemanticSnapshot = await querySemanticSnapshot();
+			const validation = await validateBaseline(
 				currentExport,
 				restoredCurrentExport,
 				outputDir,
+				currentSemanticSnapshot,
+				restoredSemanticSnapshot,
 			);
-		}
-	}
+			baselineValidation = validation;
+			for (const [table, comparison] of Object.entries(
+				validation.semanticTables,
+			)) {
+				writeLog(
+					`BASELINE_SEMANTIC table=${table} expectedRows=${comparison.expected.rowCount} actualRows=${comparison.actual.rowCount} expectedHash=${comparison.expected.semanticHash} actualHash=${comparison.actual.semanticHash} mismatchCount=${comparison.mismatchCount}`,
+				);
+			}
+			if (!validation.semanticMatches) {
+				writeLog(
+					`CURRENT STATE NOT RESTORED: semantic mismatch count=${validation.semanticMismatchCount}`,
+				);
+			} else if (!validation.rawExportShaMatches) {
+				writeLog(
+					"CURRENT STATE semantic validation passed; raw export SHA-256 differs and is diagnostic only.",
+				);
+			}
+		},
+	);
 
-	if (!baselineValidation?.matches) {
+	const validatedBaseline = baselineValidation;
+	if (!validatedBaseline || !validatedBaseline.semanticMatches) {
 		throw new Error(
-			"CURRENT STATE RESTORED 校验失败；已停止离线分析和 SQL 生成。",
+			"CURRENT STATE RESTORED 语义校验失败；已停止离线分析和 SQL 生成。",
 		);
 	}
 
@@ -301,13 +871,16 @@ async function main(): Promise<void> {
 		currentBookmark: currentBookmarkArtifact.bookmark,
 		pricingVersion,
 		undoBookmark,
+		undoBookmarkSource,
 		outputDir,
-		baselineValidation,
+		baselineValidation: validatedBaseline,
+		restoreCurrentAttempted,
+		restoreCurrentSucceeded,
 		affectedDeviceDateCount: report.affectedDays.length,
 		affectedDates: report.affectedDates,
 		missingDailyUsageParents,
 		safeToExecuteInsertSql:
-			baselineValidation.matches && missingDailyUsageParents.length === 0,
+			validatedBaseline.semanticMatches && missingDailyUsageParents.length === 0,
 		sqlExecuted: false,
 	};
 
@@ -459,6 +1032,16 @@ async function queryRows<T = RawDatabaseRow>(sql: string): Promise<T[]> {
 	}
 }
 
+async function queryOptionalRows<T>(
+	tableName: string,
+	sql: string,
+): Promise<T[]> {
+	const tableRows = await queryRows<{ name: string }>(
+		`SELECT name FROM sqlite_master WHERE type = 'table' AND name = '${tableName.replaceAll("'", "''")}'`,
+	);
+	return tableRows.length > 0 ? queryRows<T>(sql) : [];
+}
+
 async function resolveBookmark(timestamp: string): Promise<BookmarkArtifact> {
 	const response = await runWranglerJson([
 		"d1",
@@ -469,7 +1052,7 @@ async function resolveBookmark(timestamp: string): Promise<BookmarkArtifact> {
 		timestamp,
 		"--json",
 	]);
-	const bookmark = findBookmark(response);
+	const bookmark = findInfoBookmark(response);
 	if (!bookmark)
 		throw new Error(
 			`无法从 Time Travel info 响应提取 bookmark: ${JSON.stringify(response)}`,
@@ -478,27 +1061,12 @@ async function resolveBookmark(timestamp: string): Promise<BookmarkArtifact> {
 }
 
 async function restoreToBookmark(bookmark: string): Promise<unknown> {
-	return runWranglerJson([
-		"d1",
-		"time-travel",
-		"restore",
-		DATABASE,
-		"--bookmark",
-		bookmark,
-		"--json",
-	]);
+	return runWranglerJson(buildWranglerRestoreArgs(DATABASE, bookmark));
 }
 
 async function exportDatabase(output: string): Promise<void> {
-	await runWrangler([
-		"d1",
-		"export",
-		DATABASE,
-		"--remote",
-		"--skip-confirmation",
-		"--output",
-		output,
-	]);
+	await runWrangler(buildWranglerExportArgs(DATABASE, output));
+	await assertUtf8File(output);
 }
 
 async function runWrangler(args: string[]): Promise<string> {
@@ -550,10 +1118,10 @@ function findResults<T>(value: unknown): T[] | null {
 	return null;
 }
 
-function findBookmark(value: unknown): string | null {
+function findInfoBookmark(value: unknown): string | null {
 	if (Array.isArray(value)) {
 		for (const item of value) {
-			const bookmark = findBookmark(item);
+			const bookmark = findInfoBookmark(item);
 			if (bookmark) return bookmark;
 		}
 		return null;
@@ -564,7 +1132,7 @@ function findBookmark(value: unknown): string | null {
 		if (typeof record[key] === "string" && record[key]) return record[key];
 	}
 	for (const child of Object.values(record)) {
-		const bookmark = findBookmark(child);
+		const bookmark = findInfoBookmark(child);
 		if (bookmark) return bookmark;
 	}
 	return null;
@@ -574,22 +1142,32 @@ async function validateBaseline(
 	expectedPath: string,
 	actualPath: string,
 	outputDir: string,
+	expectedSemantic: SemanticSnapshot,
+	actualSemantic: SemanticSnapshot,
 ): Promise<BaselineValidation> {
 	const expectedSha256 = await sha256(expectedPath);
 	const actualSha256 = await sha256(actualPath);
-	const validation: BaselineValidation = {
-		status:
-			expectedSha256 === actualSha256
-				? "CURRENT STATE RESTORED"
-				: "CURRENT STATE NOT RESTORED",
+	const validation = buildBaselineValidation({
+		expectedSemantic,
+		actualSemantic,
 		expectedSha256,
 		actualSha256,
-		matches: expectedSha256 === actualSha256,
 		baselineExport: expectedPath,
 		restoredExport: actualPath,
-	};
+	});
 	await writeJson(join(outputDir, "baseline-validation.json"), validation);
 	return validation;
+}
+
+async function assertUtf8File(path: string): Promise<void> {
+	const content = await readFile(path);
+	try {
+		new TextDecoder("utf-8", { fatal: true }).decode(content);
+	} catch (error) {
+		throw new Error(
+			`文件不是有效 UTF-8：${path}；已停止以避免 Windows code page 污染：${error instanceof Error ? error.message : String(error)}`,
+		);
+	}
 }
 
 async function sha256(path: string): Promise<string> {
@@ -609,8 +1187,10 @@ function writeJsonOutput(value: unknown): void {
 	process.stdout.write(`${JSON.stringify(value, null, 2)}\n`);
 }
 
+/** Use ordinal comparison so recovery ordering matches SQLite case-sensitive TEXT semantics. */
 function compareStrings(left: string, right: string): number {
-	return left.localeCompare(right);
+	if (left === right) return 0;
+	return left < right ? -1 : 1;
 }
 
 async function readJson<T>(path: string): Promise<T> {
@@ -670,6 +1250,9 @@ function renderMarkdownReport(
 		`- Affected daily_usage device/date pairs: ${report.affectedDays.length}`,
 		`- Affected dates: ${report.affectedDates.join("；") || "none"}`,
 		`- Missing daily_usage parents: ${metadata.missingDailyUsageParents.length}`,
+		`- UNDO_BOOKMARK source: ${metadata.undoBookmarkSource ?? "none"}`,
+		`- RESTORE_CURRENT_ATTEMPTED: ${metadata.restoreCurrentAttempted}`,
+		`- RESTORE_CURRENT_SUCCEEDED: ${metadata.restoreCurrentSucceeded}`,
 		`- Safe to execute INSERT SQL after manual confirmation: ${metadata.safeToExecuteInsertSql ? "YES" : "NO"}`,
 		"",
 		"### Conflict details",
@@ -708,7 +1291,16 @@ function renderMarkdownReport(
 		"- `current-full-export.sql` / `restored-current-export.sql`",
 		"- `baseline-validation.json`",
 		"",
-		"## H. STOP",
+		"## H. Baseline validation",
+		`- semanticMatches: ${metadata.baselineValidation.semanticMatches}`,
+		`- semanticMismatchCount: ${metadata.baselineValidation.semanticMismatchCount}`,
+		`- rawExportShaMatches (diagnostic only): ${metadata.baselineValidation.rawExportShaMatches}`,
+		...Object.entries(metadata.baselineValidation.semanticTables).map(
+			([table, comparison]) =>
+				`- ${table}: rows ${comparison.expected.rowCount} -> ${comparison.actual.rowCount}; mismatchCount=${comparison.mismatchCount}; semanticHash ${comparison.expected.semanticHash} -> ${comparison.actual.semanticHash}`,
+		),
+		"",
+		"## I. STOP",
 		"- 本工具未执行 `restore-missing-claude.sql`。",
 		"- 本工具未执行 `recalculate-affected-daily-usage.sql`。",
 		`- Current baseline：${metadata.baselineValidation.status}。`,
@@ -797,11 +1389,11 @@ function printHelp(): void {
   pnpm --filter @aiusage/worker run db:recover-claude -- --remote --uploader-paused --yes [options]
 
 该工具会：
-  1. 导出当前完整 D1，保存 CURRENT_BOOKMARK、全部 Claude breakdown/activity；
-  2. 临时 restore PRE_RESET，保存历史全量 Claude breakdown/activity；
-  3. 立即 restore UNDO_BOOKMARK，并以完整导出 SHA-256 验证 CURRENT STATE RESTORED；
-  4. 离线计算 historical MINUS current，生成审计报告和仅 INSERT 的 SQL；
-  5. 永远不执行 restore-missing-claude.sql 或 daily_usage 重算 SQL。
+  1. 先保存操作前 CURRENT_BOOKMARK，再导出当前完整 D1 和全部 Claude breakdown/activity；
+  2. 临时 restore PRE_RESET；仅使用 restore response.previous_bookmark 作为 authoritative UNDO_BOOKMARK；
+  3. 无论历史读取是否异常，都立即 restore UNDO_BOOKMARK；
+  4. 按 devices/daily_usage/breakdown/activity/schema 语义数据验证 current state；raw export SHA-256 仅作辅助诊断；
+  5. 仅在语义验证通过后离线计算 historical MINUS current，永远不执行任何生成 SQL。
 
 Options:
   --remote                         必填，使用远程 aiusage-db
@@ -814,4 +1406,9 @@ Options:
 `);
 }
 
-await main();
+function isMainModule(): boolean {
+	const entrypoint = process.argv[1];
+	return Boolean(entrypoint && resolve(entrypoint) === fileURLToPath(import.meta.url));
+}
+
+if (isMainModule()) await main();
