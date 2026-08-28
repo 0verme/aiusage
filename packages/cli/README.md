@@ -39,7 +39,7 @@ content and local credentials are never uploaded.
 
 ## Install
 
-The npm registry publication for the 0verme fork v1.0.0 is pending. For a
+The npm registry publication for the 0verme fork v1.1.0 is pending. For a
 source or NAS/vendor installation, build the CLI from the repository and install
 the generated tarball:
 
@@ -48,13 +48,13 @@ pnpm install
 pnpm --filter @0verme/aiusage-cli build
 cd packages/cli
 npm pack
-npm install -g ./0verme-aiusage-cli-1.0.0.tgz
+npm install -g ./0verme-aiusage-cli-1.1.0.tgz
 ```
 
 After npm publication, use the reproducible pinned release:
 
 ```bash
-npm install -g @0verme/aiusage-cli@1.0.0
+npm install -g @0verme/aiusage-cli@1.1.0
 ```
 
 After installation:

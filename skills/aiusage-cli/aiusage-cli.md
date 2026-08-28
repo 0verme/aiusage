@@ -19,7 +19,7 @@ You are setting up the AIUsage controller CLI on the user's device so it can sca
 
 ## Step 1: Install the controller
 
-The npm registry publication for the 0verme fork v1.0.0 is pending. Until it is
+The npm registry publication for the 0verme fork v1.1.0 is pending. Until it is
 available, build and install the source/vendor tarball from the repository:
 
 ```bash
@@ -27,13 +27,13 @@ pnpm install
 pnpm --filter @0verme/aiusage-cli build
 cd packages/cli
 npm pack
-npm install -g ./0verme-aiusage-cli-1.0.0.tgz
+npm install -g ./0verme-aiusage-cli-1.1.0.tgz
 ```
 
 After npm publication, use the pinned release instead:
 
 ```bash
-npm install -g @0verme/aiusage-cli@1.0.0
+npm install -g @0verme/aiusage-cli@1.1.0
 ```
 
 Verify:
@@ -143,5 +143,5 @@ aiusage config set privacy.projectVisibility plain    # real names (private depl
 - **"缺少 siteId"** → Run `aiusage enroll` first with server URL and credentials
 - **"缺少 deviceToken"** → Enrollment failed or config lost; re-run `aiusage enroll`
 - **"请求失败 (401)"** → ENROLL_TOKEN mismatch or device was disabled; verify with server admin
-- **"检测到通过 npx 运行"** → Schedule requires global install: `npm install -g @0verme/aiusage-cli@1.0.0` after npm publication
+- **"检测到通过 npx 运行"** → Schedule requires global install: `npm install -g @0verme/aiusage-cli@1.1.0` after npm publication
 - **No data after sync** → Check `aiusage scan` locally first; verify tool log directories exist

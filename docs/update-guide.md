@@ -112,7 +112,7 @@ This checks for updates weekly and merges them automatically. Cloudflare then re
 ## Updating the CLI
 
 The CLI tool (`@0verme/aiusage-cli`) is released independently. The npm registry
-publication for the 0verme fork v1.0.0 is pending. Until it is available, rebuild
+publication for the 0verme fork v1.1.0 is pending. Until it is available, rebuild
 and install the source/vendor tarball from the repository:
 
 ```bash
@@ -120,13 +120,13 @@ pnpm install
 pnpm --filter @0verme/aiusage-cli build
 cd packages/cli
 npm pack
-npm install -g ./0verme-aiusage-cli-1.0.0.tgz
+npm install -g ./0verme-aiusage-cli-1.1.0.tgz
 ```
 
 After npm publication, install a pinned version on each device:
 
 ```bash
-npm install -g @0verme/aiusage-cli@1.0.0
+npm install -g @0verme/aiusage-cli@1.1.0
 ```
 
 The CLI and server are backwards-compatible — a newer CLI works with an older server and vice versa, as long as the `schemaVersion` matches.
@@ -150,7 +150,7 @@ Migration files are numbered sequentially (e.g., `0001_init.sql`, `0002_add_inde
 | ----------- | -------------- | ------------ |
 | **Worker API** | Fork sync → Cloudflare redeploy | Yes (with Git integration) |
 | **Dashboard UI** | Fork sync → Cloudflare redeploy | Yes (with Git integration) |
-| **CLI tool** | Rebuild/vendor install, or `npm install -g @0verme/aiusage-cli@1.0.0` after publication | No (manual per device) |
+| **CLI tool** | Rebuild/vendor install, or `npm install -g @0verme/aiusage-cli@1.1.0` after publication | No (manual per device) |
 | **D1 Schema** | `wrangler d1 migrations apply` | No (manual when needed) |
 | **Pricing catalog** | Bundled in Worker, updated via fork sync | Yes (with Git integration) |
 | **New tool scanners** | Bundled in CLI, updated via npm | No (manual per device) |

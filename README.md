@@ -1,4 +1,4 @@
-<p align="center"><strong>AIUsage 0verme Fork v1.0.0</strong></p>
+<p align="center"><strong>AIUsage 0verme Fork v1.1.0</strong></p>
 
 <p align="center">
   <strong>AIUsage</strong> tracks token usage and costs across all your AI tools and devices,<br>
@@ -90,7 +90,7 @@ pnpm setup
 This repository is the 0verme fork and ships an independent CLI package:
 `@0verme/aiusage-cli`.
 
-The npm registry publication for v1.0.0 is pending. For a source or NAS/vendor
+The npm registry publication for v1.1.0 is pending. For a source or NAS/vendor
 installation, build the CLI and install the generated tarball:
 
 ```bash
@@ -98,7 +98,7 @@ pnpm install
 pnpm --filter @0verme/aiusage-cli build
 cd packages/cli
 npm pack
-npm install -g ./0verme-aiusage-cli-1.0.0.tgz
+npm install -g ./0verme-aiusage-cli-1.1.0.tgz
 ```
 
 The fork focuses on:
@@ -129,7 +129,7 @@ AIUsage uses a **fork-based update model** — fork this repo, connect your fork
 
 CLI updates are separate. Until the npm publication is available, rebuild the
 source/vendor package. For a published release, use a pinned version such as
-`npm install -g @0verme/aiusage-cli@1.0.0` rather than `@latest`.
+`npm install -g @0verme/aiusage-cli@1.1.0` rather than `@latest`.
 
 See the [**Update Guide**](./docs/update-guide.md) for detailed instructions, including fully automatic sync via GitHub Actions.
 

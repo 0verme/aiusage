@@ -123,7 +123,7 @@ npx wrangler deploy
 
 ### Install the controller
 
-The npm registry publication for the 0verme fork v1.0.0 is pending. For now,
+The npm registry publication for the 0verme fork v1.1.0 is pending. For now,
 build and install the source/vendor tarball from the repository:
 
 ```bash
@@ -131,7 +131,7 @@ pnpm install
 pnpm --filter @0verme/aiusage-cli build
 cd packages/cli
 npm pack
-npm install -g ./0verme-aiusage-cli-1.0.0.tgz
+npm install -g ./0verme-aiusage-cli-1.1.0.tgz
 ```
 
 ### Register the device

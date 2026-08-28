@@ -31,7 +31,7 @@ Trae CN 通过 `aiusage trae sync --edition cn` 调用 Trae 自己的本地 `ai-
 
 ## 安装
 
-本次 0verme fork v1.0.0 尚未完成 npm registry 发布。当前可从仓库构建，用于
+本次 0verme fork v1.1.0 尚未完成 npm registry 发布。当前可从仓库构建，用于
 源码、NAS 或其他 vendor 安装：
 
 ```bash
@@ -39,13 +39,13 @@ pnpm install
 pnpm --filter @0verme/aiusage-cli build
 cd packages/cli
 npm pack
-npm install -g ./0verme-aiusage-cli-1.0.0.tgz
+npm install -g ./0verme-aiusage-cli-1.1.0.tgz
 ```
 
 npm 发布后，建议使用可复现的固定版本：
 
 ```bash
-npm install -g @0verme/aiusage-cli@1.0.0
+npm install -g @0verme/aiusage-cli@1.1.0
 ```
 
 安装后：

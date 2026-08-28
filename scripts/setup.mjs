@@ -332,7 +332,7 @@ async function main() {
   console.log(cyan(`  # npm registry publication pending; source/vendor install:`));
   console.log(cyan(`  pnpm --filter @0verme/aiusage-cli build`));
   console.log(cyan(`  cd packages/cli && npm pack`));
-  console.log(cyan(`  npm install -g ./0verme-aiusage-cli-1.0.0.tgz`));
+  console.log(cyan(`  npm install -g ./0verme-aiusage-cli-1.1.0.tgz`));
   console.log(cyan(`  aiusage enroll \\`));
   console.log(cyan(`    --server ${url} \\`));
   console.log(cyan(`    --site-id ${siteId} \\`));

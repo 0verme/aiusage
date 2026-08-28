@@ -69,7 +69,7 @@ export function resolveCommandPaths(): { nodePath: string; scriptPath: string } 
   const scriptPath = realpathSync(resolve(entryPath));
   if (scriptPath.includes('_npx') || scriptPath.includes('/npx-')) {
     throw new Error(
-      '检测到通过 npx 运行，定时任务需要全局安装。\n请先执行: npm install -g @0verme/aiusage-cli@1.0.0',
+      '检测到通过 npx 运行，定时任务需要全局安装。\n请先执行: npm install -g @0verme/aiusage-cli@1.1.0',
     );
   }
   return { nodePath: process.execPath, scriptPath };
