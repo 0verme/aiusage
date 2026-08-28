@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import {
+  buildActivityWhere,
   buildDateWindow,
   buildWhere,
   mergeProviderFacetItems,
@@ -89,5 +90,41 @@ describe('overview date windows', () => {
 
     expect(filters?.product).toEqual(['codex', 'claude-code']);
     expect(filters?.model).toEqual(['gpt-5', 'claude-opus']);
+  });
+});
+
+describe('activity interaction metric aggregation', () => {
+  it('builds activity where clause without hardcoded product allowlist', () => {
+    const filters = parseFilters(new URL(
+      'https://example.com/api/v1/public/overview?range=all&product=pi',
+    ))!;
+    const where = buildActivityWhere(filters);
+
+    expect(filters.product).toEqual(['pi']);
+    expect(where.whereClause).toContain('a.product = ?');
+    expect(where.params).toEqual(['pi']);
+    // 不得包含限定 codex/claude-code 的硬编码过滤
+    expect(where.whereClause).not.toContain('codex');
+    expect(where.whereClause).not.toContain('claude-code');
+  });
+
+  it('keeps codex and claude-code activity filters working unchanged', () => {
+    const filters = parseFilters(new URL(
+      'https://example.com/api/v1/public/overview?range=all&product=codex&product=claude-code',
+    ))!;
+    const where = buildActivityWhere(filters);
+
+    expect(where.whereClause).toContain('a.product IN (?, ?)');
+    expect(where.params).toEqual(['codex', 'claude-code']);
+  });
+
+  it('applies provider filters through canonical provider SQL for activity', () => {
+    const filters = parseFilters(new URL(
+      'https://example.com/api/v1/public/overview?range=all&provider=openai-codex',
+    ))!;
+    const where = buildActivityWhere(filters);
+
+    expect(filters.provider).toEqual(['openai']);
+    expect(where.whereClause).toContain('openai-codex');
   });
 });

@@ -814,7 +814,7 @@ async function loadActivityTopList(
 	}));
 }
 
-function buildActivityWhere(filters: DashboardFilters): WhereParts {
+export function buildActivityWhere(filters: DashboardFilters): WhereParts {
 	const clauses: string[] = [];
 	const params: (string | number)[] = [];
 

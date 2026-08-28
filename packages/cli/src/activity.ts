@@ -1,10 +1,11 @@
 import { open, readdir } from 'node:fs/promises';
 import { createInterface } from 'node:readline';
-import { homedir } from 'node:os';
-import { basename, join } from 'node:path';
+import { basename, dirname, join } from 'node:path';
+import type { Provider, Product } from '@aiusage/shared';
 import { getCodexBaseDir } from './scanners/codex.js';
 import { getClaudeProjectDirs } from './scanners/claude-paths.js';
-import { dateKey, parseTs, resolveProjectFields, runWithConcurrency, type ProjectFields } from './scanners/utils.js';
+import { resolvePiSessionDirs } from './scanners/pi.js';
+import { dateKey, inferProviderFromModel, parseTs, resolveProjectFields, runWithConcurrency, walkFiles, type ProjectFields } from './scanners/utils.js';
 import type { ReportRange } from './report.js';
 
 const FILE_CONCURRENCY = 16;
@@ -30,8 +31,8 @@ export type ActivityKind =
 
 export interface ActivityItem {
   usageDate: string;
-  provider: 'openai' | 'anthropic';
-  product: 'codex' | 'claude-code';
+  provider: Provider;
+  product: Product;
   source: string;
   project: string;
   projectDisplay?: string;
@@ -86,6 +87,7 @@ interface BuildActivityReportOptions {
   projectAliases?: Record<string, string>;
   codexDir?: string;
   claudeProjectsDirs?: string[];
+  piDir?: string;
 }
 
 interface ScanStats {
@@ -158,16 +160,38 @@ interface ClaudeContentBlock {
   input?: Record<string, unknown>;
 }
 
+interface PiLine {
+  id?: string;
+  type?: string;
+  timestamp?: string | number;
+  cwd?: string;
+  message?: {
+    role?: string;
+    provider?: string;
+    model?: string;
+    content?: PiContentBlock[];
+  };
+}
+
+interface PiContentBlock {
+  type?: string;
+  text?: string;
+  id?: string;
+  name?: string;
+  arguments?: unknown;
+}
+
 export async function buildActivityReport(
   range: ReportRange,
   options: BuildActivityReportOptions = {},
 ): Promise<ActivityReport> {
   const targetDates = options.dates ? new Set(options.dates) : undefined;
-  const [codex, claude] = await Promise.all([
+  const [codex, claude, pi] = await Promise.all([
     scanCodexActivity(targetDates, options),
     scanClaudeActivity(targetDates, options),
+    scanPiActivity(targetDates, options),
   ]);
-  const items = [...codex.items, ...claude.items].sort(sortActivityItems);
+  const items = [...codex.items, ...claude.items, ...pi.items].sort(sortActivityItems);
   const requestedDates = options.dates?.slice().sort();
   const itemDates = [...new Set(items.map(item => item.usageDate))].sort();
   const reportDates = requestedDates ?? itemDates;
@@ -191,9 +215,9 @@ export async function buildActivityReport(
     totals: {
       exactCount: sumByConfidence(items, 'exact'),
       proxyCount: sumByConfidence(items, 'proxy'),
-      userMessageCount: codex.stats.userMessages.size + claude.stats.userMessages.size,
-      filesScanned: codex.stats.filesScanned + claude.stats.filesScanned,
-      sessionsScanned: new Set([...codex.stats.sessions, ...claude.stats.sessions]).size,
+      userMessageCount: codex.stats.userMessages.size + claude.stats.userMessages.size + pi.stats.userMessages.size,
+      filesScanned: codex.stats.filesScanned + claude.stats.filesScanned + pi.stats.filesScanned,
+      sessionsScanned: new Set([...codex.stats.sessions, ...claude.stats.sessions, ...pi.stats.sessions]).size,
     },
     daily,
     bySource: summarize(items, item => item.source, item => item.source),
@@ -220,6 +244,7 @@ export async function buildActivityReport(
     notes: [
       'Claude Code 的 Skill/Agent 来自结构化 tool_use，口径为 exact。',
       'Codex 的 skill_proxy 来自命令中读取 SKILL.md 的痕迹，只能表示代理信号。',
+      'Pi 的 skill_proxy 来自工具参数中的 SKILL.md 路径，只能表示代理信号。',
       'sync 会上传按日聚合后的 activity 指标，不上传原始消息内容。',
     ],
   };
@@ -627,6 +652,230 @@ async function processClaudeFile(filePath: string, fallbackFields: ProjectFields
   }
 }
 
+async function scanPiActivity(
+  targetDates: Set<string> | undefined,
+  options: BuildActivityReportOptions,
+): Promise<ScanResult> {
+  const acc = createAccumulator(targetDates, options.projectAliases);
+  const sessionDirs = resolvePiSessionDirs(options.piDir);
+  const files = [...new Set((await Promise.all(sessionDirs.map(dir => walkFiles(dir, '.jsonl')))).flat())];
+  acc.stats.filesScanned = files.length;
+  await runWithConcurrency(files, FILE_CONCURRENCY, async filePath => {
+    await processPiFile(filePath, acc);
+  });
+  return finalizeActivity(acc);
+}
+
+async function processPiFile(filePath: string, acc: ActivityAccumulator): Promise<void> {
+  let fh;
+  try {
+    fh = await open(filePath, 'r');
+  } catch {
+    return;
+  }
+
+  const fallbackSessionId = basename(filePath, '.jsonl');
+  const encodedCwd = basename(dirname(filePath));
+  let sessionId = fallbackSessionId;
+  let projectFields: ProjectFields = {
+    project: extractPiProjectFromEncoded(encodedCwd),
+    projectDisplay: extractPiProjectFromEncoded(encodedCwd),
+  };
+
+  try {
+    const rl = createInterface({
+      input: fh.createReadStream({ encoding: 'utf-8' }),
+      crlfDelay: Infinity,
+    });
+
+    for await (const line of rl) {
+      if (!line) continue;
+      if (Buffer.byteLength(line) > MAX_LINE_BYTES) continue;
+
+      let record: PiLine;
+      try {
+        record = JSON.parse(line);
+      } catch {
+        continue;
+      }
+
+      if (record.type === 'session') {
+        const id = stringValue(record.id);
+        if (id) sessionId = id;
+        if (record.message?.role !== 'user' && typeof record.cwd === 'string' && record.cwd) {
+          projectFields = resolveProjectFields(record.cwd, acc.projectAliases);
+        }
+        acc.stats.sessions.add(`pi:${sessionId}`);
+        continue;
+      }
+
+      if (record.type !== 'message') continue;
+      const msg = record.message;
+      if (!msg) continue;
+
+      const ts = parseTs(record.timestamp);
+      if (!ts) continue;
+      const usageDate = dateKey(ts);
+      if (!acceptsDate(acc, usageDate)) continue;
+      acc.stats.sessions.add(`pi:${sessionId}`);
+
+      const provider = piProviderOf(msg);
+      const eventBase = {
+        provider,
+        product: 'pi' as const,
+        usageDate,
+        projectFields,
+        sessionId,
+      };
+
+      if (msg.role === 'user') {
+        handlePiUserMessage(acc, record, msg, eventBase, usageDate, sessionId, filePath);
+        continue;
+      }
+
+      if (msg.role !== 'assistant') continue;
+      if (!Array.isArray(msg.content)) continue;
+
+      for (const block of msg.content) {
+        if (block?.type !== 'toolCall') continue;
+        handlePiToolCall(acc, block, eventBase, filePath, usageDate, sessionId);
+      }
+    }
+  } finally {
+    await fh.close();
+  }
+}
+
+interface PiEventBase {
+  provider: string;
+  product: 'pi';
+  usageDate: string;
+  projectFields: ProjectFields;
+  sessionId: string;
+}
+
+function handlePiUserMessage(
+  acc: ActivityAccumulator,
+  record: PiLine,
+  msg: NonNullable<PiLine['message']>,
+  eventBase: PiEventBase,
+  usageDate: string,
+  sessionId: string,
+  filePath: string,
+): void {
+  const text = piUserText(msg.content);
+  if (!text) return;
+  addUserMessage(acc, {
+    ...eventBase,
+    timestamp: typeof record.timestamp === 'string' ? record.timestamp : '',
+    content: text,
+    fallbackKey: `${filePath}:${usageDate}:${sessionId}:${record.id ?? ''}:${JSON.stringify(msg.content ?? '')}`,
+    id: record.id,
+  });
+  const skillName = matchSlashSkill(text);
+  if (skillName) {
+    addActivity(acc, {
+      ...eventBase,
+      kind: 'skill_call',
+      name: skillName,
+      confidence: 'exact',
+      dedupeKey: `pi:skill:${sessionId}:${record.id ?? ''}`,
+    });
+  }
+}
+
+function handlePiToolCall(
+  acc: ActivityAccumulator,
+  block: PiContentBlock,
+  eventBase: PiEventBase,
+  filePath: string,
+  usageDate: string,
+  sessionId: string,
+): void {
+  const name = stringValue(block.name) ?? 'unknown';
+  const args = parsePiArguments(block.arguments);
+  const dedupeKey = stringValue(block.id)
+    ? `pi:tool:${sessionId}:${block.id}`
+    : `pi:tool:${filePath}:${usageDate}:${sessionId}:${name}:${JSON.stringify(args)}`;
+
+  if (name === 'subagent') {
+    // 仅明确的 subagent 工具且参数携带 agent 标识时才认定为 agent_call。
+    addActivity(acc, {
+      ...eventBase,
+      kind: 'agent_call',
+      name: piAgentName(args),
+      confidence: 'exact',
+      dedupeKey,
+    });
+    return;
+  }
+
+  // Pi 普通结构化工具统一归入 tool_call（不映射为 function_call）。
+  addActivity(acc, {
+    ...eventBase,
+    kind: 'tool_call',
+    name,
+    confidence: 'exact',
+    dedupeKey,
+  });
+
+  for (const skillName of extractSkillProxyNamesFromArgs(args)) {
+    addActivity(acc, {
+      ...eventBase,
+      kind: 'skill_proxy',
+      name: skillName,
+      confidence: 'proxy',
+      dedupeKey: `${dedupeKey}:skill:${skillName}`,
+    });
+  }
+}
+
+/**
+ * Pi 消息的 provider 解析，与 scanners/pi.ts 保持一致：
+ * 优先消息自带 provider；缺失或无意义值（'-'）时按模型名推断，最终回退 inflection。
+ */
+function piProviderOf(msg: { provider?: string; model?: string }): string {
+  const raw = msg.provider?.trim();
+  if (raw && raw !== '-') return raw;
+  return inferProviderFromModel(msg.model, 'inflection');
+}
+
+function piUserText(content: PiContentBlock[] | undefined): string | undefined {
+  if (!Array.isArray(content)) return undefined;
+  const text = content
+    .filter(block => block?.type === 'text')
+    .map(block => stringValue(block.text))
+    .filter(Boolean)
+    .join('\n');
+  return text || undefined;
+}
+
+/** 用户消息以 /skill:<name> 开头视为显式 Skill 调用（exact），消息正文不上传。 */
+function matchSlashSkill(text: string): string | undefined {
+  const match = text.match(/^\/skill\s*:\s*([A-Za-z0-9][\w.-]*)/);
+  return match?.[1];
+}
+
+/** subagent 工具参数中提取 Agent 名；无法可靠识别时回退 'subagent'。 */
+function piAgentName(args: Record<string, unknown>): string {
+  for (const key of ['agent', 'agent_type', 'name'] as const) {
+    const value = stringValue(args[key]);
+    if (value && /^[A-Za-z0-9][\w.-]*[A-Za-z0-9]$/.test(value)) return value;
+  }
+  return 'subagent';
+}
+
+function parsePiArguments(raw: unknown): Record<string, unknown> {
+  if (raw && typeof raw === 'object' && !Array.isArray(raw)) return raw as Record<string, unknown>;
+  if (typeof raw === 'string') return parseJsonObject(raw);
+  return {};
+}
+
+function extractPiProjectFromEncoded(encoded: string): string {
+  const parts = encoded.split('-').filter(Boolean);
+  return parts.length > 0 ? parts[parts.length - 1] : 'unknown';
+}
+
 function createAccumulator(targetDates?: Set<string>, projectAliases?: Record<string, string>): ActivityAccumulator {
   return {
     targetDates,
@@ -652,8 +901,8 @@ function addActivity(
   acc: ActivityAccumulator,
   input: {
     usageDate: string;
-    provider: 'openai' | 'anthropic';
-    product: 'codex' | 'claude-code';
+    provider: Provider;
+    product: Product;
     projectFields: ProjectFields;
     sessionId: string;
     kind: ActivityKind;
@@ -696,8 +945,8 @@ function addActivity(
 function addUserMessage(
   acc: ActivityAccumulator,
   input: {
-    provider: 'openai' | 'anthropic';
-    product: 'codex' | 'claude-code';
+    provider: Provider;
+    product: Product;
     usageDate: string;
     projectFields: ProjectFields;
     sessionId: string;
@@ -836,13 +1085,25 @@ function normalizeMessageText(value: string | undefined): string | undefined {
 }
 
 function extractSkillProxyNames(rawArguments?: string): string[] {
-  if (!rawArguments) return [];
-  const args = parseJsonObject(rawArguments);
-  const command = stringValue(args.cmd) ?? stringValue(args.command) ?? '';
-  if (!command.includes('SKILL.md')) return [];
+  return extractSkillProxyNamesFromArgs(parseJsonObject(rawArguments));
+}
+
+/**
+ * 从工具调用参数对象中提取 SKILL.md 读取痕迹（Codex 的 function_call 与
+ * Pi 的 read/bash 工具共用）：只从明确的 path/command/cmd 字段提取，
+ * 且仅当路径末尾为 SKILL.md 且目录名是合法的 skill 标识符时才认定。
+ */
+function extractSkillProxyNamesFromArgs(args: Record<string, unknown>): string[] {
+  const command =
+    stringValue(args.command)
+    ?? stringValue(args.cmd)
+    ?? stringValue(args.path)
+    ?? stringValue(args.filePath);
+  if (!command || !command.includes('SKILL.md')) return [];
   const names = new Set<string>();
-  for (const match of command.matchAll(/([^\s'"]*SKILL\.md)/g)) {
-    names.add(skillNameFromPath(match[1]));
+  for (const match of command.matchAll(/([^\s'"`]*SKILL\.md)/g)) {
+    const name = skillNameFromPath(match[1]);
+    if (name) names.add(name);
   }
   return [...names];
 }
@@ -857,12 +1118,18 @@ function parseJsonObject(raw?: string): Record<string, unknown> {
   }
 }
 
-function skillNameFromPath(rawPath: string): string {
+/**
+ * 从 SKILL.md 路径中解析 skill 名（取倒数第二段目录名）。
+ * 目录名必须是合法标识符（字母/数字/._- 开头结尾），
+ * 避免把文档片段、变量、相对路径噪音误认为 skill。
+ */
+function skillNameFromPath(rawPath: string): string | undefined {
   const cleaned = rawPath.replace(/^[`'"]+|[`'"]+$/g, '');
-  const parts = cleaned.split('/').filter(Boolean);
+  const parts = cleaned.split(/[/\\]+/).filter(Boolean);
   const idx = parts.lastIndexOf('SKILL.md');
   const name = idx > 0 ? parts[idx - 1] : undefined;
-  if (!name || name === '$d' || name === 's#') return 'unknown-skill';
+  if (!name) return undefined;
+  if (!/^[A-Za-z0-9][\w.-]*[A-Za-z0-9]$/.test(name)) return undefined;
   return name;
 }
 

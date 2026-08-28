@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { signDeviceToken } from '../utils/token.js';
 import type { Env } from '../types.js';
-import { canonicalizeIngestBreakdown, handleIngest } from './ingest.js';
+import { canonicalizeIngestBreakdown, handleIngest, replaceActivityMetrics } from './ingest.js';
 
 const secret = 'provider-canonicalization-test-secret';
 
@@ -85,5 +85,80 @@ describe('ingest provider canonicalization', () => {
     expect(breakdownBinds[0]?.[2]).toBe('openai');
     expect(breakdownBinds[0]?.[3]).toBe('codex');
     expect(JSON.parse(String(breakdownBinds[0]?.[19])).raw_providers).toEqual(['openai-codex']);
+  });
+});
+
+describe('Pi activity ingest', () => {
+  it('writes product=pi activity items into daily_activity_breakdown', async () => {
+    const activityBinds: unknown[][] = [];
+    const DB = {
+      prepare(sql: string) {
+        return {
+          bind(...params: unknown[]) {
+            if (sql.includes('INSERT INTO daily_activity_breakdown')) activityBinds.push(params);
+            return {
+              first: async () => null,
+              run: async () => ({ success: true }),
+            };
+          },
+        };
+      },
+    };
+
+    await replaceActivityMetrics(
+      { DB } as unknown as Env,
+      'device-test',
+      '2026-08-20',
+      [
+        {
+          provider: 'openai-codex',
+          product: 'pi',
+          source: 'openai-codex/pi',
+          project: '/workspace/demo',
+          kind: 'tool_call',
+          name: 'bash',
+          count: 5,
+          confidence: 'exact',
+        },
+        {
+          provider: 'openai-codex',
+          product: 'pi',
+          source: 'openai-codex/pi',
+          project: '/workspace/demo',
+          kind: 'skill_proxy',
+          name: 'security-review',
+          count: 1,
+          confidence: 'proxy',
+        },
+        {
+          provider: 'openai-codex',
+          product: 'pi',
+          source: 'openai-codex/pi',
+          project: '/workspace/demo',
+          kind: 'agent_call',
+          name: 'subagent',
+          count: 1,
+          confidence: 'exact',
+        },
+      ],
+      '2026-08-20T12:00:00.000Z',
+    );
+
+    expect(activityBinds).toHaveLength(3);
+    // [device_id, usage_date, provider, product, source, project, ...]
+    expect(activityBinds[0]?.[0]).toBe('device-test');
+    expect(activityBinds[0]?.[1]).toBe('2026-08-20');
+    expect(activityBinds[0]?.[2]).toBe('openai');
+    expect(activityBinds[0]?.[3]).toBe('pi');
+    expect(activityBinds[0]?.[4]).toBe('openai-codex/pi');
+    expect(activityBinds[0]?.[8]).toBe('tool_call');
+    expect(activityBinds[0]?.[9]).toBe('bash');
+    expect(activityBinds[0]?.[10]).toBe('exact');
+    expect(activityBinds[0]?.[11]).toBe(5);
+    expect(activityBinds[1]?.[8]).toBe('skill_proxy');
+    expect(activityBinds[1]?.[9]).toBe('security-review');
+    expect(activityBinds[1]?.[10]).toBe('proxy');
+    expect(activityBinds[2]?.[8]).toBe('agent_call');
+    expect(activityBinds[2]?.[9]).toBe('subagent');
   });
 });

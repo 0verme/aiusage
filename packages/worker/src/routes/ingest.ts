@@ -305,7 +305,7 @@ export async function handleIngest(request: Request, env: Env): Promise<Response
   return jsonNoStore({ daysProcessed: body.days.length, costSummary });
 }
 
-async function replaceActivityMetrics(
+export async function replaceActivityMetrics(
   env: Env,
   deviceId: string,
   usageDate: string,

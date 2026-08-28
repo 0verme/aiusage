@@ -41,6 +41,7 @@ describe('buildActivityReport', () => {
       const report = await buildActivityReport('today', {
         dates: ['2026-06-24'],
         claudeProjectsDirs: [join(tmpDir, 'missing-claude')],
+        piDir: join(tmpDir, 'missing-pi'),
       });
 
       expect(report.totals.exactCount).toBe(1);
@@ -114,6 +115,7 @@ describe('buildActivityReport', () => {
       dates: ['2026-06-24'],
       codexDir,
       claudeProjectsDirs: [join(tmpDir, 'missing-claude')],
+      piDir: join(tmpDir, 'missing-pi'),
     });
 
     expect(report.totals.exactCount).toBe(4);
@@ -200,6 +202,7 @@ describe('buildActivityReport', () => {
       dates: ['2026-06-24'],
       codexDir: join(tmpDir, 'missing-codex'),
       claudeProjectsDirs: [claudeProjects],
+      piDir: join(tmpDir, 'missing-pi'),
     });
 
     expect(report.totals.exactCount).toBe(4);
