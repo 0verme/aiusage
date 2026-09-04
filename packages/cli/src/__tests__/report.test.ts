@@ -254,6 +254,30 @@ describe('Trae CLI filters', () => {
 });
 
 describe('calculateBreakdownCost', () => {
+  it('uses pricingModelKey instead of a raw alias for local cost calculation', async () => {
+    const { calculateBreakdownCost } = await import('../report.js');
+    const warnings = new Set<string>();
+
+    const cost = calculateBreakdownCost({
+      provider: 'deepseek',
+      product: 'deepseek-chat',
+      channel: 'api',
+      model: 'deepseek-v4-flash-0731',
+      rawModel: 'deepseek-v4-flash-0731',
+      pricingModelKey: 'deepseek-v4-flash',
+      project: 'demo',
+      eventCount: 1,
+      inputTokens: 1_000_000,
+      cachedInputTokens: 0,
+      cacheWriteTokens: 0,
+      outputTokens: 1_000_000,
+      reasoningOutputTokens: 0,
+    }, warnings);
+
+    expect(cost).toBe(0.42);
+    expect([...warnings]).toEqual([]);
+  });
+
   it('prices local Codex GPT-5.5 usage', async () => {
     const { calculateBreakdownCost } = await import('../report.js');
     const warnings = new Set<string>();

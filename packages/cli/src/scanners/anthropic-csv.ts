@@ -55,9 +55,10 @@ export async function scanAnthropicCsvDates(
         + row.usage_output_tokens;
       if (total === 0) continue;
 
-      const model = normalizeModelName(row.model_version);
+      const rawModel = row.model_version;
+      const model = normalizeModelName(rawModel);
       const product = workspaceToProduct(row.workspace);
-      const key = `${model}|${product}`;
+      const key = `${rawModel}|${model}|${product}`;
 
       const byModel = grouped.get(row.usage_date_utc)!;
       const existing = byModel.get(key);
@@ -78,6 +79,7 @@ export async function scanAnthropicCsvDates(
           product,
           channel: 'cli',
           model,
+          ...(rawModel !== model ? { rawModel, pricingModelKey: model } : {}),
           project: 'unknown',
           eventCount: 1,
           inputTokens: row.usage_input_tokens_no_cache,

@@ -1,5 +1,13 @@
 import { describe, it, expect } from 'vitest';
-import { parseTs, dateKey, inferProviderFromModel, projectFromPath, resolveProjectFields } from '../utils.js';
+import {
+  parseTs,
+  dateKey,
+  inferProviderFromModel,
+  projectFromPath,
+  resolveProjectFields,
+  normalizeModelName,
+  scannerModelFields,
+} from '../utils.js';
 
 describe('parseTs', () => {
   it('treats 10-digit numeric values as Unix seconds (not milliseconds)', () => {
@@ -55,6 +63,23 @@ describe('inferProviderFromModel', () => {
     expect(inferProviderFromModel('gpt-5.6', 'pi')).toBe('openai');
     expect(inferProviderFromModel('gemini-3.1-pro-preview', 'pi')).toBe('google');
     expect(inferProviderFromModel('custom-model', 'pi')).toBe('pi');
+  });
+});
+
+describe('scanner model identity', () => {
+  it('keeps raw model separate from a pricing-compatible date key', () => {
+    expect(scannerModelFields(
+      'claude-opus-4-5-20251101',
+      normalizeModelName('claude-opus-4-5-20251101'),
+    )).toEqual({
+      model: 'claude-opus-4-5',
+      rawModel: 'claude-opus-4-5-20251101',
+      pricingModelKey: 'claude-opus-4-5',
+    });
+  });
+
+  it('does not add duplicate fields when the source model is already the pricing key', () => {
+    expect(scannerModelFields('gpt-5.6')).toEqual({ model: 'gpt-5.6' });
   });
 });
 

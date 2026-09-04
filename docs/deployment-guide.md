@@ -172,6 +172,7 @@ Repeat on every machine you want to track.
 | Command | Description |
 | --------- | ------------- |
 | `aiusage report [--tool TOOL] [--range 7d\|1m\|3m\|6m\|all] [--json]` | Local usage report with cost estimates |
+| `aiusage audit-models [--tool TOOL] [--range 1m] [--json]` | Read-only model alias audit |
 | `aiusage scan [--tool TOOL] [--date YYYY-MM-DD\|--range 6m] [--json]` | Scan one tool, date, or range |
 | `aiusage trae sync [--edition cn\|intl\|all] [--since 180]` | Cache Trae CN local or international account usage |
 | `aiusage sync [--today] [--lookback N] [--date YYYY-MM-DD]` | Upload data to server |

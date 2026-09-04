@@ -2,7 +2,14 @@ import { readdir, readFile } from 'node:fs/promises';
 import { homedir } from 'node:os';
 import { basename, join } from 'node:path';
 import type { IngestBreakdown } from '@aiusage/shared';
-import { dateKey, emptyResult, initDateMap, parseTs, resolveProjectFields } from './utils.js';
+import {
+  dateKey,
+  emptyResult,
+  initDateMap,
+  parseTs,
+  resolveProjectFields,
+  scannerModelFields,
+} from './utils.js';
 
 const SESSION_FILES = ['summary.json', 'events.jsonl', 'signals.json', 'chat_history.jsonl', 'updates.jsonl'] as const;
 
@@ -75,9 +82,10 @@ async function scanSession(
   const cwd = records.map(({ record }) => findString(record, ['cwd', 'working_directory', 'workingDirectory'])).find(Boolean) ?? decodeCwd(encodedCwd);
   // Home-directory sessions are not a real project; map to Other so Sankey has a clear target.
   const fields = resolveGrokProjectFields(cwd, aliases);
-  const model = records.map(({ record }) => findString(record, [
+  const rawModel = records.map(({ record }) => findString(record, [
     'model_id', 'modelId', 'current_model_id', 'currentModelId', 'primaryModelId', 'primary_model_id',
   ])).find(Boolean) ?? 'grok-4.5';
+  const modelFields = scannerModelFields(rawModel);
 
   const turns = records.filter(({ file, record }) => file === 'events.jsonl' && eventType(record) === 'turn_started');
   const turnDays = new Map<string, number>();
@@ -92,13 +100,13 @@ async function scanSession(
   if (turnDays.size === 0 && fallbackDate && targetDates.has(fallbackDate)) turnDays.set(fallbackDate, 0);
   if (turnDays.size === 0) return;
 
-  const key = `${model}|${fields.project}`;
+  const key = `${rawModel}|${modelFields.model}|${fields.project}`;
   const tokenDate = [...turnDays.keys()][0];
   for (const [day, count] of turnDays) {
     const dayMap = grouped.get(day)!;
     const existing = dayMap.get(key);
     const breakdown = existing ?? {
-      provider: 'xai', product: 'grok-build', channel: 'cli', model,
+      provider: 'xai', product: 'grok-build', channel: 'cli', ...modelFields,
       project: fields.project, projectDisplay: fields.projectDisplay, projectAlias: fields.projectAlias,
       eventCount: 0, sessionCount: 0, inputTokens: 0, cachedInputTokens: 0,
       cacheWriteTokens: 0, outputTokens: 0, reasoningOutputTokens: 0,

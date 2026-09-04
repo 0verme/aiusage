@@ -1,5 +1,5 @@
 import { readFile } from 'node:fs/promises';
-import { join, basename } from 'node:path';
+import { join } from 'node:path';
 import { homedir } from 'node:os';
 import type { IngestBreakdown } from '@aiusage/shared';
 import {
@@ -13,6 +13,7 @@ import {
   resolveProjectFields,
   fileModifiedTs,
   inferProviderFromModel,
+  scannerModelFields,
   type ProjectFields,
 } from './utils.js';
 
@@ -107,8 +108,10 @@ export async function scanCopilotDates(
       const metrics = obj.data?.modelMetrics;
       if (!metrics) continue;
 
-      for (const [model, entry] of Object.entries(metrics)) {
+      for (const [rawModel, entry] of Object.entries(metrics)) {
         const usage = entry.usage;
+        const modelFields = scannerModelFields(rawModel);
+        const model = modelFields.model;
         if (!usage) continue;
 
         const rawInput = clamp(usage.inputTokens);
@@ -120,12 +123,12 @@ export async function scanCopilotDates(
 
         accumulate(
           dayMap,
-          `${model}|${sessionProjectFields.project}`,
+          `${rawModel}|${model}|${sessionProjectFields.project}`,
           {
             provider: 'github',
             product: 'copilot-cli',
             channel: 'cli',
-            model,
+            ...modelFields,
             project: sessionProjectFields.project,
             projectDisplay: sessionProjectFields.projectDisplay,
             projectAlias: sessionProjectFields.projectAlias,
@@ -147,14 +150,15 @@ export async function scanCopilotDates(
       seenOtel.add(candidate.dedupKey);
       const dayMap = grouped.get(dateKey(candidate.timestamp));
       if (!dayMap) continue;
+      const modelFields = scannerModelFields(candidate.model);
       accumulate(
         dayMap,
-        `${candidate.provider}|${candidate.model}|unknown`,
+        `${candidate.provider}|${candidate.model}|${modelFields.model}|unknown`,
         {
           provider: candidate.provider,
           product: 'copilot-cli',
           channel: 'cli',
-          model: candidate.model,
+          ...modelFields,
           project: 'unknown',
           projectDisplay: 'unknown',
           inputTokens: 0,

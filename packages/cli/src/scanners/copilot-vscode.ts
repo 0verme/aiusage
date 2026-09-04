@@ -69,12 +69,13 @@ export async function scanCopilotVscodeDates(
 
       accumulate(
         dayMap,
-        `${event.model}|${sessionProject}`,
+        `${event.rawModel}|${event.model}|${sessionProject}`,
         {
           provider: 'github',
           product: 'copilot-vscode',
           channel: 'ide',
           model: event.model,
+          ...(event.rawModel !== event.model ? { rawModel: event.rawModel, pricingModelKey: event.model } : {}),
           project: sessionProject,
           inputTokens: 0,
           cachedInputTokens: 0,
@@ -97,7 +98,7 @@ export async function scanCopilotVscodeDates(
   return finalize(grouped);
 }
 
-function extractSuccessEvent(line: string): { requestId: string; timestamp: Date; model: string } | null {
+function extractSuccessEvent(line: string): { requestId: string; timestamp: Date; model: string; rawModel: string } | null {
   if (!line.includes('ccreq:') || !line.includes('| success |')) return null;
 
   const timestampMatch = line.match(/^(\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}\.\d+)/);
@@ -111,11 +112,12 @@ function extractSuccessEvent(line: string): { requestId: string; timestamp: Date
 
   const requestIdMatch = parts[0].match(/ccreq:([^.|\s]+)/);
   const requestId = requestIdMatch?.[1] ?? `${timestamp.getTime()}`;
-  const model = normalizeModel(parts[2]);
+  const rawModel = parts[2];
+  const model = normalizeModel(rawModel);
   if (!model) return null;
   if (isBackgroundRequest(parts[4], model)) return null;
 
-  return { requestId, timestamp, model };
+  return { requestId, timestamp, model, rawModel };
 }
 
 function isBackgroundRequest(rawScope: string | undefined, model: string): boolean {
@@ -196,7 +198,8 @@ async function collectWorkspaceSessionEvents(
     if (!request.response?.length) continue;
     if (request.result?.errorDetails?.responseIsIncomplete) continue;
 
-    const model = normalizeWorkspaceModel(request.modelId);
+    const rawModel = request.modelId?.trim() ?? '';
+    const model = normalizeWorkspaceModel(rawModel);
     if (!model) continue;
 
     const timestamp = new Date(request.timestamp ?? 0);
@@ -212,12 +215,13 @@ async function collectWorkspaceSessionEvents(
 
     accumulate(
       dayMap,
-      `${model}|${project}`,
+      `${rawModel}|${model}|${project}`,
       {
         provider: 'github',
         product: 'copilot-vscode',
         channel: 'ide',
         model,
+        ...(rawModel !== model ? { rawModel, pricingModelKey: model } : {}),
         project,
         inputTokens: 0,
         cachedInputTokens: 0,
@@ -291,7 +295,9 @@ function addTokenizedWorkspaceRequest(
   const dayMap = grouped.get(dateKey(timestamp));
   if (!dayMap) return;
 
-  const model = normalizeTokenizedWorkspaceModel(resolvedModel || rawModelId) || 'auto';
+  const sourceModel = resolvedModel || rawModelId || 'auto';
+  const model = normalizeTokenizedWorkspaceModel(sourceModel) || 'auto';
+  const rawModel = sourceModel;
   const reasoning = (metadata?.toolCallRounds ?? []).reduce(
     (sum, round) => sum + clampToken(round.thinking?.tokens),
     0,
@@ -303,12 +309,13 @@ function addTokenizedWorkspaceRequest(
   const provider = inferProviderFromModel(model, 'github-copilot');
   accumulate(
     dayMap,
-    `${provider}|${model}|${project}`,
+    `${provider}|${rawModel}|${model}|${project}`,
     {
       provider,
       product: 'copilot-vscode',
       channel: 'ide',
       model,
+      ...(rawModel !== model ? { rawModel, pricingModelKey: model } : {}),
       project,
       inputTokens: 0,
       cachedInputTokens: 0,

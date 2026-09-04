@@ -183,6 +183,9 @@ export function MultiSelectFilter({
             {options.map((option) => {
               const checked = selected.has(option.value);
               const tip = tooltips?.[option.value];
+              const rawModelTip = option.rawModels?.length && option.rawModels.length > 1
+                ? `${locale === 'zh' ? '原始模型别名' : 'Raw model aliases'}:\n${option.rawModels.map((rawModel) => `- ${rawModel}`).join('\n')}`
+                : undefined;
               const icon = getIcon?.(option);
               return (
                 <button
@@ -190,7 +193,7 @@ export function MultiSelectFilter({
                   type="button"
                   role="option"
                   aria-selected={checked}
-                  title={tip}
+                  title={tip ?? rawModelTip}
                   onClick={() => toggleValue(option.value)}
                   className={`flex w-full items-center gap-2 rounded-lg px-2.5 py-2 text-left text-[12px] transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-[var(--glow-strong)] ${
                     checked
@@ -211,6 +214,11 @@ export function MultiSelectFilter({
                     </span>
                   )}
                   <span className="min-w-0 flex-1 truncate">{formatLabel(option.label, option.value)}</span>
+                  {option.aliasCount !== undefined && option.aliasCount > 1 && (
+                    <span className="shrink-0 text-[11px] text-[var(--fg3)]">
+                      · {option.aliasCount} {locale === 'zh' ? '个别名' : 'aliases'}
+                    </span>
+                  )}
                   {option.eventCount !== undefined && (
                     <span className="shrink-0 tabular-nums text-[var(--fg3)]">
                       {formatCompact(option.eventCount, locale)}

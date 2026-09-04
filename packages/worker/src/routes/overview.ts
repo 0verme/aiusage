@@ -6,8 +6,11 @@ import {
 } from "../utils/privacy.js";
 import type { Env } from "../types.js";
 import {
+	canonicalModelSqlExpression,
 	canonicalProviderSqlExpression,
+	canonicalizeModel,
 	canonicalizeProvider,
+	displayModelName,
 	type OverviewComparisonPayload,
 } from "@aiusage/shared";
 
@@ -22,6 +25,13 @@ export const TOTAL_TOKENS_SQL = `
 const PROJECT_DISPLAY_SQL = `COALESCE(b.project_alias, b.project_display)`;
 const ACTIVITY_PROJECT_DISPLAY_SQL = `COALESCE(a.project_alias, a.project_display)`;
 const PROVIDER_SQL = canonicalProviderSqlExpression("b.provider", "b.model");
+const MODEL_SQL = canonicalModelSqlExpression("b.model");
+const RAW_MODEL_SQL = `COALESCE(
+  CASE WHEN json_valid(b.extra_metrics_json)
+    THEN json_extract(b.extra_metrics_json, '$.raw_model')
+  END,
+  b.model
+)`;
 const ACTIVITY_PROVIDER_SQL = canonicalProviderSqlExpression("a.provider");
 
 type FilterKey =
@@ -43,6 +53,8 @@ export interface DashboardFilters {
 	channel: string[];
 	model: string[];
 	project: string[];
+	/** 默认 true；false 仅用于排查 raw model。 */
+	mergeModelAliases?: boolean;
 }
 
 export interface WhereParts {
@@ -55,6 +67,8 @@ interface FacetItem {
 	label: string;
 	estimatedCostUsd: number;
 	eventCount: number;
+	rawModels?: string[];
+	aliasCount?: number;
 }
 
 export async function handleOverview(url: URL, env: Env): Promise<Response> {
@@ -67,6 +81,8 @@ export async function handleOverview(url: URL, env: Env): Promise<Response> {
 		env,
 	);
 	const filters = { ...parsedFilters, project: projectFilter.databaseValues };
+	const mergeModelAliases = filters.mergeModelAliases !== false;
+	const modelExpression = getModelExpression(filters);
 	const where = buildWhere(filters);
 	const previousFilters = buildPreviousFilters(filters);
 
@@ -178,19 +194,21 @@ export async function handleOverview(url: URL, env: Env): Promise<Response> {
 			}>(),
 		env.DB.prepare(`
       SELECT
-        b.model AS value,
+        ${modelExpression} AS value,
+        GROUP_CONCAT(DISTINCT ${RAW_MODEL_SQL}) AS raw_models,
         COALESCE(SUM(b.estimated_cost_usd), 0) AS estimated_cost_usd,
         COALESCE(SUM(b.event_count), 0) AS event_count,
         COALESCE(SUM(${TOTAL_TOKENS_SQL}), 0) AS total_tokens
       FROM daily_usage_breakdown b
       ${where.whereClause}
-      GROUP BY b.model
-      HAVING b.model IS NOT NULL AND b.model != ''
+      GROUP BY ${modelExpression}
+      HAVING value IS NOT NULL AND value != ''
       ORDER BY total_tokens DESC, value ASC
     `)
 			.bind(...where.params)
 			.all<{
 				value: string;
+				raw_models?: string;
 				estimated_cost_usd: number;
 				event_count: number;
 				total_tokens: number;
@@ -214,18 +232,20 @@ export async function handleOverview(url: URL, env: Env): Promise<Response> {
 			}>(),
 		env.DB.prepare(`
       SELECT
-        b.model,
+        ${mergeModelAliases ? "b.model" : `${RAW_MODEL_SQL} AS model`},
+        GROUP_CONCAT(DISTINCT ${RAW_MODEL_SQL}) AS raw_models,
         ${PROJECT_DISPLAY_SQL} AS project,
         COALESCE(SUM(${TOTAL_TOKENS_SQL}), 0) AS total_tokens
       FROM daily_usage_breakdown b
       ${where.whereClause}
-      GROUP BY b.model, ${PROJECT_DISPLAY_SQL}
+      GROUP BY ${mergeModelAliases ? "b.model" : RAW_MODEL_SQL}, ${PROJECT_DISPLAY_SQL}
       HAVING COALESCE(SUM(${TOTAL_TOKENS_SQL}), 0) > 0
       ORDER BY total_tokens DESC, b.model ASC, project ASC
     `)
 			.bind(...where.params)
 			.all<{
 				model: string;
+				raw_models?: string;
 				project: string;
 				total_tokens: number;
 			}>(),
@@ -278,7 +298,9 @@ export async function handleOverview(url: URL, env: Env): Promise<Response> {
 				eventCount: Number(row.event_count ?? 0),
 				estimatedCostUsd: roundUsd(row.estimated_cost_usd ?? 0),
 			})),
-			providerDailyTrend: mergeProviderTrendRows(providerTrendRows.results ?? []),
+			providerDailyTrend: mergeProviderTrendRows(
+				providerTrendRows.results ?? [],
+			),
 			tokenComposition: (tokenRows.results ?? []).map((row) => ({
 				usageDate: row.usage_date,
 				inputTokens: Number(row.input_tokens ?? 0),
@@ -295,10 +317,11 @@ export async function handleOverview(url: URL, env: Env): Promise<Response> {
 			})),
 			modelCostShare: (modelRows.results ?? []).map((row) => ({
 				value: row.value,
-				label: row.value,
+				label: mergeModelAliases ? displayModelName(row.value) : row.value,
 				estimatedCostUsd: roundUsd(row.estimated_cost_usd ?? 0),
 				eventCount: Number(row.event_count ?? 0),
 				totalTokens: Number(row.total_tokens ?? 0),
+				...modelMetadata(row.raw_models, row.value, mergeModelAliases),
 			})),
 			channelCostShare: (channelRows.results ?? []).map((row) => ({
 				value: row.value,
@@ -306,7 +329,7 @@ export async function handleOverview(url: URL, env: Env): Promise<Response> {
 				estimatedCostUsd: roundUsd(row.estimated_cost_usd ?? 0),
 				eventCount: Number(row.event_count ?? 0),
 			})),
-			sankey: await buildSankey(flowRows.results ?? [], env),
+			sankey: await buildSankey(flowRows.results ?? [], env, mergeModelAliases),
 			heatmap: (heatmapRows.results ?? []).map((row) => ({
 				usageDate: row.usage_date,
 				totalTokens: Number(row.total_tokens ?? 0),
@@ -323,6 +346,7 @@ export async function handleOverview(url: URL, env: Env): Promise<Response> {
 					channel: filters.channel,
 					model: filters.model,
 					project: projectFilter.selection,
+					mergeModelAliases,
 				},
 				options: {
 					devices,
@@ -343,6 +367,8 @@ export function parseFilters(url: URL): DashboardFilters | null {
 	const range = readTextParam(url, "range") ?? "30d";
 	const window = buildDateWindow(range);
 	if (!window) return null;
+	const mergeModelAliases = readBooleanParam(url, "mergeModelAliases", true);
+	const requestedModels = readTextParams(url, "model");
 
 	return {
 		minDate: window.minDate,
@@ -350,13 +376,20 @@ export function parseFilters(url: URL): DashboardFilters | null {
 		rangeDays: window.days,
 		range,
 		deviceId: readTextParams(url, "deviceId"),
-		provider: [...new Set(
-			readTextParams(url, "provider").map((value) => canonicalizeProvider({ provider: value })),
-		)],
+		provider: [
+			...new Set(
+				readTextParams(url, "provider").map((value) =>
+					canonicalizeProvider({ provider: value }),
+				),
+			),
+		],
 		product: readTextParams(url, "product"),
 		channel: readTextParams(url, "channel"),
-		model: readTextParams(url, "model"),
+		model: mergeModelAliases
+			? [...new Set(requestedModels.map((value) => canonicalizeModel(value)))]
+			: requestedModels,
 		project: readTextParams(url, "project"),
+		mergeModelAliases,
 	};
 }
 
@@ -392,6 +425,40 @@ function readTextParam(url: URL, key: string): string | null {
 	return trimmed === "" ? null : trimmed;
 }
 
+function readBooleanParam(url: URL, key: string, fallback: boolean): boolean {
+	const value = readTextParam(url, key)?.toLowerCase();
+	if (!value) return fallback;
+	if (["0", "false", "off", "no"].includes(value)) return false;
+	if (["1", "true", "on", "yes"].includes(value)) return true;
+	return fallback;
+}
+
+function getModelExpression(filters: Pick<DashboardFilters, "mergeModelAliases">): string {
+	return filters.mergeModelAliases === false ? RAW_MODEL_SQL : MODEL_SQL;
+}
+
+function parseRawModels(rawModels: string | null | undefined, fallback: string): string[] {
+	const values = (rawModels ?? "")
+		.split(",")
+		.map((value) => value.trim())
+		.filter(Boolean);
+	if (values.length === 0 && fallback) values.push(fallback);
+	return [...new Set(values)].sort((left, right) => left.localeCompare(right));
+}
+
+function modelMetadata(
+	rawModels: string | null | undefined,
+	fallback: string,
+	mergeAliases: boolean,
+): { rawModels?: string[]; aliasCount?: number } {
+	const values = parseRawModels(rawModels, fallback);
+	if (!mergeAliases || values.length === 0) return {};
+	return {
+		rawModels: values,
+		...(values.length > 1 ? { aliasCount: values.length } : {}),
+	};
+}
+
 export function buildWhere(
 	filters: DashboardFilters,
 	omit?: FilterKey,
@@ -416,7 +483,7 @@ export function buildWhere(
 	if (omit !== "channel")
 		addValueFilter(clauses, params, "b.channel", filters.channel);
 	if (omit !== "model")
-		addValueFilter(clauses, params, "b.model", filters.model);
+		addValueFilter(clauses, params, getModelExpression(filters), filters.model);
 	if (omit !== "project")
 		addValueFilter(clauses, params, PROJECT_DISPLAY_SQL, filters.project);
 
@@ -433,18 +500,27 @@ async function loadFacetOptions(
 ): Promise<FacetItem[]> {
 	const omit = toFilterKey(column);
 	const where = buildWhere(filters, omit);
-	const columnExpr = column === "project"
-		? PROJECT_DISPLAY_SQL
-		: column === "provider"
-			? PROVIDER_SQL
-			: `b.${column}`;
+	const isModelColumn = column === "model";
+	const columnExpr =
+		column === "project"
+			? PROJECT_DISPLAY_SQL
+			: column === "provider"
+				? PROVIDER_SQL
+				: isModelColumn
+					? getModelExpression(filters)
+					: `b.${column}`;
 	const modelSelect = column === "provider" ? "b.model AS model," : "";
-	const groupExpr = column === "provider" ? `${columnExpr}, b.model` : columnExpr;
+	const rawModelSelect = isModelColumn
+		? `GROUP_CONCAT(DISTINCT ${RAW_MODEL_SQL}) AS raw_models,`
+		: "";
+	const groupExpr =
+		column === "provider" ? `${columnExpr}, b.model` : columnExpr;
 	const limitClause = column === "provider" ? "" : "LIMIT 80";
 	const rows = await env.DB.prepare(`
     SELECT
       ${columnExpr} AS value,
       ${modelSelect}
+      ${rawModelSelect}
       COALESCE(SUM(b.estimated_cost_usd), 0) AS estimated_cost_usd,
       COALESCE(SUM(b.event_count), 0) AS event_count
     FROM daily_usage_breakdown b
@@ -458,6 +534,7 @@ async function loadFacetOptions(
 		.all<{
 			value: string;
 			model?: string;
+			raw_models?: string;
 			estimated_cost_usd: number;
 			event_count: number;
 		}>();
@@ -472,28 +549,41 @@ async function loadFacetOptions(
 
 	const items = await Promise.all(
 		(rows.results ?? []).map(async (row) => {
-			const provider = column === "provider"
-				? canonicalizeProvider({ provider: row.value, model: row.model })
+			const modelValue = isModelColumn && filters.mergeModelAliases !== false
+				? canonicalizeModel(row.value)
 				: row.value;
+			const provider =
+				column === "provider"
+					? canonicalizeProvider({ provider: row.value, model: row.model })
+					: row.value;
 			const identity =
 				column === "project"
 					? await toPublicProjectIdentity(row.value, env)
 					: null;
 			return {
-				value: identity?.value ?? provider,
+				value: identity?.value ?? (isModelColumn ? modelValue : provider),
 				label:
 					identity?.label ??
 					(column === "device_id"
 						? (deviceLabels?.get(row.value) ?? row.value)
 						: column === "product"
 							? productLabel(row.value, false)
-							: row.value),
+							: isModelColumn && filters.mergeModelAliases !== false
+								? displayModelName(modelValue)
+								: row.value),
 				estimatedCostUsd: roundUsd(row.estimated_cost_usd ?? 0),
 				eventCount: Number(row.event_count ?? 0),
+				...(isModelColumn
+					? modelMetadata(
+							row.raw_models,
+							row.value,
+							filters.mergeModelAliases !== false,
+						)
+					: {}),
 			};
 		}),
 	);
-	if (column === "project") return mergeFacetItems(items);
+	if (column === "project" || column === "model") return mergeFacetItems(items);
 	if (column === "provider") return mergeProviderFacetItems(items);
 	return column === "product" ? addCombinedTraeFacet(items) : items;
 }
@@ -506,9 +596,15 @@ export function mergeProviderTrendRows(
 		estimated_cost_usd: number;
 	}>,
 ): Array<{ usageDate: string; provider: string; estimatedCostUsd: number }> {
-	const merged = new Map<string, { usageDate: string; provider: string; estimatedCostUsd: number }>();
+	const merged = new Map<
+		string,
+		{ usageDate: string; provider: string; estimatedCostUsd: number }
+	>();
 	for (const row of rows) {
-		const provider = canonicalizeProvider({ provider: row.provider, model: row.model });
+		const provider = canonicalizeProvider({
+			provider: row.provider,
+			model: row.model,
+		});
 		const key = `${row.usage_date}\0${provider}`;
 		const existing = merged.get(key);
 		if (existing) {
@@ -522,15 +618,24 @@ export function mergeProviderTrendRows(
 		}
 	}
 	return [...merged.values()]
-		.map((row) => ({ ...row, estimatedCostUsd: roundUsd(row.estimatedCostUsd) }))
-		.sort((a, b) => a.usageDate.localeCompare(b.usageDate) || a.provider.localeCompare(b.provider));
+		.map((row) => ({
+			...row,
+			estimatedCostUsd: roundUsd(row.estimatedCostUsd),
+		}))
+		.sort(
+			(a, b) =>
+				a.usageDate.localeCompare(b.usageDate) ||
+				a.provider.localeCompare(b.provider),
+		);
 }
 
 export function mergeProviderFacetItems(items: FacetItem[]): FacetItem[] {
-	return mergeFacetItems(items.map((item) => ({
-		...item,
-		value: canonicalizeProvider({ provider: item.value }),
-	})));
+	return mergeFacetItems(
+		items.map((item) => ({
+			...item,
+			value: canonicalizeProvider({ provider: item.value }),
+		})),
+	);
 }
 
 export function mergeFacetItems(items: FacetItem[]): FacetItem[] {
@@ -851,20 +956,25 @@ export function buildActivityWhere(filters: DashboardFilters): WhereParts {
 export async function buildSankey(
 	rows: Array<{
 		model: string;
+		raw_models?: string | null;
 		project: string;
 		total_tokens: number;
 	}>,
 	env: Env,
+	mergeModelAliases = true,
 ): Promise<{
 	nodes: Array<{
 		id: string;
 		label: string;
 		layer: number;
 		totalTokens: number;
+		rawModels?: string[];
+		aliasCount?: number;
 	}>;
 	links: Array<{ source: string; target: string; value: number }>;
 }> {
 	const modelTotals = new Map<string, number>();
+	const modelRawModels = new Map<string, Set<string>>();
 	const projectTotals = new Map<
 		string,
 		{
@@ -878,7 +988,13 @@ export async function buildSankey(
 		const value = Number(row.total_tokens ?? 0);
 		if (!value) continue;
 
-		modelTotals.set(row.model, (modelTotals.get(row.model) ?? 0) + value);
+		const model = mergeModelAliases ? canonicalizeModel(row.model) : row.model || "unknown";
+		modelTotals.set(model, (modelTotals.get(model) ?? 0) + value);
+		const rawModels = parseRawModels(row.raw_models, row.model);
+		const rawModelSet = modelRawModels.get(model) ?? new Set<string>();
+		for (const rawModel of rawModels) rawModelSet.add(rawModel);
+		modelRawModels.set(model, rawModelSet);
+
 		const identity = await toPublicProjectIdentity(row.project, env);
 		const projectTotal = projectTotals.get(identity.nodeId);
 		if (projectTotal) {
@@ -887,17 +1003,22 @@ export async function buildSankey(
 			projectTotals.set(identity.nodeId, { identity, totalTokens: value });
 		}
 
-		const key = `${row.model}\u0000${identity.nodeId}`;
+		const key = `${model}\u0000${identity.nodeId}`;
 		flowLinks.set(key, (flowLinks.get(key) ?? 0) + value);
 	}
 
 	const nodes = [
-		...sortedNodeEntries(modelTotals).map(([label, totalTokens]) => ({
-			id: `model-${label}`,
-			label,
-			layer: 0,
-			totalTokens,
-		})),
+		...sortedNodeEntries(modelTotals).map(([model, totalTokens]) => {
+			const rawModels = [...(modelRawModels.get(model) ?? new Set([model]))]
+				.sort((left, right) => left.localeCompare(right));
+			return {
+				id: `model-${model}`,
+				label: mergeModelAliases ? displayModelName(model) : model,
+				layer: 0,
+				totalTokens,
+				...modelMetadata(rawModels.join(","), model, mergeModelAliases),
+			};
+		}),
 		...sortedNodeEntries(
 			new Map(
 				[...projectTotals].map(([nodeId, project]) => [

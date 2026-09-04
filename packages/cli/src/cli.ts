@@ -24,7 +24,7 @@ import { runDoctor } from './doctor.js';
 import { getVersion } from './version.js';
 import { discoverProjects } from './project.js';
 import { applyPrivacy, applyProjectPrivacy } from './privacy.js';
-import type { IngestActivityItem, IngestDay } from '@aiusage/shared';
+import { auditModelAliases, type IngestActivityItem, type IngestDay } from '@aiusage/shared';
 import { getPricingStatus, resolvePricingCatalog } from './pricing.js';
 import { syncTraeCnUsage } from './trae-sync.js';
 import { syncTraeIntlUsage } from './trae-intl-sync.js';
@@ -45,6 +45,10 @@ try {
     const parsed = parseArgs(argv.slice(1));
     if (parsed.flags.help) return helpForSubcommand('report');
     await runReport(parsed.flags, parsed.positionals);
+  } else if (command === 'audit-models') {
+    const parsed = parseArgs(argv.slice(1));
+    if (parsed.flags.help) return helpForSubcommand('audit-models');
+    await runModelAudit(parsed.flags, parsed.positionals);
   } else if (command === 'activity') {
     const parsed = parseArgs(argv.slice(1));
     if (parsed.flags.help) return helpForSubcommand('activity');
@@ -222,6 +226,44 @@ function printScanResult(result: Awaited<ReturnType<typeof scanDate>>, zh: boole
   console.log('── 合计 ──');
   console.log(`  事件: ${result.totals.eventCount}  输入: ${fmt(result.totals.inputTokens)}  缓存读: ${fmt(result.totals.cachedInputTokens)}  缓存写: ${fmt(result.totals.cacheWriteTokens)}  输出: ${fmt(result.totals.outputTokens)}  推理: ${fmt(result.totals.reasoningOutputTokens)}`);
   console.log();
+}
+
+async function runModelAudit(flags: Record<string, string | boolean>, positionals: string[] = []) {
+  const config = await readConfig();
+  const zh = config.lang === 'zh';
+  assertNoPositionals('audit-models', positionals, zh);
+  const { dates, range } = resolveDateParams(flags, config);
+  if (!dates) {
+    throw new Error(zh
+      ? 'audit-models --range all 需要明确日期范围，请使用 --from YYYY-MM-DD --to YYYY-MM-DD'
+      : 'audit-models --range all requires --from YYYY-MM-DD --to YYYY-MM-DD');
+  }
+  const tools = parseToolSelection(flags.tool, zh);
+  const results = await scanDates(dates, {
+    projectAliases: config.projectAliases,
+    opencodeDbPaths: config.scanner?.opencodeDbPaths,
+    tools,
+  });
+  const rawModels = results.flatMap((result) =>
+    result.breakdowns.map((breakdown) => breakdown.rawModel ?? breakdown.model),
+  );
+  const report = auditModelAliases(rawModels);
+
+  if (flags.json) {
+    console.log(JSON.stringify({ range, dates, ...report }, null, 2));
+    return;
+  }
+
+  console.log(zh ? `模型别名审计（${range}）` : `Model alias audit (${range})`);
+  console.log(zh
+    ? `扫描 ${dates.length} 天，发现 ${report.rawModelCount} 个原始模型、${report.canonicalModelCount} 个 canonical model。`
+    : `Scanned ${dates.length} days: ${report.rawModelCount} raw models, ${report.canonicalModelCount} canonical models.`);
+  console.log(zh ? `安全变体: ${report.safeVariants.length} 组` : `Safe variants: ${report.safeVariants.length} group(s)`);
+  console.log(zh ? `显式别名: ${report.knownAliases.length} 组` : `Explicit aliases: ${report.knownAliases.length} group(s)`);
+  console.log(zh ? `Remaining Unknown Aliases: ${report.remainingUnknownAliases.length}` : `Remaining Unknown Aliases: ${report.remainingUnknownAliases.length}`);
+  for (const candidate of report.remainingUnknownAliases) {
+    console.log(`  ${candidate.rawModel} -> ${candidate.suggestedModel} [${candidate.reason}]`);
+  }
 }
 
 async function runReport(flags: Record<string, string | boolean>, positionals: string[] = []) {
@@ -913,6 +955,7 @@ function printHelp(zh = false) {
   const cmds = zh ? [
     ['scan [--tool 工具] [--date YYYY-MM-DD|--today|--range 7d|1m|3m|6m] [--json]', '扫描用量明细'],
     ['report [--tool 工具] [--range 7d|1m|3m|6m|all] [--detail] [--json]', '本地用量报告'],
+    ['audit-models [--tool 工具] [--range ...] [--json]', '扫描模型别名并输出 Remaining Unknown Aliases'],
     ['activity [--today] [--range 7d|1m|3m|6m|all] [--detail] [--json]', '本地交互指标'],
     ['sync [--today|--yesterday] [--range 7d|1m|3m|6m]',             '上传用量到服务端'],
     ['trae sync [--edition cn|intl|all] [--since 180]',           '同步 Trae CN/国际版用量'],
@@ -928,6 +971,7 @@ function printHelp(zh = false) {
   ] : [
     ['scan [--tool TOOL] [--date YYYY-MM-DD|--today|--range 7d|1m|3m|6m] [--json]', 'Scan usage breakdown'],
     ['report [--tool TOOL] [--range 7d|1m|3m|6m|all] [--detail] [--json]', 'Local usage report'],
+    ['audit-models [--tool TOOL] [--range ...] [--json]', 'Scan aliases and report Remaining Unknown Aliases'],
     ['activity [--today] [--range 7d|1m|3m|6m|all] [--detail] [--json]', 'Local interaction metrics'],
     ['sync [--today|--yesterday] [--range 7d|1m|3m|6m]',             'Upload usage to server'],
     ['trae sync [--edition cn|intl|all] [--since 180]',           'Sync Trae CN/International usage'],
@@ -958,6 +1002,7 @@ function printUsageHint(zh = false) {
   const cmds = zh ? [
     ['scan [--tool 工具] [--date YYYY-MM-DD|--range 1m|6m]',   '扫描用量明细'],
     ['report [--tool 工具] [--range 7d|1m|3m|6m|all]', '本地用量报告'],
+    ['audit-models [--tool 工具] [--range ...]', '扫描模型别名'],
     ['activity [--range 7d|1m|3m|6m|all]',       '本地交互指标'],
     ['sync [--today|--yesterday] [--range 7d|1m|3m|6m]', '上传用量到服务端'],
     ['trae sync [--edition cn|intl|all]',        '同步 Trae CN/国际版用量'],
@@ -969,6 +1014,7 @@ function printUsageHint(zh = false) {
   ] : [
     ['scan [--tool TOOL] [--date YYYY-MM-DD|--range 1m|6m]',   'Scan usage breakdown'],
     ['report [--tool TOOL] [--range 7d|1m|3m|6m|all]', 'Local usage report'],
+    ['audit-models [--tool TOOL] [--range ...]', 'Scan model aliases'],
     ['activity [--range 7d|1m|3m|6m|all]',       'Local interaction metrics'],
     ['sync [--today|--yesterday] [--range 7d|1m|3m|6m]', 'Upload usage to server'],
     ['trae sync [--edition cn|intl|all]',        'Sync Trae CN/International usage'],

@@ -12,6 +12,7 @@ import {
   accumulate,
   finalize,
   emptyResult,
+  scannerModelFields,
 } from './utils.js';
 
 /**
@@ -93,7 +94,8 @@ export async function scanQwenDates(
       const dayMap = grouped.get(dk);
       if (!dayMap) continue;
 
-      const model = obj.model ?? 'unknown';
+      const rawModel = obj.model ?? 'unknown';
+      const modelFields = scannerModelFields(rawModel);
       const fields = obj.cwd
         ? resolveProjectFields(obj.cwd, projectAliases)
         : resolveProjectFields(projectId, projectAliases);
@@ -108,12 +110,12 @@ export async function scanQwenDates(
 
       accumulate(
         dayMap,
-        `${model}|${fields.project}`,
+        `${rawModel}|${modelFields.model}|${fields.project}`,
         {
           provider: 'alibaba',
           product: 'qwen-code',
           channel: 'cli',
-          model,
+          ...modelFields,
           project: fields.project,
           projectDisplay: fields.projectDisplay,
           projectAlias: fields.projectAlias,

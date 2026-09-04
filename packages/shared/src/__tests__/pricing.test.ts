@@ -171,6 +171,12 @@ describe('calculateCost — 关键模型', () => {
     expect(r.costStatus).toBe('exact');
   });
 
+  it('Claude 4-5 日期快照别名解析为 exact', () => {
+    const r = calculateCost('anthropic', 'claude-code', 'claude-opus-4-5-20251101', tokens);
+    expect(r.resolvedModel).toBe('claude-opus-4-5');
+    expect(r.costStatus).toBe('exact');
+  });
+
   it('Claude 5 常见误写别名解析为 exact', () => {
     const fable = calculateCost('anthropic', 'claude-code', 'claude-fibre-5', tokens);
     const opus = calculateCost('anthropic', 'claude-code', 'claude-ops-5', tokens);

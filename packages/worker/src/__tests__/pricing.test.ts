@@ -40,6 +40,27 @@ describe('calculateCost: 基本计费', () => {
     expect(result.costStatus).toBe('exact');
   });
 
+  it('使用独立 pricingModelKey 计算成本而不把高风险 raw alias 直接送入 catalog', () => {
+    const result = calculateIngestBreakdownCost({
+      provider: 'deepseek',
+      product: 'deepseek-chat',
+      channel: 'api',
+      model: 'deepseek-v4-flash-0731',
+      rawModel: 'deepseek-v4-flash-0731',
+      pricingModelKey: 'deepseek-v4-flash',
+      project: 'demo',
+      eventCount: 1,
+      inputTokens: 1_000_000,
+      cachedInputTokens: 0,
+      cacheWriteTokens: 0,
+      outputTokens: 1_000_000,
+      reasoningOutputTokens: 0,
+    });
+
+    expect(result.estimatedCostUsd).toBe(0.42);
+    expect(result.costStatus).toBe('exact');
+  });
+
   it('定价版本不一致时拒绝客户端预计算成本', () => {
     const result = calculateIngestBreakdownCost({
       provider: 'openai',

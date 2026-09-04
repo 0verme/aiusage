@@ -12,6 +12,7 @@ import {
   accumulate,
   finalize,
   emptyResult,
+  scannerModelFields,
 } from './utils.js';
 
 /**
@@ -63,6 +64,8 @@ export interface ParsedOpenCodeRecord {
   fingerprint: string;
   timestamp: Date;
   model: string;
+  rawModel?: string;
+  pricingModelKey?: string;
   provider: string;
   projectRoot?: string;
   tokens: { input: number; cached: number; cacheWrite: number; output: number; reasoning: number };
@@ -408,6 +411,8 @@ async function loadNodeSqlite(): Promise<NodeSqliteModule | null> {
     try {
       // Keep Node 18 compatibility: this module exists only in newer Node releases.
       const specifier = 'node:sqlite';
+      // SAFETY: `node:sqlite` is optional; the runtime shape is validated by
+      // the DatabaseSync function check before this value is returned.
       const module = await import(specifier) as unknown as Partial<NodeSqliteModule>;
       return typeof module.DatabaseSync === 'function' ? module as NodeSqliteModule : null;
     } catch {
@@ -440,13 +445,14 @@ function parseOpenCodeMessage(
 
   const timestamp = parseTs(message.time?.created);
   if (!timestamp) return undefined;
-  const model = cleanString(message.modelID) || cleanString(message.model?.id);
-  if (!model) return undefined;
+  const rawModel = cleanString(message.modelID) || cleanString(message.model?.id);
+  if (!rawModel) return undefined;
+  const modelFields = scannerModelFields(rawModel);
   const rawProvider = cleanString(message.providerID) || cleanString(message.model?.providerID);
   const provider = canonicalizeProvider({
     provider: rawProvider ?? 'opencode',
     product: 'opencode',
-    model,
+    model: rawModel,
   });
   const tokens = {
     input: clamp(message.tokens.input),
@@ -470,14 +476,14 @@ function parseOpenCodeMessage(
     fallbackId,
     sessionId,
     timestamp,
-    model,
+    ...modelFields,
     provider,
     projectRoot,
     tokens,
     costUSD,
     agent,
     fingerprint: JSON.stringify([
-      timestamp.getTime(), completed, model, provider, tokens.input, tokens.cached,
+      timestamp.getTime(), completed, modelFields.model, provider, tokens.input, tokens.cached,
       tokens.cacheWrite, tokens.output, tokens.reasoning, costUSD, agent ?? '',
     ]),
   };
@@ -495,7 +501,9 @@ function addOpenCodeRecord(
   const fields = record.projectRoot
     ? resolveProjectFields(record.projectRoot, aliases)
     : { project: 'unknown', projectDisplay: 'unknown' };
-  const breakdownKey = `${record.provider}|${record.model}|${fields.project}`;
+  const modelFields = scannerModelFields(record.rawModel ?? record.model, record.model);
+  const rawModel = record.rawModel ?? record.model;
+  const breakdownKey = `${record.provider}|${rawModel}|${modelFields.model}|${fields.project}`;
   accumulate(
     dayMap,
     breakdownKey,
@@ -503,7 +511,7 @@ function addOpenCodeRecord(
       provider: record.provider,
       product: 'opencode',
       channel: 'cli',
-      model: record.model,
+      ...modelFields,
       project: fields.project,
       projectDisplay: fields.projectDisplay,
       projectAlias: fields.projectAlias,

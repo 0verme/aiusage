@@ -35,7 +35,15 @@ export interface IngestBreakdown {
   provider: Provider;
   product: Product;
   channel: Channel;
+  /**
+   * Backward-compatible pricing model field. New scanners may attach the
+   * source value in rawModel and the catalog lookup key in pricingModelKey.
+   */
   model: string;
+  /** 数据源原始模型名；缺省时兼容旧客户端的 model。 */
+  rawModel?: string;
+  /** 仅用于 Pricing catalog lookup，不参与 Dashboard 聚合。 */
+  pricingModelKey?: string;
   project: string;
   projectDisplay?: string;
   projectAlias?: string;
@@ -195,6 +203,10 @@ export interface ShareItem {
 
 export interface ModelShareItem extends ShareItem {
   totalTokens: number;
+  /** canonical model 下实际出现过的 raw model 值。 */
+  rawModels?: string[];
+  /** rawModels.length > 1 时供 UI 弱提示使用。 */
+  aliasCount?: number;
 }
 
 export interface SankeyNode {
@@ -202,6 +214,8 @@ export interface SankeyNode {
   label: string;
   layer: number;
   totalTokens: number;
+  rawModels?: string[];
+  aliasCount?: number;
 }
 
 export interface SankeyLink {
@@ -220,6 +234,8 @@ export interface FacetOption {
   label: string;
   estimatedCostUsd: number;
   eventCount: number;
+  rawModels?: string[];
+  aliasCount?: number;
 }
 
 export interface DashboardFiltersPayload {
@@ -231,6 +247,7 @@ export interface DashboardFiltersPayload {
     channel: string[];
     model: string[];
     project: string[];
+    mergeModelAliases?: boolean;
   };
   options: {
     devices: FacetOption[];
@@ -249,6 +266,8 @@ export interface BreakdownItem {
   product: Product;
   channel: Channel;
   model: string;
+  rawModel?: string;
+  pricingModelKey?: string;
   project: string;
   eventCount: number;
   inputTokens: number;

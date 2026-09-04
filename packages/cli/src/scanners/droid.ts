@@ -82,7 +82,8 @@ export async function scanDroidDates(
     const sessionDir = dirname(settingsPath);
     const transcriptPath = settingsPath.replace(/\.settings\.json$/, '.jsonl');
     const transcriptModel = settings.model ? undefined : await extractModelFromTranscript(transcriptPath);
-    const model = normalizeDroidModel(settings.model ?? transcriptModel ?? `${settings.providerLock ?? 'droid'}-unknown`);
+    const rawModel = settings.model ?? transcriptModel ?? `${settings.providerLock ?? 'droid'}-unknown`;
+    const model = normalizeDroidModel(rawModel);
     const provider = settings.providerLock?.trim().toLowerCase()
       || inferProviderFromModel(model, 'droid');
     const ts = parseTs(settings.providerLockTimestamp) ?? await fileModifiedTs(settingsPath);
@@ -97,12 +98,13 @@ export async function scanDroidDates(
 
     accumulate(
       dayMap,
-      `${model}|${project}`,
+      `${rawModel}|${model}|${project}`,
       {
         provider,
         product: 'droid',
         channel: 'cli',
         model,
+        ...(rawModel !== model ? { rawModel, pricingModelKey: model } : {}),
         project,
         projectDisplay: rawProject,
         projectAlias: alias,

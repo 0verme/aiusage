@@ -22,6 +22,7 @@
     "db:migrate:local": "wrangler d1 execute aiusage-db --local --file=migrations/0001_init.sql",
     "db:migrate:remote": "wrangler d1 execute aiusage-db --remote --file=migrations/0001_init.sql",
     "db:recalculate": "node --import tsx/esm scripts/recalculate-costs.ts",
+    "db:audit-models": "node --import tsx/esm scripts/audit-model-aliases.ts",
     "db:recover-claude": "node --import tsx/esm scripts/recover-claude.ts"
   },
   "dependencies": {

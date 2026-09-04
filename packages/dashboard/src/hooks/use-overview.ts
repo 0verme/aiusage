@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState } from 'react';
 import type { OverviewResponse } from '@aiusage/shared';
 import { DEMO_OVERVIEW, DEMO_HEALTH } from '../demo-data';
 import { arrSum } from '../utils/format';
-import { buildQuery, padMonth } from '../utils/data';
+import { buildQuery, normalizeModelDimensions, padMonth } from '../utils/data';
 import { getMetricAvailability } from '../utils/metric-availability';
 
 // ── Types ──
@@ -15,6 +15,7 @@ export interface FiltersState {
   products?: string[];
   models?: string[];
   projects?: string[];
+  mergeModelAliases?: boolean;
 }
 
 export interface HealthPayload { ok: boolean; siteId: string; version: string; siteTitle?: string }
@@ -24,6 +25,8 @@ export interface FacetOption {
   label: string;
   estimatedCostUsd?: number;
   eventCount?: number;
+  rawModels?: string[];
+  aliasCount?: number;
 }
 
 // ── Fetch helper ──
@@ -62,13 +65,14 @@ export function useOverview(filters: FiltersState) {
           ),
         ]);
         if (cancelled) return;
-        setOverview(filters.range === 'month' ? padMonth(ov) : ov);
+        const prepared = filters.range === 'month' ? padMonth(ov) : ov;
+        setOverview(normalizeModelDimensions(prepared, filters.mergeModelAliases !== false));
         setHealth(hp);
         setIsDemo(false);
       } catch {
         if (cancelled) return;
         const demo = filters.range === 'month' ? padMonth(DEMO_OVERVIEW) : DEMO_OVERVIEW;
-        setOverview(demo);
+        setOverview(normalizeModelDimensions(demo, filters.mergeModelAliases !== false));
         setHealth(DEMO_HEALTH);
         setIsDemo(true);
       } finally {

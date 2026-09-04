@@ -1,5 +1,7 @@
 import {
+	canonicalModelSqlExpression,
 	canonicalProviderSqlExpression,
+	canonicalizeModel,
 	canonicalizeProvider,
 	DEFAULT_BREAKDOWN_LIMIT,
 	MAX_BREAKDOWN_LIMIT,
@@ -12,6 +14,13 @@ import {
 import type { Env } from "../types.js";
 
 const PROVIDER_SQL = canonicalProviderSqlExpression("b.provider", "b.model");
+const MODEL_SQL = canonicalModelSqlExpression("b.model");
+const RAW_MODEL_SQL = `COALESCE(
+  CASE WHEN json_valid(b.extra_metrics_json)
+    THEN json_extract(b.extra_metrics_json, '$.raw_model')
+  END,
+  b.model
+)`;
 
 const SORT_FIELDS: Record<string, string> = {
 	usage_date: "b.usage_date",
@@ -19,7 +28,7 @@ const SORT_FIELDS: Record<string, string> = {
 	provider: PROVIDER_SQL,
 	product: "b.product",
 	channel: "b.channel",
-	model: "b.model",
+	model: MODEL_SQL,
 	project: "COALESCE(b.project_alias, b.project_display)",
 	event_count: "b.event_count",
 	input_tokens: "b.input_tokens",
@@ -46,9 +55,11 @@ export async function handleBreakdowns(url: URL, env: Env): Promise<Response> {
 		? canonicalizeProvider({ provider })
 		: null;
 	const product = readTextParam(url, "product");
-	const model = readTextParam(url, "model");
+	const requestedModel = readTextParam(url, "model");
 	const channel = readTextParam(url, "channel");
 	const project = readTextParam(url, "project");
+	const mergeModelAliases = readBooleanParam(url, "mergeModelAliases", true);
+	const modelExpression = mergeModelAliases ? MODEL_SQL : RAW_MODEL_SQL;
 	const projectFilter = await resolvePublicProjectFilter(
 		project ? [project] : [],
 		env,
@@ -94,8 +105,11 @@ export async function handleBreakdowns(url: URL, env: Env): Promise<Response> {
 			params.push(product);
 		}
 	}
+	const model = requestedModel
+		? (mergeModelAliases ? canonicalizeModel(requestedModel) : requestedModel)
+		: null;
 	if (model) {
-		conditions.push("b.model = ?");
+		conditions.push(`${modelExpression} = ?`);
 		params.push(model);
 	}
 	if (channel) {
@@ -115,7 +129,9 @@ export async function handleBreakdowns(url: URL, env: Env): Promise<Response> {
 
 	const whereClause =
 		conditions.length > 0 ? `WHERE ${conditions.join(" AND ")}` : "";
-	const sortExpression = SORT_FIELDS[sort];
+	const sortExpression = sort === "model" && !mergeModelAliases
+		? RAW_MODEL_SQL
+		: SORT_FIELDS[sort];
 
 	const countResult = await env.DB.prepare(`
     SELECT COUNT(*) AS total
@@ -132,7 +148,8 @@ export async function handleBreakdowns(url: URL, env: Env): Promise<Response> {
       ${PROVIDER_SQL} AS provider,
       b.product,
       b.channel,
-      b.model,
+      ${modelExpression} AS model,
+      ${RAW_MODEL_SQL} AS raw_model,
       COALESCE(b.project_alias, b.project_display) AS project,
       b.event_count,
       b.input_tokens,
@@ -156,6 +173,7 @@ export async function handleBreakdowns(url: URL, env: Env): Promise<Response> {
 			product: string;
 			channel: string;
 			model: string;
+			raw_model: string;
 			project: string;
 			event_count: number;
 			input_tokens: number;
@@ -171,7 +189,8 @@ export async function handleBreakdowns(url: URL, env: Env): Promise<Response> {
 	const data = await Promise.all(
 		(rows.results ?? []).map(async (row) => ({
 			...row,
-			provider: canonicalizeProvider({ provider: row.provider, model: row.model }),
+			raw_model: row.raw_model || row.model,
+			provider: canonicalizeProvider({ provider: row.provider, model: row.raw_model || row.model }),
 			estimated_cost_usd: roundUsd(row.estimated_cost_usd),
 			total_tokens: Number(row.total_tokens ?? 0),
 			project: (
@@ -204,6 +223,14 @@ function readTextParam(url: URL, key: string): string | null {
 	if (!value) return null;
 	const trimmed = value.trim();
 	return trimmed === "" ? null : trimmed;
+}
+
+function readBooleanParam(url: URL, key: string, fallback: boolean): boolean {
+	const value = readTextParam(url, key)?.toLowerCase();
+	if (!value) return fallback;
+	if (["0", "false", "off", "no"].includes(value)) return false;
+	if (["1", "true", "on", "yes"].includes(value)) return true;
+	return fallback;
 }
 
 function clampLimit(value: string | null): number {

@@ -112,6 +112,28 @@ function LangToggle({ value, onChange }: { value: Locale; onChange: (v: Locale) 
 // Controls
 // ────────────────────────────────────────
 
+function ModelAliasToggle({
+  checked,
+  onChange,
+  label,
+}: {
+  checked: boolean;
+  onChange: (checked: boolean) => void;
+  label: string;
+}) {
+  return (
+    <label className="inline-flex h-9 cursor-pointer items-center gap-2 rounded-lg bg-[var(--panel-soft)] px-3 text-[12px] font-medium text-[var(--fg2)] transition-colors hover:text-[var(--fg)]">
+      <input
+        type="checkbox"
+        checked={checked}
+        onChange={(event) => onChange(event.target.checked)}
+        className="h-3.5 w-3.5 accent-[var(--accent)]"
+      />
+      <span>{label}</span>
+    </label>
+  );
+}
+
 function SegmentedControl({
   value,
   options,
@@ -260,7 +282,7 @@ function InteractionMetricsSection({
 
 export function App() {
   const [filters, setFilters] = useState<FiltersState>({
-    range: '30d', deviceIds: [], products: [], models: [],
+    range: '30d', deviceIds: [], products: [], models: [], mergeModelAliases: true,
   });
 
   const {
@@ -419,9 +441,18 @@ export function App() {
                 options={fOpts.models}
                 allLabel={t.all}
                 locale={locale}
-                formatLabel={(label) => formatModelName(label, isMobile)}
+                formatLabel={(label, value) => filters.mergeModelAliases === false ? value : formatModelName(label, isMobile)}
                 getIcon={(option) => modelIcon(option.value, option.label)}
                 onChange={(values) => setFilters((f) => ({ ...f, models: values }))}
+              />
+              <ModelAliasToggle
+                checked={filters.mergeModelAliases !== false}
+                label={t.mergeModelAliases}
+                onChange={(checked) => setFilters((f) => ({
+                  ...f,
+                  mergeModelAliases: checked,
+                  models: [],
+                }))}
               />
               <MultiSelectFilter
                 label={t.device}
@@ -625,7 +656,9 @@ export function App() {
                       title={t.modelShare}
                       data={(overview?.modelCostShare ?? []).map((m) => ({
                         value: m.value,
-                        label: formatModelName(m.label, isMobile),
+                        label: filters.mergeModelAliases === false
+                          ? m.value
+                          : `${formatModelName(m.label, isMobile)}${m.aliasCount && m.aliasCount > 1 ? ` · ${m.aliasCount} ${t.aliasCount}` : ''}`,
                         amount: m.totalTokens,
                       }))}
                       colors={getChartColors(isDark)}

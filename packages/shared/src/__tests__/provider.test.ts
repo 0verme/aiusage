@@ -20,6 +20,7 @@ describe('inferProviderFromModel', () => {
     ['kimi-k3', 'moonshot'],
     ['grok-4.5', 'xai'],
     ['openai/gpt-5.6', 'openai'],
+    ['custom-gateway/gpt-5.6', 'openai'],
   ])('%s -> %s', (model, provider) => {
     expect(inferProviderFromModel(model, 'fallback')).toBe(provider);
   });
