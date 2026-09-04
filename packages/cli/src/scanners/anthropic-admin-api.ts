@@ -97,7 +97,8 @@ async function fetchAndMerge(
 
       for (const result of bucket.results) {
         if (!result.model) continue;
-        const model = normalizeModelName(result.model);
+        const rawModel = result.model;
+        const model = normalizeModelName(rawModel);
 
         const inputTokens = result.uncached_input_tokens ?? 0;
         const cachedInputTokens = result.cache_read_input_tokens ?? 0;
@@ -108,7 +109,9 @@ async function fetchAndMerge(
 
         if (inputTokens + outputTokens + cachedInputTokens + cacheWriteTokens === 0) continue;
 
-        const existing = breakdowns.find(b => b.model === model);
+        const existing = breakdowns.find(
+          b => b.model === model && (b.rawModel ?? b.model) === rawModel,
+        );
         if (existing) {
           existing.eventCount += 1;
           existing.inputTokens += inputTokens;
@@ -123,6 +126,7 @@ async function fetchAndMerge(
             product: 'claude-code',
             channel: 'cli',
             model,
+            ...(rawModel !== model ? { rawModel, pricingModelKey: model } : {}),
             project: 'unknown',
             eventCount: 1,
             inputTokens,

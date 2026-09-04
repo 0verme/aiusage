@@ -69,8 +69,8 @@ export async function walkFiles(dir: string, ext: string): Promise<string[]> {
 }
 
 async function walk(dir: string, ext: string, out: string[]): Promise<void> {
-  let entries;
-  try { entries = await readdir(dir, { withFileTypes: true }); } catch { return; }
+  let entries: Array<{ name: string; isDirectory(): boolean }>;
+  try { entries = await readdir(dir, { withFileTypes: true, encoding: 'utf8' }); } catch { return; }
   entries.sort((a, b) => a.name.localeCompare(b.name));
   for (const e of entries) {
     const full = join(dir, e.name);
@@ -124,12 +124,31 @@ export function emptyResult(dates: Set<string>): Map<string, IngestBreakdown[]> 
   return new Map([...dates].map(d => [d, []]));
 }
 
-// 归一化模型名，去掉日期后缀（如 claude-3-5-sonnet-20241022 → claude-3-5-sonnet）
-// 与上下文窗口标记（如 deepseek-v4-flash[1M] → deepseek-v4-flash，Claude Code 会附带 [1M]/[200k] 等）
+// 生成旧 scanner 使用的 pricing-compatible key：去掉日期后缀（如
+// claude-3-5-sonnet-20241022 → claude-3-5-sonnet）和上下文窗口标记。
+// 这不是 canonical/display normalization；调用方必须在 rawModel 中保留原值。
 export function normalizeModelName(name: string): string {
   return name
     .replace(/\[\d+[a-zA-Z]*\]$/, '')
     .replace(/-\d{8}$/, '');
+}
+
+/**
+ * Attach the scanner-level pricing key without losing the source model.
+ * Callers that have a source-specific pricing normalization pass it as the
+ * second argument; the default deliberately keeps the raw value unchanged.
+ * `model` remains the legacy pricing-compatible field; canonical/display
+ * normalization is intentionally deferred to shared/Worker/Dashboard code.
+ */
+export function scannerModelFields(
+  rawModel: string | undefined | null,
+  pricingModelKey = rawModel ?? '',
+): Pick<IngestBreakdown, 'model' | 'rawModel' | 'pricingModelKey'> {
+  const raw = rawModel?.trim() || 'unknown';
+  const pricing = pricingModelKey.trim() || 'unknown';
+  return pricing === raw
+    ? { model: pricing }
+    : { model: pricing, rawModel: raw, pricingModelKey: pricing };
 }
 
 // Pool-based 并发控制，避免同时打开过多文件句柄

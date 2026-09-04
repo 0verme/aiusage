@@ -1,3 +1,4 @@
+import { displayModelName } from '@aiusage/shared';
 import type { LocalReport } from './report.js';
 import type { Lang } from './i18n.js';
 import { t } from './i18n.js';
@@ -101,7 +102,7 @@ export function renderReport(report: LocalReport, opts: RenderOptions): string {
     lines.push(renderTable(
       [s.hdrModel, s.hdrSource, s.hdrEvents, s.hdrTotal, s.hdrInput, s.hdrOutput, s.hdrCost],
       report.byModel.slice(0, 12).map((r) => [
-        r.model, r.source, fmtInt(r.eventCount),
+        displayModelName(r.model), r.source, fmtInt(r.eventCount),
         fmtToken(r.totalTokens), fmtToken(r.inputTokens),
         fmtToken(r.outputTokens), fmtUsd(r.estimatedCostUsd, true),
       ]),

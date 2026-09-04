@@ -1,3 +1,9 @@
+import {
+  canonicalizeModel,
+  displayModelName,
+  modelProviderHint,
+  normalizeModelKey,
+} from '../model.js';
 import type { PricingCatalog } from './types.js';
 import { catalog as defaultCatalog } from './catalog.js';
 
@@ -21,6 +27,19 @@ export interface PricingIdentity {
   };
   /** 可读的归一化规则，未发生规则转换时为空。 */
   normalization: string | null;
+}
+
+/** 贯穿 raw → pricing → canonical → display 的模型身份快照。 */
+export interface ModelIdentity {
+  rawModel: string;
+  pricingModelKey: string;
+  pricingServiceTier: PricingServiceTier;
+  canonicalModel: string;
+  displayName: string;
+  providerPrefix?: string;
+  provider?: string;
+  providerLabel?: string;
+  pricingNormalization: string | null;
 }
 
 /**
@@ -49,13 +68,19 @@ export function normalizePricingModel(
   model: string,
   catalog: PricingCatalog = defaultCatalog,
 ): { model: string; serviceTier: PricingServiceTier; normalization: string | null } {
-  const rawModel = model.trim().toLowerCase();
+  // Pricing gets only safe syntax normalization here. In particular, the
+  // canonical MODEL_ALIASES map is intentionally not applied: a date/snapshot
+  // alias may be visually mergeable while still requiring a distinct price.
+  const rawModel = normalizeModelKey(model).model;
   const { baseModel, serviceTier } = splitPricingServiceTier(rawModel);
   const withoutContextWindow = baseModel.replace(/\[\d+[a-zA-Z]*\]$/, '');
   const alias = catalog.aliases[withoutContextWindow];
   const normalizedModel = alias ?? withoutContextWindow;
   const rules: string[] = [];
 
+  if (rawModel !== model.trim()) {
+    rules.push(`model-syntax:${model.trim()}->${rawModel}`);
+  }
   if (withoutContextWindow !== baseModel) {
     rules.push(`model-context:${baseModel}->${withoutContextWindow}`);
   }
@@ -68,6 +93,35 @@ export function normalizePricingModel(
     model: normalizedModel,
     serviceTier,
     normalization: rules.length > 0 ? rules.join(',') : null,
+  };
+}
+
+/** 返回供 catalog lookup 使用的 pricing model key（不含 service tier）。 */
+export function getPricingModelKey(
+  model: string,
+  catalog: PricingCatalog = defaultCatalog,
+): string {
+  return normalizePricingModel(model, catalog).model;
+}
+
+/** 解析一次完整模型身份，供 scanner、Pricing 和展示层共享审计信息。 */
+export function resolveModelIdentity(
+  rawModel: string,
+  catalog: PricingCatalog = defaultCatalog,
+): ModelIdentity {
+  const pricing = normalizePricingModel(rawModel, catalog);
+  const providerHint = modelProviderHint(rawModel);
+  const canonicalModel = canonicalizeModel(rawModel);
+  return {
+    rawModel,
+    pricingModelKey: pricing.model,
+    pricingServiceTier: pricing.serviceTier,
+    canonicalModel,
+    displayName: displayModelName(canonicalModel),
+    providerPrefix: providerHint?.prefix,
+    provider: providerHint?.id,
+    providerLabel: providerHint?.label,
+    pricingNormalization: pricing.normalization,
   };
 }
 

@@ -54,6 +54,7 @@ interface CodexTotals {
 
 interface CodexFileState {
   currentModel: string;
+  currentRawModel: string;
   projectFields: ProjectFields;
   hasSessionWorkspace: boolean;
   previousTotals?: CodexTotals;
@@ -72,6 +73,7 @@ interface CodexUsageEvent {
   usageDate: string;
   signature: string;
   model: string;
+  rawModel: string;
   projectFields: ProjectFields;
   inputTokens: number;
   cachedInputTokens: number;
@@ -156,6 +158,7 @@ async function processCodexFile(
     const fallbackTs = await fileModifiedTs(filePath);
     const state: CodexFileState = {
       currentModel: 'unknown',
+      currentRawModel: 'unknown',
       projectFields: { project: 'unknown', projectDisplay: 'unknown' },
       hasSessionWorkspace: false,
       waitingForChildTurn: false,
@@ -232,6 +235,7 @@ async function processCodexFile(
 
       if (record.type === 'turn_context') {
         if (payloadModel && payloadModel !== '<synthetic>') {
+          state.currentRawModel = payloadModel;
           state.currentModel = applyCodexServiceTier(normalizeModelName(payloadModel), serviceTier);
         }
         if (payload.cwd && !state.hasSessionWorkspace) {
@@ -245,6 +249,7 @@ async function processCodexFile(
       if (!info?.total_token_usage && !info?.last_token_usage) continue;
 
       if (payloadModel && payloadModel !== '<synthetic>') {
+        state.currentRawModel = payloadModel;
         state.currentModel = applyCodexServiceTier(normalizeModelName(payloadModel), serviceTier);
       }
       const ts = parseTimestamp(record.timestamp) ?? fallbackTs;
@@ -292,6 +297,7 @@ async function processCodexFile(
         usageDate,
         signature,
         model: state.currentModel,
+        rawModel: state.currentRawModel,
         projectFields: { ...state.projectFields },
         inputTokens: nonCachedInput,
         cachedInputTokens: cachedInput,
@@ -315,7 +321,7 @@ function mergeCodexEvent(
 ): void {
   const grouped = groupedByDate.get(event.usageDate);
   if (!grouped) return;
-  const key = `${event.model}|${event.projectFields.project}`;
+  const key = `${event.rawModel}|${event.model}|${event.projectFields.project}`;
   const existing = grouped.get(key);
   if (existing) {
     existing.eventCount += 1;
@@ -335,6 +341,7 @@ function mergeCodexEvent(
     product: 'codex',
     channel: 'cli',
     model: event.model,
+    ...(event.rawModel !== event.model ? { rawModel: event.rawModel, pricingModelKey: event.model } : {}),
     project: event.projectFields.project,
     projectDisplay: event.projectFields.projectDisplay,
     projectAlias: event.projectFields.projectAlias,

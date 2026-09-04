@@ -78,6 +78,8 @@ interface KimiCodeSessionIndexLine {
 interface ParsedUsage {
   timestamp: Date;
   model: string;
+  rawModel?: string;
+  pricingModelKey?: string;
   input: number;
   cached: number;
   cacheWrite: number;
@@ -150,7 +152,7 @@ export async function scanKimiDates(
   const result = finalize(grouped);
   for (const [usageDate, breakdowns] of result) {
     for (const breakdown of breakdowns) {
-      const key = `${usageDate}|${breakdown.model}|${breakdown.project}`;
+      const key = `${usageDate}|${breakdown.rawModel ?? breakdown.model}|${breakdown.model}|${breakdown.project}`;
       breakdown.sessionCount = sessionSets.get(key)?.size ?? 0;
     }
   }
@@ -170,6 +172,7 @@ async function parseLegacyFile(filePath: string, fallbackModel: string): Promise
   const usages: ParsedUsage[] = [];
   const keyedIndices = new Map<string, number>();
   let currentModel = fallbackModel;
+  let currentRawModel = fallbackModel;
 
   for (const line of content.split('\n')) {
     if (!line.trim()) continue;
@@ -181,7 +184,10 @@ async function parseLegacyFile(filePath: string, fallbackModel: string): Promise
     }
 
     const payload = record.message?.payload ?? record.payload;
-    if (payload?.model) currentModel = normalizeModel(payload.model);
+    if (payload?.model) {
+      currentRawModel = payload.model;
+      currentModel = normalizeModel(payload.model);
+    }
 
     const eventType = record.message?.type ?? record.type;
     if (eventType !== 'StatusUpdate' || !payload?.token_usage) continue;
@@ -195,6 +201,9 @@ async function parseLegacyFile(filePath: string, fallbackModel: string): Promise
     const usage: ParsedUsage = {
       timestamp,
       model: currentModel,
+      ...(currentRawModel !== currentModel
+        ? { rawModel: currentRawModel, pricingModelKey: currentModel }
+        : {}),
       ...tokens,
       messageId: payload.message_id,
     };
@@ -228,9 +237,12 @@ async function parseKimiCodeFile(filePath: string): Promise<ParsedUsage[]> {
     const timestamp = parseTs(record.time ?? record.created_at) ?? fallbackTimestamp;
     if (!timestamp) continue;
 
+    const rawModel = record.model ?? DEFAULT_MODEL;
+    const model = normalizeModel(rawModel);
     usages.push({
       timestamp,
-      model: normalizeModel(record.model ?? DEFAULT_MODEL),
+      model,
+      ...(rawModel !== model ? { rawModel, pricingModelKey: model } : {}),
       ...tokens,
     });
   }
@@ -251,7 +263,8 @@ function addUsage(
   const dayMap = grouped.get(usageDate);
   if (!dayMap) return;
 
-  const breakdownKey = `${usage.model}|${projectFields.project}`;
+  const pricingModelKey = usage.pricingModelKey ?? usage.model;
+  const breakdownKey = `${usage.rawModel ?? usage.model}|${pricingModelKey}|${projectFields.project}`;
   accumulate(
     dayMap,
     breakdownKey,
@@ -260,6 +273,7 @@ function addUsage(
       product: 'kimi-code',
       channel: 'cli',
       model: usage.model,
+      ...(usage.rawModel !== usage.model ? { rawModel: usage.rawModel, pricingModelKey } : {}),
       project: projectFields.project,
       projectDisplay: projectFields.projectDisplay,
       projectAlias: projectFields.projectAlias,

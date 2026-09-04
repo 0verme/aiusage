@@ -12,6 +12,7 @@ import {
   accumulate,
   finalize,
   emptyResult,
+  scannerModelFields,
 } from './utils.js';
 
 /**
@@ -119,15 +120,16 @@ export async function scanAmpDates(
       const { input, cached, cacheWrite, output, reasoning } = record.tokens;
       if (input + cached + cacheWrite + output + reasoning === 0) continue;
       const provider = inferProviderFromModel(record.model, 'anthropic');
+      const modelFields = scannerModelFields(record.model);
 
       accumulate(
         dayMap,
-        `${provider}|${record.model}|unknown`,
+        `${provider}|${record.model}|${modelFields.model}|unknown`,
         {
           provider,
           product: 'amp',
           channel: 'cli',
-          model: record.model,
+          ...modelFields,
           project: 'unknown',
           projectDisplay: 'unknown',
           inputTokens: 0,

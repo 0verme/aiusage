@@ -1,5 +1,6 @@
 import {
   calculateCost,
+  canonicalizeModel,
   getPricingCatalog,
   getWorstCostStatus,
   type CostStatus,
@@ -161,7 +162,7 @@ export function buildRecalculationPlan(
     aggregate.totalCostUsd += update.estimatedCostUsd;
     aggregate.statuses.push(update.costStatus);
     addCost(aggregate.projects, publicProjectLabel(update.row), update.estimatedCostUsd);
-    addCost(aggregate.models, update.row.model || 'unknown', update.estimatedCostUsd);
+    addCost(aggregate.models, canonicalizeModel(update.row.model), update.estimatedCostUsd);
   }
 
   const daily = dailyRows.map(row => buildDailyUpdate(row, aggregates.get(dailyKey(row.device_id, row.usage_date)), catalog.version));
@@ -206,7 +207,7 @@ function calculateBreakdownUpdate(row: DatabaseBreakdownRow, catalog: PricingCat
     : calculateCost(
       pricingProviderForRow(row),
       row.product,
-      row.model,
+      pricingModelForRow(row),
       {
         inputTokens: number(row.input_tokens),
         cachedInputTokens: number(row.cached_input_tokens),
@@ -451,6 +452,14 @@ function cacheWriteTokens(row: DatabaseBreakdownRow, key: string): number {
   const extra = parseExtraMetrics(row);
   const value = extra?.[key];
   return value == null ? number(row.cache_write_tokens) : number(value as number);
+}
+
+function pricingModelForRow(row: DatabaseBreakdownRow): string {
+  const extra = parseExtraMetrics(row);
+  const pricingModel = extra?.pricing_model_key;
+  return typeof pricingModel === 'string' && pricingModel.trim()
+    ? pricingModel
+    : row.model;
 }
 
 function pricingProviderForRow(row: DatabaseBreakdownRow): string {

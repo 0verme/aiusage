@@ -1,3 +1,7 @@
+import { canonicalModelSqlExpression } from "@aiusage/shared";
+
+const MODEL_SQL = canonicalModelSqlExpression("b.model");
+
 export const CLAUDE_PRODUCT_ALIASES = [
 	"claude-code",
 	"claudecode",
@@ -674,9 +678,9 @@ export function buildAffectedDailyUsageSql(
 			const usageDate = sqlString(day.usage_date);
 			const scope = `device_id = ${deviceId} AND usage_date = ${usageDate}`;
 			const topProject = `(SELECT COALESCE(project_alias, project_display)\n          FROM daily_usage_breakdown\n          WHERE ${scope}\n          GROUP BY COALESCE(project_alias, project_display)\n          ORDER BY SUM(estimated_cost_usd) DESC, COALESCE(project_alias, project_display) ASC\n          LIMIT 1)`;
-			const topModel = `(SELECT model\n          FROM daily_usage_breakdown\n          WHERE ${scope}\n          GROUP BY model\n          ORDER BY SUM(estimated_cost_usd) DESC, model ASC\n          LIMIT 1)`;
+			const topModel = `(SELECT ${MODEL_SQL} AS model\n          FROM daily_usage_breakdown b\n          WHERE ${scope}\n          GROUP BY ${MODEL_SQL}\n          ORDER BY SUM(b.estimated_cost_usd) DESC, ${MODEL_SQL} ASC\n          LIMIT 1)`;
 			const topProjectCost = `(SELECT SUM(estimated_cost_usd)\n          FROM daily_usage_breakdown\n          WHERE ${scope}\n          GROUP BY COALESCE(project_alias, project_display)\n          ORDER BY SUM(estimated_cost_usd) DESC, COALESCE(project_alias, project_display) ASC\n          LIMIT 1)`;
-			const topModelCost = `(SELECT SUM(estimated_cost_usd)\n          FROM daily_usage_breakdown\n          WHERE ${scope}\n          GROUP BY model\n          ORDER BY SUM(estimated_cost_usd) DESC, model ASC\n          LIMIT 1)`;
+			const topModelCost = `(SELECT SUM(b.estimated_cost_usd)\n          FROM daily_usage_breakdown b\n          WHERE ${scope}\n          GROUP BY ${MODEL_SQL}\n          ORDER BY SUM(b.estimated_cost_usd) DESC, ${MODEL_SQL} ASC\n          LIMIT 1)`;
 			return `UPDATE daily_usage
 SET event_count = COALESCE((SELECT SUM(event_count) FROM daily_usage_breakdown WHERE ${scope}), 0),
     input_tokens = COALESCE((SELECT SUM(input_tokens) FROM daily_usage_breakdown WHERE ${scope}), 0),
@@ -798,7 +802,10 @@ function compareFields(
 	});
 }
 
-function comparableValue(value: unknown, field: string): unknown {
+function comparableValue(
+	value: unknown,
+	field: string,
+): string | number | boolean | null {
 	if (value == null) return null;
 	if (
 		(NUMERIC_BREAKDOWN_FIELDS as readonly string[]).includes(field) ||
@@ -806,7 +813,10 @@ function comparableValue(value: unknown, field: string): unknown {
 	) {
 		return numberValue(value);
 	}
-	return value;
+	if (typeof value === "string" || typeof value === "number" || typeof value === "boolean") {
+		return value;
+	}
+	return JSON.stringify(value) ?? String(value);
 }
 
 /** JSON string keys preserve case and avoid locale-aware/case-insensitive dedupe. */

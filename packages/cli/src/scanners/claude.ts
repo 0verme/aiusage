@@ -256,7 +256,9 @@ async function processJsonlFile(
         mergeClaudeDuplicate(seen, snapshot);
         continue;
       }
-      const key = `${provider}|${model}|${recordFields.project}`;
+      // Keep the source model separate from the pricing key. This prevents a
+      // date-qualified raw model from disappearing during scanner aggregation.
+      const key = `${provider}|${rawModel}|${model}|${recordFields.project}`;
 
       // Track distinct sessions per group
       const sessionSetKey = `${usageDate}|${key}`;
@@ -280,6 +282,7 @@ async function processJsonlFile(
           product: 'claude-code',
           channel: 'cli',
           model,
+          ...(rawModel !== model ? { rawModel, pricingModelKey: model } : {}),
           project: recordFields.project,
           projectDisplay: recordFields.projectDisplay,
           projectAlias: recordFields.projectAlias,

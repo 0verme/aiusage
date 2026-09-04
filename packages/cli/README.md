@@ -105,6 +105,17 @@ Reads data from local tool data directories including `~/.claude/projects` (Clau
 
 **Compact mode** (default) shows Sources and Daily tables with merged Cache column and 2-decimal cost. **Detail mode** (`--detail`) expands all columns (CacheRead, CacheWrite, Reasoning), adds Top Models and Pricing Notes sections, and shows 4-decimal cost.
 
+### audit-models
+
+Audit model names found in local logs without changing data. Safe variants and explicitly registered aliases are separated from `remainingUnknownAliases`, which only produces review suggestions and never auto-merges or changes pricing.
+
+```bash
+aiusage audit-models --range 1m --json
+aiusage audit-models --tool claude-code --from 2025-01-01 --to 2026-08-31
+```
+
+See [`docs/model-normalization.md`](../../docs/model-normalization.md) for the raw/pricing/canonical/display contract and alias review policy.
+
 ### trae sync
 
 Sync either Trae edition before running a regular report or dashboard upload:

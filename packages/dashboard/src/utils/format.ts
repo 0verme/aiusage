@@ -1,4 +1,5 @@
 import type { Locale } from '../i18n';
+import { displayModelName } from '@aiusage/shared';
 import { convertUsd, type CurrencyMode } from '../hooks/use-cny-rate';
 
 export function formatUsd(v: number, currency: CurrencyMode = 'auto'): string {
@@ -43,16 +44,8 @@ export function formatPercent(v: number): string {
 }
 
 export function formatModelName(raw: string, compact = false): string {
-  if (!raw || raw === '<synthetic>') return 'Other';
-  let s = raw.replace(/-\d{8}$/, '');          // strip date suffix
-  s = s.replace(/(\d+)-(\d+)/g, '$1.$2');      // version: 4-6 → 4.6
-  s = s.replace(/-/g, ' ');                     // dashes → spaces
-  if (compact) s = s.replace(/^claude\s+/i, ''); // mobile: drop "Claude " prefix
-  s = s.replace(/^gpt\s/i, 'GPT-');            // keep GPT- brand dash
-  s = s.replace(/^o(\d)/i, 'O$1');
-  s = s.replace(/^[a-z]/, (c) => c.toUpperCase());
-  s = s.replace(/(?<=\s)[a-z]/g, (c) => c.toUpperCase());
-  return s;
+  const display = displayModelName(raw);
+  return compact ? display.replace(/^Claude\s+/i, '') : display;
 }
 
 export function shortDate(v: string): string { return v.slice(5); }

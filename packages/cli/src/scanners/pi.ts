@@ -15,6 +15,7 @@ import {
   finalize,
   emptyResult,
   type ProjectFields,
+  scannerModelFields,
 } from './utils.js';
 
 /**
@@ -121,8 +122,9 @@ export async function scanPiDates(
       if (seen.has(messageKey)) continue;
       seen.add(messageKey);
 
-      const model = msg.model ?? 'unknown';
-      const provider = msg.provider?.trim() || inferProviderFromModel(model, 'inflection');
+      const rawModel = msg.model ?? 'unknown';
+      const modelFields = scannerModelFields(rawModel);
+      const provider = msg.provider?.trim() || inferProviderFromModel(rawModel, 'inflection');
       const input = Math.max(usage.input ?? 0, 0);
       const cached = Math.max(usage.cacheRead ?? 0, 0);
       const cacheWrite = Math.max(usage.cacheWrite ?? 0, 0);
@@ -131,12 +133,12 @@ export async function scanPiDates(
 
       accumulate(
         dayMap,
-        `${model}|${sessionProjectFields.project}`,
+        `${rawModel}|${modelFields.model}|${sessionProjectFields.project}`,
         {
           provider,
           product: 'pi',
           channel: 'cli',
-          model,
+          ...modelFields,
           project: sessionProjectFields.project,
           projectDisplay: sessionProjectFields.projectDisplay,
           projectAlias: sessionProjectFields.projectAlias,

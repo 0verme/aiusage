@@ -239,7 +239,8 @@ export async function scanCursorDates(
     const inputTokens = inputWithCache + inputWithout + cacheRead;
 
     const dayMap = grouped.get(date)!;
-    const existing = dayMap.get(model);
+    const breakdownKey = `${rawModel}|${model}`;
+    const existing = dayMap.get(breakdownKey);
     if (existing) {
       existing.eventCount += 1;
       existing.inputTokens += inputTokens;
@@ -247,11 +248,12 @@ export async function scanCursorDates(
       existing.cacheWriteTokens += inputWithCache;
       existing.outputTokens += output;
     } else {
-      dayMap.set(model, {
+      dayMap.set(breakdownKey, {
         provider: 'cursor',
         product: 'cursor',
         channel: 'ide',
         model,
+        ...(rawModel !== model ? { rawModel, pricingModelKey: model } : {}),
         project: 'unknown',
         projectDisplay: 'unknown',
         eventCount: 1,

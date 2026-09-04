@@ -107,6 +107,7 @@ export function FlowChart({ data }: { data?: SankeyGraph }) {
               const tgtNode = d.target as { name?: string } | undefined;
               // Node hover: just has .name
               const nodeName = (d as { name?: string }).name;
+              const rawModels = (d as { rawModels?: string[] }).rawModels;
               const val = Number(d.value ?? 0);
               if (srcNode?.name && tgtNode?.name) {
                 return (
@@ -121,6 +122,12 @@ export function FlowChart({ data }: { data?: SankeyGraph }) {
                   <div className="rounded-lg border px-3 py-2 font-mono text-[12px] shadow-lg" style={{ background: 'var(--panel)', borderColor: 'var(--border)' }}>
                     <div className="font-semibold" style={{ color: 'var(--fg)' }}>{nodeName}</div>
                     {val > 0 && <div className="mt-0.5 tabular-nums" style={{ color: 'var(--fg2)' }}>{formatCompact(val)} tokens</div>}
+                    {rawModels && rawModels.length > 1 && (
+                      <div className="mt-1.5 text-[11px]" style={{ color: 'var(--fg3)' }}>
+                        <div>Raw model aliases:</div>
+                        {rawModels.map((rawModel) => <div key={rawModel}>- {rawModel}</div>)}
+                      </div>
+                    )}
                   </div>
                 );
               }

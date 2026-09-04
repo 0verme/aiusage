@@ -31,6 +31,23 @@ test('merges provider aliases in the trend pivot', () => {
   assert.equal(result.data[0].openai, 15);
 });
 
+test('serializes the raw model debug switch without changing the default query', () => {
+  assert.equal(new URLSearchParams(buildQuery({
+    range: 'all',
+    deviceIds: [],
+    products: [],
+    models: [],
+    mergeModelAliases: false,
+  })).get('mergeModelAliases'), '0');
+  assert.equal(new URLSearchParams(buildQuery({
+    range: 'all',
+    deviceIds: [],
+    products: [],
+    models: [],
+    mergeModelAliases: true,
+  })).get('mergeModelAliases'), null);
+});
+
 test('omits empty selections so an empty array means no facet restriction', () => {
   const params = new URLSearchParams(buildQuery({
     range: '180d',

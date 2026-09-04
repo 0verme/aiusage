@@ -1,7 +1,7 @@
 import { readdir, readFile } from 'node:fs/promises';
 import { homedir } from 'node:os';
 import { basename, dirname, join } from 'node:path';
-import { calculateCost, PRICING_VERSION, type IngestBreakdown, type PricingCatalog } from '@aiusage/shared';
+import { calculateCost, canonicalizeModel, PRICING_VERSION, type IngestBreakdown, type PricingCatalog } from '@aiusage/shared';
 import { scanDates } from './scan.js';
 import { parseTs, dateKey, fileModifiedTs } from './scanners/utils.js';
 import { getCodexBaseDir } from './scanners/codex.js';
@@ -91,6 +91,7 @@ export async function buildLocalReport(
     projectAliases: options.projectAliases,
     opencodeDbPaths: options.opencodeDbPaths,
     tools: options.tools,
+    pricingCatalog: options.pricingCatalog,
   });
 
   for (const result of results) {
@@ -106,8 +107,9 @@ export async function buildLocalReport(
         dayTotals.estimatedCostUsd += breakdownTotals.estimatedCostUsd;
         mergeTotals(totals, breakdownTotals);
         mergeTotals(getOrCreate(bySource, `${breakdown.provider}/${breakdown.product}`), breakdownTotals);
+        const canonicalModel = canonicalizeModel(breakdown.rawModel ?? breakdown.model);
         mergeTotals(
-          getOrCreate(byModel, `${breakdown.provider}/${breakdown.product}|${breakdown.model}`),
+          getOrCreate(byModel, `${breakdown.provider}/${breakdown.product}|${canonicalModel}`),
           breakdownTotals,
         );
       }
@@ -239,8 +241,8 @@ async function discoverGenericJsonlDates(baseDir: string, dates: Set<string>): P
     let foundDate = false;
     for (const line of content.split('\n')) {
       if (!line.trim()) continue;
-      let record: Record<string, any>;
-      try { record = JSON.parse(line); } catch { continue; }
+      let record: unknown;
+      try { record = JSON.parse(line) as unknown; } catch { continue; }
       foundDate = collectRecordDates(record, dates) || foundDate;
     }
     if (!foundDate) await addFileModifiedDate(filePath, dates);
@@ -254,7 +256,7 @@ async function discoverJsonlFileDates(filePath: string, dates: Set<string>): Pro
   for (const line of content.split('\n')) {
     if (!line.trim()) continue;
     try {
-      foundDate = collectRecordDates(JSON.parse(line) as Record<string, any>, dates) || foundDate;
+      foundDate = collectRecordDates(JSON.parse(line) as unknown, dates) || foundDate;
     } catch { /* skip malformed rows */ }
   }
   if (!foundDate) await addFileModifiedDate(filePath, dates);
@@ -267,8 +269,8 @@ async function discoverGenericJsonDates(baseDir: string, dates: Set<string>): Pr
   for (const filePath of files) {
     const content = await safeReadUtf8(filePath);
     if (!content) continue;
-    let data: any;
-    try { data = JSON.parse(content); } catch { continue; }
+    let data: unknown;
+    try { data = JSON.parse(content) as unknown; } catch { continue; }
     if (Array.isArray(data) && data.length === 0) continue;
     const foundDate = Array.isArray(data)
       ? data.reduce((found, row) => collectRecordDates(row, dates) || found, false)
@@ -277,15 +279,19 @@ async function discoverGenericJsonDates(baseDir: string, dates: Set<string>): Pr
   }
 }
 
-function collectRecordDates(record: Record<string, any> | undefined, dates: Set<string>): boolean {
-  if (!record || typeof record !== 'object') return false;
+function collectRecordDates(record: unknown, dates: Set<string>): boolean {
+  if (!isRecord(record)) return false;
   let found = false;
+  const time = asRecord(record.time);
+  const data = asRecord(record.data);
+  const set = asRecord(record.$set);
+  const usageLedger = asRecord(record.usageLedger);
   const candidates = [
     record.timestamp, record.time, record.created_at, record.createTime, record.startTime,
     record.lastUpdated, record.created, record.providerLockTimestamp, record.endTime,
     record.hrTime, record._hrTime, record.observedTimestamp, record.timeUnixNano,
     record.usage_time,
-    record.time?.created,
+    time?.created,
   ];
   for (const value of candidates) {
     const ts = parseStructuredTs(value);
@@ -295,16 +301,29 @@ function collectRecordDates(record: Record<string, any> | undefined, dates: Set<
     }
   }
   const nestedRows = [
-    ...(Array.isArray(record.messages) ? record.messages : []),
-    ...(Array.isArray(record.history) ? record.history : []),
-    ...(Array.isArray(record.data?.messages) ? record.data.messages : []),
-    ...(Array.isArray(record.data?.history) ? record.data.history : []),
-    ...(Array.isArray(record.$set?.messages) ? record.$set.messages : []),
-    ...(Array.isArray(record.usageLedger?.events) ? record.usageLedger.events : []),
-    ...(Array.isArray(record.events) ? record.events : []),
+    ...recordArray(record, 'messages'),
+    ...recordArray(record, 'history'),
+    ...recordArray(data, 'messages'),
+    ...recordArray(data, 'history'),
+    ...recordArray(set, 'messages'),
+    ...recordArray(usageLedger, 'events'),
+    ...recordArray(record, 'events'),
   ];
   for (const row of nestedRows) found = collectRecordDates(row, dates) || found;
   return found;
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return value !== null && typeof value === 'object' && !Array.isArray(value);
+}
+
+function asRecord(value: unknown): Record<string, unknown> | undefined {
+  return isRecord(value) ? value : undefined;
+}
+
+function recordArray(record: Record<string, unknown> | undefined, key: string): Record<string, unknown>[] {
+  if (!record || !Array.isArray(record[key])) return [];
+  return record[key].filter(isRecord);
 }
 
 function parseStructuredTs(value: unknown): Date | null {
@@ -692,6 +711,8 @@ export function calculateBreakdownCost(
   pricingCatalog?: PricingCatalog,
 ): number {
   const effectivePricingVersion = pricingCatalog?.version ?? PRICING_VERSION;
+  const pricingModelKey = breakdown.pricingModelKey?.trim() || breakdown.model;
+  const rawModel = breakdown.rawModel ?? breakdown.model;
   const sourceCostMatchesCatalog =
     breakdown.product === 'trae-intl' ||
     breakdown.product === 'opencode' ||
@@ -704,7 +725,7 @@ export function calculateBreakdownCost(
   const result = calculateCost(
     breakdown.provider,
     breakdown.product,
-    breakdown.model,
+    pricingModelKey,
     {
       inputTokens: breakdown.inputTokens,
       cachedInputTokens: breakdown.cachedInputTokens,
@@ -718,11 +739,11 @@ export function calculateBreakdownCost(
   );
 
   if (result.costStatus === 'unavailable') {
-    warnings.add(`${breakdown.provider}/${breakdown.product}/${breakdown.model} 暂无定价配置，已跳过成本估算。`);
-  } else if (result.costStatus === 'estimated' && result.resolvedModel && result.resolvedModel !== breakdown.model) {
-    warnings.add(`${breakdown.model} 已按 ${result.resolvedModel} 的公开单价估算。`);
+    warnings.add(`${breakdown.provider}/${breakdown.product}/${rawModel} 暂无定价配置，已跳过成本估算。`);
+  } else if (result.costStatus === 'estimated' && result.resolvedModel && result.resolvedModel !== pricingModelKey) {
+    warnings.add(`${rawModel} 已按 ${result.resolvedModel} 的公开单价估算。`);
   } else if (result.costStatus === 'estimated' && result.matchedTierIndex !== undefined) {
-    warnings.add(`${breakdown.model} 的阶梯价格已按每事件平均输入量估算。`);
+    warnings.add(`${rawModel} 的阶梯价格已按每事件平均输入量估算。`);
   }
 
   return result.estimatedCostUsd;

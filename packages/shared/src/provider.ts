@@ -6,6 +6,8 @@
  * pricing/identity.ts 单独处理，以保留 custom / opencode-go 等历史定价入口。
  */
 
+import { normalizeModelKey } from './model.js';
+
 export interface ProviderCanonicalizationInput {
   provider?: string | null;
   product?: string | null;
@@ -31,6 +33,9 @@ export const PROVIDER_ALIASES = {
   minimaxai: 'minimax',
   minimax_ai: 'minimax',
   mistral: 'mistralai',
+  zai: 'zhipu',
+  'zai-org': 'zhipu',
+  zhipuai: 'zhipu',
 } as const;
 
 /**
@@ -53,14 +58,14 @@ export const MODEL_PROVIDER_RULES = [
  * 支持 service tier、context window 和 provider/model 形式的模型名。
  */
 export function inferProviderFromModel(model: string | null | undefined, fallback: string): string {
-  let value = model?.trim().toLowerCase() ?? '';
+  let value = normalizeModelKey(model).model;
+  // Provider inference may inspect an unknown gateway namespace, while the
+  // canonical model identity intentionally keeps that namespace intact.
+  const slashIndex = value.lastIndexOf('/');
+  if (slashIndex >= 0) value = value.slice(slashIndex + 1);
   value = value
     .replace(/\[\d+[a-zA-Z]*\]$/, '')
     .replace(/-(?:fast|priority)$/, '');
-
-  // OpenCode/provider gateway 有时把模型写成 provider/model。
-  const slashIndex = value.lastIndexOf('/');
-  if (slashIndex >= 0) value = value.slice(slashIndex + 1);
 
   for (const rule of MODEL_PROVIDER_RULES) {
     if (rule.prefixes.some(prefix => modelStartsWith(value, prefix))) {

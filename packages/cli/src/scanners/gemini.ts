@@ -11,7 +11,7 @@ import {
   emptyResult,
   walkFiles,
   fileModifiedTs,
-  normalizeModelName,
+  scannerModelFields,
   resolveProjectFields,
 } from './utils.js';
 
@@ -84,15 +84,15 @@ export async function scanGeminiDates(
       const dayMap = grouped.get(dk);
       if (!dayMap) continue;
       tokenBackedDates.add(dk);
-      const model = normalizeModelName(event.model || 'unknown');
+      const modelFields = scannerModelFields(event.model);
       accumulate(
         dayMap,
-        `${model}|${fields.project}`,
+        `${event.model}|${modelFields.model}|${fields.project}`,
         {
           provider: 'google',
           product: 'gemini-cli',
           channel: 'cli',
-          model,
+          ...modelFields,
           project: fields.project,
           projectDisplay: fields.projectDisplay,
           projectAlias: fields.projectAlias,

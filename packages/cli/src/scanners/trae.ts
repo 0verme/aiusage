@@ -66,6 +66,8 @@ interface ParsedEvent {
   product: 'trae-cn' | 'trae-intl';
   provider: string;
   model: string;
+  rawModel?: string;
+  pricingModelKey?: string;
   project: string;
   input: number;
   cached: number;
@@ -148,7 +150,7 @@ export async function scanTraeDates(
     if (!day) continue;
 
     const projectFields = resolveProjectFields(event.project, options.projectAliases);
-    const breakdownKey = `${event.product}|${event.provider}|${event.model}|${projectFields.project}`;
+    const breakdownKey = `${event.product}|${event.provider}|${event.rawModel ?? event.model}|${event.model}|${projectFields.project}`;
     accumulate(
       day,
       breakdownKey,
@@ -157,6 +159,7 @@ export async function scanTraeDates(
         product: event.product,
         channel: 'ide',
         model: event.model,
+        ...(event.rawModel !== event.model ? { rawModel: event.rawModel, pricingModelKey: event.model } : {}),
         project: projectFields.project,
         projectDisplay: projectFields.projectDisplay,
         projectAlias: projectFields.projectAlias,
@@ -191,7 +194,7 @@ export async function scanTraeDates(
   const result = finalize(grouped);
   for (const [usageDate, breakdowns] of result) {
     for (const breakdown of breakdowns) {
-      const key = `${usageDate}|${breakdown.product}|${breakdown.provider}|${breakdown.model}|${breakdown.project}`;
+      const key = `${usageDate}|${breakdown.product}|${breakdown.provider}|${breakdown.rawModel ?? breakdown.model}|${breakdown.model}|${breakdown.project}`;
       breakdown.sessionCount = sessionSets.get(key)?.size ?? 0;
     }
   }
@@ -211,7 +214,8 @@ function parseNativeCache(value: unknown): ParsedEvent[] {
     const timestamp = parseTs(raw.timestamp as string | number | undefined);
     if (!messageId || !timestamp) continue;
 
-    const model = normalizeTraeModel(stringValue(raw.model));
+    const rawModel = stringValue(raw.model);
+    const model = normalizeTraeModel(rawModel);
     const tokens = {
       input: tokenValue(raw.inputTokens),
       cached: tokenValue(raw.cachedInputTokens),
@@ -228,6 +232,7 @@ function parseNativeCache(value: unknown): ParsedEvent[] {
       product: 'trae-cn',
       provider: inferProviderFromModel(model, 'trae'),
       model,
+      ...(rawModel && rawModel !== model ? { rawModel, pricingModelKey: model } : {}),
       project,
       ...tokens,
     });
@@ -272,6 +277,7 @@ function parseIntlCache(value: unknown): ParsedEvent[] {
       product: 'trae-intl',
       provider: inferProviderFromModel(model, 'trae'),
       model,
+      ...(rawModel && rawModel !== model ? { rawModel, pricingModelKey: model } : {}),
       project: 'unknown',
       ...tokens,
       costUSD: positiveNumber(session.dollar_float),
