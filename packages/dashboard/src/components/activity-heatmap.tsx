@@ -9,16 +9,16 @@ import type { Locale } from '../i18n';
 
 // ── 常量 ──
 
-const MIN_CELL = 11;
-const MAX_CELL = 16;
-const DEFAULT_CELL = 13;
-const GAP = 3;
+const MIN_CELL = 12;
+const MAX_CELL = 20;
+const DEFAULT_CELL = 14;
+const GAP = 4;
 const DAYS = 7;
-const DAY_LABEL_W = 34;
+const DAY_LABEL_W = 46;
 const MONTH_LABELS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
 const GAMMA = 0.7;
-const MONTH_ROW = 22;
-const LEGEND_ROW = 34;
+const MONTH_ROW = 24;
+const LEGEND_ROW = 36;
 // Less(~22px) gap 5格 gap More(~26px)；宽度随格子尺寸同步变化
 
 // ── 颜色配置 ──
@@ -195,10 +195,10 @@ export function ActivityHeatmap({ days, metricLabel = 'tokens', locale = 'en', c
     : 0;
 
   return (
-    <div ref={rootRef} className={`relative grid gap-5 lg:grid-cols-[150px_minmax(0,1fr)] lg:items-center ${className}`}>
+    <div ref={rootRef} className={`heatmap-layout relative ${className}`}>
       {/* 连续活跃信息：桌面端置于热力图左侧，窄屏转为两列 */}
       <div
-        className="grid grid-cols-2 gap-3 border-b pb-4 lg:flex lg:flex-col lg:gap-5 lg:border-b-0 lg:border-r lg:pb-0 lg:pr-6"
+        className="heatmap-streaks grid grid-cols-2 gap-3 border-b pb-4 lg:flex lg:flex-col lg:border-b-0 lg:border-r lg:pb-0"
         style={{ borderColor: 'var(--border)' }}
       >
         <div className="min-w-0 rounded-lg bg-[var(--panel-soft)] px-3 py-3 lg:bg-transparent lg:p-0">
@@ -215,9 +215,9 @@ export function ActivityHeatmap({ days, metricLabel = 'tokens', locale = 'en', c
         </div>
       </div>
 
-      <div className="min-w-0">
+      <div className="heatmap-main min-w-0">
         {/* 统计摘要 */}
-        <div className="mb-3 flex flex-wrap items-center gap-5 font-sans text-xs" style={{ color: 'var(--fg2)' }}>
+        <div className="heatmap-summary mb-3 flex flex-wrap items-center gap-5 font-sans text-xs" style={{ color: 'var(--fg2)' }}>
           <span>
             <span className="font-mono font-semibold" style={{ color: 'var(--accent)' }}>{activeDays}</span> {activeDaysLabel}
           </span>
@@ -241,7 +241,7 @@ export function ActivityHeatmap({ days, metricLabel = 'tokens', locale = 'en', c
                   key={dayIdx}
                   x={DAY_LABEL_W - 6}
                   y={MONTH_ROW + dayIdx * step + cellSize / 2}
-                  fontSize={10}
+                  fontSize={11}
                   fill={LABEL_FILL}
                   fontFamily="system-ui, sans-serif"
                   textAnchor="end"
@@ -258,7 +258,7 @@ export function ActivityHeatmap({ days, metricLabel = 'tokens', locale = 'en', c
                     key={label + weekIdx}
                     x={x}
                     y={MONTH_ROW - 4}
-                    fontSize={10}
+                    fontSize={11}
                     fill={LABEL_FILL}
                     fontFamily="system-ui, sans-serif"
                   >
@@ -311,7 +311,7 @@ export function ActivityHeatmap({ days, metricLabel = 'tokens', locale = 'en', c
 
               {/* 图例：右下角，不抢热力图主体焦点 */}
               <g transform={`translate(${legendX}, ${totalH - LEGEND_ROW + 10})`}>
-                <text x={0} y={10} fontSize={10} fill={LABEL_FILL} fontFamily="system-ui, sans-serif">{locale === 'zh' ? '少' : 'Less'}</text>
+                <text x={0} y={10} fontSize={11} fill={LABEL_FILL} fontFamily="system-ui, sans-serif">{locale === 'zh' ? '少' : 'Less'}</text>
                 {[0, 1, 2, 3, 4].map((lvl) => (
                   <rect
                     key={lvl}
@@ -325,7 +325,7 @@ export function ActivityHeatmap({ days, metricLabel = 'tokens', locale = 'en', c
                     strokeWidth={1}
                   />
                 ))}
-                <text x={24 + 5 * step} y={10} fontSize={10} fill={LABEL_FILL} fontFamily="system-ui, sans-serif">{locale === 'zh' ? '多' : 'More'}</text>
+                <text x={24 + 5 * step} y={10} fontSize={11} fill={LABEL_FILL} fontFamily="system-ui, sans-serif">{locale === 'zh' ? '多' : 'More'}</text>
               </g>
             </svg>
           )}
@@ -340,7 +340,7 @@ export function ActivityHeatmap({ days, metricLabel = 'tokens', locale = 'en', c
       {/* Tooltip */}
       {tooltip && (
         <div
-          className="pointer-events-none absolute z-50 rounded-lg border px-2.5 py-1.5 font-mono text-xs shadow-lg"
+          className="heatmap-tooltip pointer-events-none absolute z-50 rounded-lg border px-2.5 py-1.5 font-mono text-xs shadow-lg"
           style={{
             left: tooltipLeft,
             top: tooltipTop,

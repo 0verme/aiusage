@@ -37,7 +37,7 @@ export function ChartContainer({
     <ChartContext.Provider value={{ config }}>
       <div
         className={cn(
-          'w-full [contain:inline-size] tabular-nums text-xs [&_.recharts-cartesian-axis-tick_text]:fill-slate-500 [&_.recharts-cartesian-grid_horizontal_line]:stroke-slate-200/80 [&_.recharts-cartesian-grid_vertical_line]:stroke-slate-200/60 [&_.recharts-curve.recharts-tooltip-cursor]:stroke-slate-300 [&_.recharts-rectangle.recharts-tooltip-cursor]:fill-slate-100/70 [&_.recharts-reference-line_line]:stroke-slate-300 [&_.recharts-sector:focus]:outline-none [&_.recharts-surface]:overflow-visible',
+          'chart-container w-full [contain:inline-size] tabular-nums text-xs [&_.recharts-cartesian-axis-tick_text]:fill-[var(--fg3)] [&_.recharts-cartesian-grid_horizontal_line]:stroke-[var(--grid)] [&_.recharts-cartesian-grid_vertical_line]:stroke-[var(--grid)] [&_.recharts-curve.recharts-tooltip-cursor]:stroke-[var(--border-strong)] [&_.recharts-rectangle.recharts-tooltip-cursor]:fill-[var(--panel-soft)] [&_.recharts-sector:focus]:outline-none [&_.recharts-surface]:overflow-visible',
           className,
         )}
         style={{ ...cssVariables, ...style }}
@@ -86,13 +86,13 @@ export function ChartTooltipContent({
   return (
     <div
       className={cn(
-        'min-w-[188px] rounded-2xl border border-slate-200/90 bg-white/96 px-3.5 py-3 shadow-[0_20px_50px_rgba(15,23,42,0.12)] backdrop-blur dark:border-white/10 dark:bg-[#1a1a1a]/96 dark:shadow-[0_20px_50px_rgba(0,0,0,0.5)]',
+        'min-w-[188px] rounded-[10px] border border-[var(--border)] bg-[var(--panel)] px-3.5 py-3 shadow-[0_12px_30px_rgba(43,61,82,0.12)]',
         className,
       )}
       {...props}
     >
       {!hideLabel && label != null ? (
-        <div className="mb-2 text-[11px] font-semibold tracking-[0.02em] text-slate-950 dark:text-slate-300">
+        <div className="mb-2 text-[11px] font-semibold tracking-[0.02em] text-[var(--fg)]">
           {labelFormatter ? labelFormatter(String(label)) : String(label)}
         </div>
       ) : null}
@@ -109,8 +109,8 @@ export function ChartTooltipContent({
                 className={cn('rounded-full bg-current', indicator === 'line' ? 'h-2 w-6' : 'h-2.5 w-2.5')}
                 style={{ color: tone }}
               />
-              <span className="truncate text-[11px] text-slate-500 dark:text-slate-400">{itemLabel}</span>
-              <span className="text-[11px] font-semibold text-slate-950 dark:text-slate-300 tabular-nums">
+              <span className="truncate text-[11px] text-[var(--fg2)]">{itemLabel}</span>
+              <span className="text-[11px] font-semibold text-[var(--fg)] tabular-nums">
                 {formatter ? formatter(item.value ?? 0, String(itemLabel)) : String(item.value ?? 0)}
               </span>
             </div>
@@ -121,8 +121,8 @@ export function ChartTooltipContent({
           return (
             <div className="mt-1 grid grid-cols-[auto_minmax(0,1fr)_auto] items-center gap-2.5 border-t border-slate-200/80 pt-2 dark:border-white/10">
               <span className="h-2.5 w-2.5" />
-              <span className="truncate text-[11px] font-semibold text-slate-700 dark:text-slate-300">{totalLabel}</span>
-              <span className="text-[11px] font-semibold text-slate-950 dark:text-slate-200 tabular-nums">
+              <span className="truncate text-[11px] font-semibold text-[var(--fg2)]">{totalLabel}</span>
+              <span className="text-[11px] font-semibold text-[var(--fg)] tabular-nums">
                 {totalFormatter ? totalFormatter(sum) : String(sum)}
               </span>
             </div>

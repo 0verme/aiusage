@@ -62,16 +62,16 @@ export function DonutSection({
     if (!folded.length) return <EmptyState label="No data" />;
 
     return (
-        <div>
-            <div className="mb-3.5 flex items-center gap-2.5">
+        <div className="share-section">
+            <div className="share-section-header">
                 <span className="section-bar" aria-hidden="true" />
-                <h3 className="m-0 text-[16px] font-bold" style={{ color: 'var(--fg)' }}>{title}</h3>
+                <h3>{title}</h3>
             </div>
-            <div className="grid grid-cols-[2fr_3fr] items-center gap-3">
+            <div className="share-section-body">
                 {/* Ring */}
                 <div
                     ref={containerRef}
-                    className="relative flex items-center justify-center"
+                    className="share-ring"
                     onMouseMove={(e) => {
                         if (!containerRef.current || !tip) return;
                         const rect = containerRef.current.getBoundingClientRect();
@@ -79,7 +79,7 @@ export function DonutSection({
                     }}
                     onMouseLeave={() => setTip(null)}
                 >
-                    <ChartContainer config={{}} className="aspect-square w-full max-w-[130px]">
+                    <ChartContainer config={{}} className="chart-container aspect-square w-full">
                         <ResponsiveContainer width="100%" height="100%">
                             <PieChart>
                                 <Pie
@@ -103,14 +103,12 @@ export function DonutSection({
                             </PieChart>
                         </ResponsiveContainer>
                     </ChartContainer>
-                    <div className="pointer-events-none absolute inset-0 flex items-center justify-center">
-                        <span className="font-mono text-[14px] font-bold tabular-nums" style={{ color: 'var(--fg)' }}>{centerLabel}</span>
-                    </div>
+                    <div className="share-ring-center">{centerLabel}</div>
 
                     {/* Tooltip 跟随鼠标 */}
                     {tip && (
                         <div
-                            className="pointer-events-none absolute z-10 whitespace-nowrap rounded-lg border px-3.5 py-3 font-mono shadow-lg"
+                            className="share-tooltip pointer-events-none absolute z-10 whitespace-nowrap rounded-lg border px-3.5 py-3 font-mono shadow-lg"
                             style={{ left: tip.x, top: tip.y, background: 'var(--panel)', borderColor: 'var(--border)' }}
                         >
                             <div className="text-[11px]" style={{ color: 'var(--fg2)' }}>{tip.label}</div>
@@ -120,16 +118,18 @@ export function DonutSection({
                 </div>
 
                 {/* Legend */}
-                <div className="grid min-w-0 gap-y-2 font-mono text-[12px]" style={{ gridTemplateColumns: "10px minmax(0,1fr) auto auto", columnGap: "10px" }}>
+                <div className="share-section-list">
                     {folded.map((item, i) => {
                         const pct = getSharePercent(item.amount, total);
                         const c = colors[i % colors.length];
                         return (
-                            <div key={item.value} className="col-span-4 grid grid-cols-subgrid items-center">
-                                <span className="h-[9px] w-[9px] rounded-[2px]" style={{ backgroundColor: c, boxShadow: `0 0 7px ${c}` }} />
-                                <span className="truncate" style={{ color: 'var(--fg)' }}>{item.label}</span>
-                                <span className="text-right tabular-nums" style={{ color: 'var(--fg2)' }}>{pct.toFixed(1)}%</span>
-                                <span className="text-right font-semibold tabular-nums" style={{ color: 'var(--fg)' }}>{formatValue(item.amount)}</span>
+                            <div key={item.value} className="share-section-item">
+                                <span className="share-section-name">
+                                    <span className="share-section-swatch" style={{ backgroundColor: c }} />
+                                    <span>{item.label}</span>
+                                </span>
+                                <span className="share-section-percent">{pct.toFixed(1)}%</span>
+                                <span className="share-section-value">{formatValue(item.amount)}</span>
                             </div>
                         );
                     })}

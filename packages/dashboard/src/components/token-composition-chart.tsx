@@ -16,8 +16,9 @@ export function TokenCompositionChart({ data, locale, totalLabel }: { data: Over
   if (!data.length) return <EmptyState label="No data" />;
   const barW = data.length <= 7 ? 94 : data.length <= 30 ? 47 : 20;
   return (
-    <ChartContainer config={getTokenConfig(isDark)} className="h-[280px] w-full">
-      <ResponsiveContainer width="100%" height="100%">
+    <div className="chart-scroll">
+      <ChartContainer config={getTokenConfig(isDark)} className="chart-container composition-chart-container w-full">
+        <ResponsiveContainer width="100%" height="100%">
         <BarChart data={data} margin={{ top: 12, left: 4, right: 12, bottom: 0 }} barSize={barW}>
           <CartesianGrid vertical={false} className="stroke-slate-100 dark:stroke-white/[0.06]" />
           <XAxis
@@ -48,7 +49,8 @@ export function TokenCompositionChart({ data, locale, totalLabel }: { data: Over
             />
           ))}
         </BarChart>
-      </ResponsiveContainer>
-    </ChartContainer>
+        </ResponsiveContainer>
+      </ChartContainer>
+    </div>
   );
 }

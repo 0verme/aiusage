@@ -25,6 +25,7 @@ const SANKEY_SOURCE_COLORS = [
 export interface DashboardSankeyNode {
   name: string;
   color: string;
+  totalTokens: number;
   rawModels?: string[];
   aliasCount?: number;
 }
@@ -335,7 +336,8 @@ export function transformSankey(input?: SankeyGraph): DashboardSankeyData | null
 
   const nodeList = nodes.map((n) => ({
     name: n.label || n.id,
-    color: sourceColorMap.get(n.id) ?? 'rgba(186, 199, 219, 0.92)',
+    color: sourceColorMap.get(n.id) ?? 'var(--flow-target-edge)',
+    totalTokens: Number(n.totalTokens || 0),
     ...(n.layer === 0 && n.rawModels ? { rawModels: n.rawModels, aliasCount: n.aliasCount } : {}),
   }));
   const idToIdx = new Map(nodes.map((n, i) => [n.id, i]));

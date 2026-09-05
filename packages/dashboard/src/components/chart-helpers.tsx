@@ -35,31 +35,27 @@ export function SectionHeader({
   stat,
   statLabel,
   statTone = 'accent',
+  meta,
 }: {
   title: string;
   stat?: string;
   statLabel?: string;
   statTone?: 'accent' | 'green';
+  meta?: React.ReactNode;
 }) {
   return (
-    <div className="mb-[18px] flex flex-wrap items-center justify-between gap-x-4 gap-y-2">
-      <div className="flex items-center gap-2.5">
+    <div className="section-header">
+      <div className="section-heading">
         <span className="section-bar" aria-hidden="true" />
-        <h2 className="m-0 whitespace-nowrap text-[17px] font-bold" style={{ color: 'var(--fg)' }}>{title}</h2>
+        <h2>{title}</h2>
       </div>
+      {meta}
       {stat && (
-        <div className="flex shrink-0 items-baseline gap-2">
-          <span
-            className="font-mono text-[20px] font-bold tabular-nums"
-            style={{ color: statTone === 'green' ? 'var(--green)' : 'var(--accent)' }}
-          >
+        <div className="section-stat">
+          <span className={`section-stat-value${statTone === 'green' ? ' is-green' : ''}`}>
             {stat}
           </span>
-          {statLabel && (
-            <span className="whitespace-nowrap text-[11px] font-medium" style={{ color: 'var(--fg3)' }}>
-              {statLabel}
-            </span>
-          )}
+          {statLabel && <span className="section-stat-label">{statLabel}</span>}
         </div>
       )}
     </div>
@@ -68,15 +64,12 @@ export function SectionHeader({
 
 export function ChartLegend({ items }: { items: { label: string; color: string; value?: string }[] }) {
   return (
-    <div className="mt-3.5 flex flex-wrap gap-x-[18px] gap-y-2 font-mono text-[12px]">
+    <div className="chart-legend">
       {items.map((it) => (
-        <div key={it.label} className="flex items-center gap-[7px]">
-          <span
-            className="h-[9px] w-[9px] shrink-0 rounded-[2px]"
-            style={{ backgroundColor: it.color, boxShadow: `0 0 7px ${it.color}` }}
-          />
-          <span style={{ color: 'var(--fg2)' }}>{it.label}</span>
-          {it.value && <span className="font-semibold tabular-nums" style={{ color: 'var(--fg)' }}>{it.value}</span>}
+        <div key={it.label} className="chart-legend-item">
+          <span className="chart-legend-swatch" style={{ backgroundColor: it.color }} />
+          <span>{it.label}</span>
+          {it.value && <span className="chart-legend-value">{it.value}</span>}
         </div>
       ))}
     </div>

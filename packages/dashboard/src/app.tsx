@@ -1,5 +1,20 @@
 import { useEffect, useMemo, useRef, useState, useCallback } from 'react';
-import { RotateCw, Sun, Moon, Monitor } from 'lucide-react';
+import {
+  Activity,
+  ArrowDownLeft,
+  ArrowUpRight,
+  CalendarDays,
+  Database,
+  DollarSign,
+  Gauge,
+  HardDrive,
+  MessageSquare,
+  ReceiptText,
+  RotateCw,
+  Sun,
+  Moon,
+  Monitor,
+} from 'lucide-react';
 import type { Locale, T } from './i18n';
 import { I18N, getStoredLocale } from './i18n';
 import type { ThemeMode } from './theme';
@@ -122,13 +137,16 @@ function ModelAliasToggle({
   label: string;
 }) {
   return (
-    <label className="inline-flex h-9 cursor-pointer items-center gap-2 rounded-lg bg-[var(--panel-soft)] px-3 text-[12px] font-medium text-[var(--fg2)] transition-colors hover:text-[var(--fg)]">
+    <label className="filter-toggle inline-flex cursor-pointer items-center">
       <input
         type="checkbox"
         checked={checked}
         onChange={(event) => onChange(event.target.checked)}
-        className="h-3.5 w-3.5 accent-[var(--accent)]"
+        className="sr-only"
       />
+      <span className={`filter-check${checked ? ' is-checked' : ''}`} aria-hidden="true">
+        {checked ? '✓' : ''}
+      </span>
       <span>{label}</span>
     </label>
   );
@@ -144,14 +162,14 @@ function SegmentedControl({
   onChange: (v: string) => void;
 }) {
   return (
-    <div className="pill-group" role="radiogroup">
+    <div className="pill-group dashboard-range-control" role="radiogroup">
       {options.map((o) => (
         <button
           key={o.value}
           role="radio"
           aria-checked={value === o.value}
           onClick={() => onChange(o.value)}
-          className={`pill px-3.5 py-1.5 text-[13px] ${value === o.value ? 'pill-active' : ''}`}
+          className={`pill dashboard-range-option ${value === o.value ? 'pill-active' : ''}`}
         >
           {o.label}
         </button>
@@ -172,8 +190,8 @@ function InteractionMetricTile({
   suffix?: string;
 }) {
   return (
-    <div className="min-w-0 border-b border-[var(--border)] pb-4 last:border-b-0 sm:border-b-0 sm:pb-0">
-      <div className="text-[11px] font-medium uppercase tracking-[0.06em] text-[var(--fg2)]">
+    <div className="interaction-summary-stat min-w-0 border-b border-[var(--border)] pb-4 last:border-b-0 sm:border-b-0 sm:pb-0">
+      <div className="summary-label text-[11px] font-medium uppercase tracking-[0.06em] text-[var(--fg2)]">
         {label}
       </div>
       <div className="mt-2 whitespace-nowrap font-mono text-[24px] font-bold leading-none tracking-tight tabular-nums text-[var(--fg)] sm:text-[27px]">
@@ -200,7 +218,7 @@ function InteractionTopList({
   if (!items.length) return null;
   const max = Math.max(...items.map((item) => item.eventCount), 1);
   return (
-    <div className={`min-w-0 interaction-tone-${tone}`}>
+    <div className={`interaction-ranking-col min-w-0 interaction-tone-${tone}`}>
       <h3 className="interaction-list-title mb-3 text-[13px] font-semibold text-[var(--fg)]">{title}</h3>
       <div className="grid gap-3">
         {items.slice(0, 6).map((item) => {
@@ -251,13 +269,13 @@ function InteractionMetricsSection({
   animationDelay?: string;
 }) {
   return (
-    <div className="card fade-up p-6" style={{ animationDelay }}>
+    <div className="card interaction-card fade-up" style={{ animationDelay }}>
       <SectionHeader
         title={t.interactionMetrics}
         stat={formatCompact(metrics.exactCount, locale)}
         statLabel={t.exactEvents}
       />
-      <div className="mt-6 grid gap-x-6 gap-y-5 sm:grid-cols-4">
+      <div className="interaction-summary mt-6 grid gap-x-6 gap-y-5 sm:grid-cols-4">
         <InteractionMetricTile label={t.functionCalls} value={formatCompact(metrics.functionCallCount, locale)} />
         <InteractionMetricTile label={t.toolCalls} value={formatCompact(metrics.toolCallCount, locale)} />
         <InteractionMetricTile
@@ -267,7 +285,7 @@ function InteractionMetricsSection({
         />
         <InteractionMetricTile label={t.subagents} value={formatCompact(metrics.subagentCount, locale)} />
       </div>
-      <div className="mt-7 grid gap-7 lg:grid-cols-3 lg:gap-8">
+      <div className="interaction-rankings mt-7 grid gap-7 lg:grid-cols-3 lg:gap-8">
         <InteractionTopList title={t.topTools} items={metrics.topTools} locale={locale} proxyLabel={t.proxy} tone="tool" />
         <InteractionTopList title={t.topSkills} items={metrics.topSkills} locale={locale} proxyLabel={t.proxy} tone="skill" />
         <InteractionTopList title={t.topSubagents} items={metrics.topAgents} locale={locale} proxyLabel={t.proxy} tone="subagent" />
@@ -379,10 +397,10 @@ export function App() {
   }, [overview, kpis]);
 
   return (
-    <main className="mx-auto w-full max-w-[1340px] px-4 pb-16 sm:px-6 lg:px-8">
+    <main className="dashboard-shell mx-auto w-full max-w-[1548px] px-4 pb-16 sm:px-6 lg:px-8">
 
       {/* ── Header ── */}
-      <header className="fade-up relative z-20 py-6 sm:py-8">
+      <header className="dashboard-header fade-up relative z-20 py-6 sm:py-8">
         <div className="flex flex-wrap items-center justify-between gap-y-3">
           <h1 className="m-0">
             <HeaderLogo />
@@ -392,7 +410,7 @@ export function App() {
             <LangToggle value={locale} onChange={setLocale} />
             <button
               onClick={refresh}
-              className="hidden sm:inline-flex h-[34px] w-[34px] items-center justify-center rounded-[10px] border transition-colors"
+              className="header-refresh hidden h-[34px] w-[34px] items-center justify-center rounded-[10px] border transition-colors sm:inline-flex"
               style={{ background: 'var(--panel)', borderColor: 'var(--border)', color: 'var(--fg2)' }}
               aria-label="Refresh"
             >
@@ -414,8 +432,8 @@ export function App() {
       )}
 
         {/* ── Range + Filters ── */}
-        <div className="relative z-30 mt-2 mb-6 flex flex-col gap-2.5 sm:flex-row sm:flex-wrap sm:items-center">
-          <div className="min-w-0 overflow-x-auto scrollbar-hide">
+        <div className="dashboard-toolbar relative z-30 mt-2 mb-6 flex flex-col gap-2.5 sm:flex-row sm:flex-wrap sm:items-center">
+          <div className="dashboard-range-scroll min-w-0 overflow-x-auto scrollbar-hide">
             <SegmentedControl
               value={filters.range}
               options={getRanges(t)}
@@ -423,7 +441,7 @@ export function App() {
             />
           </div>
           {overview && (
-            <div className="flex min-w-0 flex-wrap items-center gap-2">
+            <div className="dashboard-filters flex min-w-0 flex-wrap items-center gap-2">
               <MultiSelectFilter
                 label={t.tool}
                 value={filters.products ?? []}
@@ -469,18 +487,10 @@ export function App() {
 
       {/* ── Content ── */}
       {loading && !overview ? (
-        <div className="grid gap-4">
-          <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-5">
-            {Array.from({ length: 5 }).map((_, i) => (
-              <div key={`sa-${i}`} className="card px-5 py-5">
-                <Skeleton className="mb-3 h-2.5 w-14" />
-                <Skeleton className="h-6 w-20" />
-              </div>
-            ))}
-          </div>
-          <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-5">
-            {Array.from({ length: 5 }).map((_, i) => (
-              <div key={`sb-${i}`} className="card px-5 py-5">
+        <div className="dashboard-content grid gap-4">
+          <div className="dashboard-kpi-grid grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-5">
+            {Array.from({ length: 10 }).map((_, i) => (
+              <div key={`sk-${i}`} className="card px-5 py-5">
                 <Skeleton className="mb-3 h-2.5 w-14" />
                 <Skeleton className="h-6 w-20" />
               </div>
@@ -495,66 +505,66 @@ export function App() {
           <div className="text-[13px] text-red-500/80">{error}</div>
         </div>
       ) : (
-        <div className="grid gap-4">
+        <div className="dashboard-content grid gap-4">
 
           {/* ── KPI Row 1 ── */}
           <div
-            className="fade-up grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-5"
+            className="dashboard-kpi-grid fade-up grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-5"
             style={{ animationDelay: '50ms' }}
           >
-            <div className="kpi kpi-cost col-span-2 sm:col-span-1">
+            <div className="kpi kpi-cost">
               <CostKpiCard
                 label={t.estimatedCost}
                 value={unavailable ? t.unavailable : formatUsd(overview?.totalCostUsd ?? 0)}
                 sub={rangeSub}
                 delta={unavailable ? undefined : kpiDeltas.totalCostUsd}
+                icon={DollarSign}
+                help
               />
             </div>
             <div className="kpi">
-              <KpiCard label={t.totalTokens} value={unavailable ? t.unavailable : formatCompact(kpis?.totalTokens ?? 0, locale)} sub={locale === 'zh' ? '累计消耗' : 'Cumulative'} delta={unavailable ? undefined : kpiDeltas.totalTokens} />
+              <KpiCard icon={Database} label={t.totalTokens} value={unavailable ? t.unavailable : formatCompact(kpis?.totalTokens ?? 0, locale)} sub={locale === 'zh' ? '累计消耗' : 'Cumulative'} delta={unavailable ? undefined : kpiDeltas.totalTokens} />
             </div>
             <div className="kpi">
-              <KpiCard label={t.inputTokens} value={unavailable ? t.unavailable : formatCompact(kpis?.inputTokens ?? 0, locale)} sub="Prompt" delta={unavailable ? undefined : kpiDeltas.inputTokens} />
+              <KpiCard icon={ArrowDownLeft} label={t.inputTokens} value={unavailable ? t.unavailable : formatCompact(kpis?.inputTokens ?? 0, locale)} sub="Prompt" delta={unavailable ? undefined : kpiDeltas.inputTokens} />
             </div>
             <div className="kpi">
-              <KpiCard label={t.outputTokens} value={unavailable ? t.unavailable : formatCompact(kpis?.outputTokens ?? 0, locale)} sub="Completion" delta={unavailable ? undefined : kpiDeltas.outputTokens} />
+              <KpiCard icon={ArrowUpRight} label={t.outputTokens} value={unavailable ? t.unavailable : formatCompact(kpis?.outputTokens ?? 0, locale)} sub="Completion" delta={unavailable ? undefined : kpiDeltas.outputTokens} />
             </div>
             <div className="kpi">
-              <KpiCard label={t.cachedTokens} value={unavailable ? t.unavailable : formatCompact(kpis?.cachedTokens ?? 0, locale)} sub="Cached" delta={unavailable ? undefined : kpiDeltas.cachedTokens} />
+              <KpiCard icon={HardDrive} label={t.cachedTokens} value={unavailable ? t.unavailable : formatCompact(kpis?.cachedTokens ?? 0, locale)} sub="Cached" delta={unavailable ? undefined : kpiDeltas.cachedTokens} />
             </div>
-          </div>
 
-          {/* ── KPI Row 2 ── */}
-          <div
-            className="fade-up grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-5"
-            style={{ animationDelay: '100ms' }}
-          >
-            <div className="kpi col-span-2 sm:col-span-1">
+          {/* ── KPI metrics continued ── */}
+            <div className="kpi">
               <KpiCard
                 label={t.activeDays}
                 value={String(overview?.activeDays ?? 0)}
                 suffix={` / ${overview?.totalDays ?? 0}`}
                 sub={locale === 'zh' ? '区间内' : 'In range'}
                 delta={kpiDeltas.activeDays}
+                icon={Activity}
+                help
               />
             </div>
-            <div className="kpi">
+            <div className="kpi kpi-sessions">
               <KpiCard
                 label={t.sessions}
                 value={formatNumber((overview?.totalSessions ?? 0) > 0 ? overview!.totalSessions : (overview?.totalEvents ?? 0))}
                 suffix={(overview?.totalSessions ?? 0) > 0 && overview!.totalSessions !== overview!.totalEvents ? ` / ${formatNumber(overview!.totalEvents)}` : undefined}
                 sub={locale === 'zh' ? '对话 / 消息' : 'Sessions / Msgs'}
                 delta={kpiDeltas.sessions}
+                icon={MessageSquare}
               />
             </div>
             <div className="kpi">
-              <KpiCard label={t.costPerSession} value={unavailable ? t.unavailable : formatUsd(kpis?.costPerSession ?? 0)} sub={locale === 'zh' ? '每会话' : 'Per session'} delta={unavailable ? undefined : kpiDeltas.costPerSession} />
+              <KpiCard icon={ReceiptText} label={t.costPerSession} value={unavailable ? t.unavailable : formatUsd(kpis?.costPerSession ?? 0)} sub={locale === 'zh' ? '每会话' : 'Per session'} delta={unavailable ? undefined : kpiDeltas.costPerSession} />
             </div>
             <div className="kpi">
-              <KpiCard label={t.avgDailyCost} value={unavailable ? t.unavailable : formatUsd(overview?.averageDailyCostUsd ?? 0)} sub={locale === 'zh' ? '平均' : 'Average'} delta={unavailable ? undefined : kpiDeltas.averageDailyCostUsd} />
+              <KpiCard icon={CalendarDays} label={t.avgDailyCost} value={unavailable ? t.unavailable : formatUsd(overview?.averageDailyCostUsd ?? 0)} sub={locale === 'zh' ? '平均' : 'Average'} delta={unavailable ? undefined : kpiDeltas.averageDailyCostUsd} />
             </div>
             <div className="kpi">
-              <KpiCard label={t.cacheHitRate} value={unavailable ? t.unavailable : formatPercent(kpis?.cacheHitRate ?? 0)} sub={locale === 'zh' ? '高效复用' : 'Reuse'} delta={unavailable ? undefined : kpiDeltas.cacheHitRate} />
+              <KpiCard icon={Gauge} label={t.cacheHitRate} value={unavailable ? t.unavailable : formatPercent(kpis?.cacheHitRate ?? 0)} sub={locale === 'zh' ? '高效复用' : 'Reuse'} delta={unavailable ? undefined : kpiDeltas.cacheHitRate} />
             </div>
           </div>
 
@@ -565,7 +575,7 @@ export function App() {
           )}
 
           {/* ── Activity Heatmap ── */}
-          <div className="card fade-up p-6" style={{ animationDelay: '120ms' }}>
+          <div className="card heatmap-card fade-up p-6" style={{ animationDelay: '120ms' }}>
             <SectionHeader title={locale === 'zh' ? '年度活跃热力图' : 'Activity Heatmap'} />
             <ActivityHeatmap days={activityHeatmap.days} metricLabel={activityHeatmap.metricLabel} locale={locale} />
           </div>
@@ -575,7 +585,7 @@ export function App() {
           )}
 
           {/* ── Cost Trend ── */}
-          <div className="card fade-up p-6" style={{ animationDelay: '150ms' }}>
+          <div className="card chart-card fade-up p-6" style={{ animationDelay: '150ms' }}>
             <SectionHeader title={t.costTrend} stat={unavailable ? t.unavailable : formatUsd(overview?.totalCostUsd ?? 0)} statTone="green" />
             {unavailable ? (
               <EmptyState label={t.costUnavailable} />
@@ -590,7 +600,7 @@ export function App() {
           </div>
 
           {/* ── Token Trend ── */}
-          <div className="card fade-up p-6" style={{ animationDelay: '230ms' }}>
+          <div className="card chart-card fade-up p-6" style={{ animationDelay: '230ms' }}>
             <SectionHeader title={t.tokenTrend} stat={unavailable ? t.unavailable : formatCompact(kpis?.totalTokens ?? 0, locale)} />
             {unavailable ? (
               <EmptyState label={t.tokenUnavailable} />
@@ -607,7 +617,7 @@ export function App() {
           </div>
 
           {/* ── Token Composition ── */}
-          <div className="card fade-up p-6" style={{ animationDelay: '280ms' }}>
+          <div className="card chart-card fade-up p-6" style={{ animationDelay: '280ms' }}>
             <SectionHeader title={t.tokenComposition} stat={unavailable ? t.unavailable : formatCompact(kpis?.totalTokens ?? 0, locale)} />
             {unavailable ? (
               <EmptyState label={t.tokenUnavailable} />
@@ -622,8 +632,8 @@ export function App() {
           </div>
 
           {/* ── Flow & Share ── */}
-          <div className="fade-up grid gap-4 lg:grid-cols-5" style={{ animationDelay: '330ms' }}>
-            <div className="card p-6 lg:col-span-3">
+          <div className="dashboard-flow-grid fade-up grid gap-4" style={{ animationDelay: '330ms' }}>
+            <div className="card flow-panel">
               <SectionHeader title={t.tokenFlow} />
               {unavailable ? (
                 <EmptyState label={t.tokenUnavailable} />
@@ -633,12 +643,14 @@ export function App() {
                 </ChartBoundary>
               )}
             </div>
-            <div className="card flex flex-col p-6 lg:col-span-2">
+            <div className="dashboard-share-stack">
               {unavailable ? (
-                <EmptyState label={t.shareUnavailable} />
+                <div className="card share-panel">
+                  <EmptyState label={t.shareUnavailable} />
+                </div>
               ) : (
                 <ChartBoundary name="Share">
-                  <div className="flex flex-1 flex-col">
+                  <div className="card share-panel">
                     <DonutSection
                       title={t.providerShare}
                       data={(overview?.filters.options.providers ?? []).map((p) => ({
@@ -651,7 +663,8 @@ export function App() {
                       formatValue={formatUsd}
                       formatTooltipValue={formatUsdFull}
                     />
-                    <div className="my-5 border-t" style={{ borderColor: 'var(--border)' }} />
+                  </div>
+                  <div className="card share-panel">
                     <DonutSection
                       title={t.modelShare}
                       data={(overview?.modelCostShare ?? []).map((m) => ({
@@ -666,7 +679,8 @@ export function App() {
                       formatValue={(value) => formatCompact(value, locale)}
                       formatTooltipValue={(value) => formatTokens(value, locale)}
                     />
-                    <div className="my-5 border-t" style={{ borderColor: 'var(--border)' }} />
+                  </div>
+                  <div className="card share-panel">
                     <DonutSection
                       title={t.deviceShare}
                       data={(overview?.filters.options.devices ?? []).map((d) => ({
@@ -689,7 +703,7 @@ export function App() {
       )}
 
       {/* ── Footer ── */}
-      <footer className="fade-up mt-12 flex justify-center border-t pb-6 pt-5 sm:mt-14" style={{ borderColor: 'var(--border)' }}>
+      <footer className="dashboard-footer fade-up mt-12 flex justify-center border-t pb-6 pt-5 sm:mt-14" style={{ borderColor: 'var(--border)' }}>
         <a
           href="https://github.com/0verme/aiusage"
           target="_blank"
