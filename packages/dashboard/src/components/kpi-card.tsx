@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import type { ReactNode } from 'react';
 import { Activity, ArrowRightLeft } from 'lucide-react';
 import type { LucideIcon } from 'lucide-react';
 import { toggleCurrency, useCurrencyStore } from '../hooks/use-cny-rate';
@@ -38,6 +39,31 @@ function KpiLabel({ label, icon: Icon = Activity, highlight, help }: Pick<KpiCar
   );
 }
 
+function KpiValue({
+  value,
+  suffix,
+  highlight = false,
+  trailing,
+}: {
+  value: string;
+  suffix?: string;
+  highlight?: boolean;
+  trailing?: ReactNode;
+}) {
+  const unitMatch = value.match(/^(.*?)(\s+(?:亿|万)|[KMB])$/u);
+  const mainValue = unitMatch?.[1] ?? value;
+  const unit = unitMatch?.[2];
+
+  return (
+    <div className={`kpi-value${highlight ? ' kpi-value-cost' : ''}`}>
+      <span className="kpi-value-main">{mainValue}</span>
+      {unit && <span className="kpi-value-unit">{unit}</span>}
+      {suffix && <span className="kpi-value-suffix">{suffix}</span>}
+      {trailing}
+    </div>
+  );
+}
+
 export function KpiCard({
   label,
   value,
@@ -54,10 +80,7 @@ export function KpiCard({
         <KpiLabel label={label} icon={icon} highlight={highlight} help={help} />
         <Delta value={delta} />
       </div>
-      <div className={`kpi-value${highlight ? ' kpi-value-cost' : ''}`}>
-        {value}
-        {suffix && <span className="kpi-value-suffix">{suffix}</span>}
-      </div>
+      <KpiValue value={value} suffix={suffix} highlight={highlight} />
       <div className="kpi-sub">
         <span>{sub}</span>
       </div>
@@ -93,9 +116,10 @@ export function CostKpiCard({
         <KpiLabel label={label} icon={icon} highlight help={help} />
         <Delta value={delta} cost />
       </div>
-      <div className="kpi-value kpi-value-cost">
-        <span>{value}</span>
-        {rate && (
+      <KpiValue
+        value={value}
+        highlight
+        trailing={rate && (
           <button
             onClick={toggleCurrency}
             className={`kpi-currency-toggle ${hovered ? 'is-visible' : ''}`}
@@ -105,7 +129,7 @@ export function CostKpiCard({
             <ArrowRightLeft size={13} />
           </button>
         )}
-      </div>
+      />
       <div className="kpi-sub">
         <span>{sub}</span>
       </div>
