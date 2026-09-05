@@ -40,8 +40,9 @@ export function CostTrendChart({
 
   return (
     <>
-      <ChartContainer config={config} className="h-[280px] w-full">
-        <ResponsiveContainer width="100%" height="100%">
+      <div className="chart-scroll">
+        <ChartContainer config={config} className="chart-container trend-chart-container w-full">
+          <ResponsiveContainer width="100%" height="100%">
           <BarChart data={pivoted} margin={{ top: 12, left: 4, right: 12, bottom: 0 }} barSize={barW}>
             <CartesianGrid vertical={false} strokeDasharray="3 3" className="stroke-slate-100 dark:stroke-white/[0.06]" />
             <XAxis
@@ -72,8 +73,9 @@ export function CostTrendChart({
               />
             ))}
           </BarChart>
-        </ResponsiveContainer>
-      </ChartContainer>
+          </ResponsiveContainer>
+        </ChartContainer>
+      </div>
       {providers.length > 1 && (
         <ChartLegend
           items={providers.map((p, i) => ({

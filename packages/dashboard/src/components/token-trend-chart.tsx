@@ -38,8 +38,9 @@ export function TokenTrendChart({
 
   return (
     <div>
-      <ChartContainer config={getTokenConfig(isDark)} className="h-[280px] w-full">
-        <ResponsiveContainer width="100%" height="100%">
+      <div className="chart-scroll">
+        <ChartContainer config={getTokenConfig(isDark)} className="chart-container trend-chart-container w-full">
+          <ResponsiveContainer width="100%" height="100%">
           <AreaChart data={data} margin={{ top: 12, left: 4, right: 12, bottom: 0 }}>
             <CartesianGrid vertical={false} className="stroke-slate-100 dark:stroke-white/[0.06]" />
             <XAxis
@@ -80,11 +81,12 @@ export function TokenTrendChart({
               );
             })}
           </AreaChart>
-        </ResponsiveContainer>
-      </ChartContainer>
+          </ResponsiveContainer>
+        </ChartContainer>
+      </div>
 
       {legendItems.length > 0 && (
-        <div className="mt-4 flex flex-wrap gap-2">
+        <div className="chart-legend token-chart-legend">
           {legendItems.map((item) => {
             const isActive = activeKey === item.key;
             const isDimmed = activeKey !== null && !isActive;
@@ -96,16 +98,12 @@ export function TokenTrendChart({
                 onMouseLeave={() => setActiveKey(null)}
                 onFocus={() => setActiveKey(item.key)}
                 onBlur={() => setActiveKey(null)}
-                className={`inline-flex items-center gap-1.5 rounded-md border px-2.5 py-1.5 text-[12px] transition-all duration-150 ${
-                  isActive
-                    ? 'border-slate-300 bg-slate-50 text-slate-900 shadow-sm dark:border-slate-600 dark:bg-white/[0.06] dark:text-slate-200'
-                    : 'border-transparent text-slate-500 hover:border-slate-200 hover:bg-slate-50 dark:text-slate-400 dark:hover:border-white/[0.08] dark:hover:bg-white/[0.04]'
-                } ${isDimmed ? 'opacity-45' : 'opacity-100'}`}
+                className={`chart-legend-button ${isActive ? 'is-active' : ''} ${isDimmed ? 'is-dimmed' : ''}`}
                 aria-label={`${item.label}${item.value ? ` ${item.value}` : ''}`}
               >
-                <span className="h-[7px] w-[7px] shrink-0 rounded-full" style={{ backgroundColor: item.color }} />
+                <span className="chart-legend-dot" style={{ backgroundColor: item.color }} />
                 <span>{item.label}</span>
-                {item.value && <span className="font-medium tabular-nums text-slate-700 dark:text-slate-300">{item.value}</span>}
+                {item.value && <span className="chart-legend-button-value">{item.value}</span>}
               </button>
             );
           })}

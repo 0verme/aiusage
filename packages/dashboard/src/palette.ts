@@ -20,47 +20,47 @@ export interface Palette {
 }
 
 export const LIGHT_PALETTE: Palette = {
-  bg: '#eef1f7',
+  bg: '#fbfcfe',
   panel: '#ffffff',
-  border: '#e3e8f1',
-  fg: '#0b1220',
-  fg2: '#5b6678',
-  fg3: '#9aa4b6',
-  accent: '#0a9fc4',
-  accent2: '#2f6bff',
-  green: '#0a9d68',
-  orange: '#ef6f1a',
-  violet: '#7c5cff',
-  grid: 'rgba(12,22,44,0.07)',
-  cell: '#e7ebf1',
-  track: '#eef1f7',
-  hm: ['#e7ebf1', '#0a9fc455', '#0a9fc488', '#0a9fc4bb', '#0a9fc4'],
+  border: '#e4eaf2',
+  fg: '#101828',
+  fg2: '#50627c',
+  fg3: '#8b9ab1',
+  accent: '#1677ff',
+  accent2: '#4f6df5',
+  green: '#04b86f',
+  orange: '#ff9a6a',
+  violet: '#6d69f2',
+  grid: 'rgba(80,98,124,0.14)',
+  cell: '#edf2f8',
+  track: '#edf2f8',
+  hm: ['#edf2f8', '#d7eaff', '#9fd3f7', '#5fb7eb', '#167bc4'],
 };
 
 export const DARK_PALETTE: Palette = {
-  bg: '#06090f',
-  panel: '#0d121c',
-  border: 'rgba(125,145,180,0.13)',
-  fg: '#eaf0f8',
-  fg2: '#9aa6b8',
-  fg3: '#5c6678',
-  accent: '#1fe0ff',
-  accent2: '#5b9bff',
-  green: '#2fe6a0',
-  orange: '#ff8a4c',
-  violet: '#a98bff',
-  grid: 'rgba(255,255,255,0.06)',
-  cell: '#121826',
-  track: '#0a0e17',
-  hm: ['#121826', '#1fe0ff33', '#1fe0ff66', '#1fe0ffaa', '#1fe0ff'],
+  bg: '#0e141d',
+  panel: '#151d28',
+  border: 'rgba(157,177,210,0.16)',
+  fg: '#eef4fb',
+  fg2: '#a8b5c7',
+  fg3: '#74839a',
+  accent: '#6ea5ff',
+  accent2: '#8a98ff',
+  green: '#42d99a',
+  orange: '#ffad84',
+  violet: '#a99cff',
+  grid: 'rgba(221,232,248,0.12)',
+  cell: '#202b3a',
+  track: '#202b3a',
+  hm: ['#202b3a', 'rgba(110,165,255,0.28)', 'rgba(110,165,255,0.48)', 'rgba(110,165,255,0.72)', '#6ea5ff'],
 };
 
 export function getPalette(isDark: boolean): Palette {
   return isDark ? DARK_PALETTE : LIGHT_PALETTE;
 }
 
-/** Categorical series colors (donuts, multi-series), brightest first. */
+/** Categorical series colors (donuts, multi-series), ordered by visual weight. */
 export function getSeriesColors(isDark: boolean): string[] {
   const p = getPalette(isDark);
-  return [p.accent, p.accent2, p.orange, p.violet, p.green, '#ff5c8a', '#ffc04d', p.fg3];
+  return [p.accent, p.accent2, p.orange, p.violet, p.green, '#ff5c8a', '#f1b35d', p.fg3];
 }

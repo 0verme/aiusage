@@ -4,8 +4,8 @@ import { SITE_TITLE, SITE_TAGLINE } from '../site-config';
 /** Up-trend chart glyph used inside the gradient brand square. */
 const MARK_GLYPH = (
   <svg width="52%" height="52%" viewBox="0 0 24 24" fill="none" aria-hidden="true">
-    <path d="M3 16 L9 9 L13 13.5 L21 4.5" stroke="#04121a" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" />
-    <circle cx="21" cy="4.5" r="2.3" fill="#04121a" />
+    <path d="M3 16 L9 9 L13 13.5 L21 4.5" stroke="var(--accent)" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" />
+    <circle cx="21" cy="4.5" r="2.3" fill="var(--accent)" />
   </svg>
 );
 
@@ -97,8 +97,8 @@ function BrandMark({ size, radius }: { size: number; radius: number }) {
         width: size,
         height: size,
         borderRadius: radius,
-        background: 'linear-gradient(135deg, var(--accent), var(--accent2))',
-        boxShadow: '0 0 24px var(--glow-strong)',
+        background: 'var(--accent-soft)',
+        border: '1px solid var(--border)',
       }}
       aria-hidden="true"
     >

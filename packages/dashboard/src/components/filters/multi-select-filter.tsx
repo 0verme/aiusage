@@ -134,20 +134,20 @@ export function MultiSelectFilter({
         aria-controls={listboxId}
         aria-label={`${label}: ${summary}`}
         onClick={() => setOpen((isOpen) => !isOpen)}
-        className={`inline-flex h-9 max-w-full items-center gap-1.5 rounded-lg px-3 text-[13px] font-medium transition-all duration-150 focus:outline-none focus-visible:ring-2 focus-visible:ring-[var(--glow-strong)] ${
+        className={`filter-trigger inline-flex max-w-full items-center rounded-lg font-medium transition-all duration-150 focus:outline-none focus-visible:ring-2 focus-visible:ring-[var(--glow-strong)] ${
           hasSelection
-            ? 'bg-[var(--panel)] text-[var(--fg2)] shadow-sm ring-1 ring-[var(--border)]'
-            : 'bg-[var(--panel-soft)] text-[var(--fg3)] hover:text-[var(--fg2)]'
+            ? 'has-selection'
+            : 'is-empty'
         }`}
       >
         <FilterIcon icon={selectedIcon} />
         <span className="flex min-w-0 items-center gap-1.5 truncate">
-          <span className="shrink-0">{label}</span>
-          <span className="min-w-0 truncate">{summary}</span>
+          <span className="filter-label shrink-0">{label}</span>
+          <span className="filter-summary min-w-0 truncate">{summary}</span>
         </span>
         <ChevronDown
           aria-hidden
-          className={`h-3.5 w-3.5 shrink-0 transition-transform ${open ? 'rotate-180' : ''}`}
+          className={`filter-chevron h-3.5 w-3.5 shrink-0 transition-transform ${open ? 'rotate-180' : ''}`}
         />
       </button>
 
@@ -156,7 +156,7 @@ export function MultiSelectFilter({
           id={listboxId}
           role="listbox"
           aria-label={label}
-          className="absolute right-0 top-full z-50 mt-2 w-[min(340px,calc(100vw-2rem))] overflow-hidden rounded-xl border border-[var(--border)] bg-[var(--panel)] shadow-[0_20px_60px_rgba(15,23,42,0.14)] sm:left-0 sm:right-auto"
+          className="filter-menu absolute right-0 top-full z-50 mt-2 w-[min(340px,calc(100vw-2rem))] overflow-hidden rounded-xl border border-[var(--border)] bg-[var(--panel)] sm:left-0 sm:right-auto"
         >
           <div className="max-h-80 overflow-y-auto p-1.5">
             <button

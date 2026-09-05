@@ -160,10 +160,7 @@ export async function handleBreakdowns(url: URL, env: Env): Promise<Response> {
 	}
 
 	if (model) {
-		if (!mergeModelAliases) {
-			conditions.push(`${modelExpression} = ?`);
-			params.push(model);
-		} else {
+		if (mergeModelAliases) {
 			const candidateWhere =
 				conditions.length > 0 ? `WHERE ${conditions.join(" AND ")}` : "";
 			const candidateRows = await prepareQuery(env, `
@@ -187,6 +184,9 @@ export async function handleBreakdowns(url: URL, env: Env): Promise<Response> {
 				);
 				params.push(...databaseValues);
 			}
+		} else {
+			conditions.push(`${modelExpression} = ?`);
+			params.push(model);
 		}
 	}
 

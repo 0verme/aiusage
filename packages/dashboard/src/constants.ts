@@ -15,19 +15,19 @@ export const CHART_COLORS = getSeriesColors(false);
 export const CHART_COLORS_DARK = getSeriesColors(true);
 
 export const PROVIDER_COLORS: Record<string, string> = {
-  openai: DARK_PALETTE.accent,
-  anthropic: DARK_PALETTE.orange,
-  google: DARK_PALETTE.accent2,
-  github: DARK_PALETTE.violet,
-  sourcegraph: DARK_PALETTE.green,
+  openai: '#5ecaf5',
+  anthropic: '#ff9a6a',
+  google: '#7ba0e8',
+  github: '#6d69f2',
+  sourcegraph: '#4db985',
   moonshot: '#ff5c8a',
-  alibaba: '#ffc04d',
-  deepseek: '#2f9e44',
-  xai: '#111827',
-  droid: DARK_PALETTE.fg2,
-  opencode: DARK_PALETTE.fg3,
-  trae: '#7c3aed',
-  zhipu: '#2563eb',
+  alibaba: '#f1b35d',
+  deepseek: '#4db985',
+  xai: '#53637f',
+  droid: '#8b9ab1',
+  opencode: '#9aa7ba',
+  trae: '#7c6ff2',
+  zhipu: '#6d69f2',
 };
 
 export const PROVIDER_LABELS: Record<string, string> = {
