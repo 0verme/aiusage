@@ -12,50 +12,20 @@ function SankeyNode({
   payload: DashboardSankeyNode;
 }) {
   const isLeft = x < 200;
-  const targetRailWidth = Math.max(96, width + 88);
-  const targetRailX = x - targetRailWidth + width;
-  const labelY = y + height / 2 - (payload.totalTokens > 0 ? 7 : 0);
-  const valueY = labelY + 17;
-
   return (
     <g>
-      {isLeft ? (
-        <rect x={x} y={y} width={Math.max(10, width)} height={height} rx={3} fill={payload.color} />
-      ) : (
-        <>
-          <rect
-            x={targetRailX}
-            y={y}
-            width={targetRailWidth}
-            height={height}
-            rx={4}
-            fill="var(--flow-target)"
-            stroke="var(--border)"
-            strokeWidth={1}
-          />
-          <rect x={x - 6} y={y} width={6} height={height} rx={3} fill="var(--flow-target-edge)" />
-        </>
-      )}
+      <rect x={x} y={y} width={width} height={height} rx={2} fill={payload.color} />
       <text
-        x={isLeft ? x + Math.max(10, width) + 10 : x - 14}
-        y={labelY}
+        x={isLeft ? x + width + 8 : x - 8}
+        y={y + height / 2}
         textAnchor={isLeft ? 'start' : 'end'}
         dominantBaseline="central"
-        className="flow-node-label"
+        fill="var(--fg2)"
+        fontFamily="'JetBrains Mono', monospace"
+        className="text-[11px]"
       >
         {payload.name}
       </text>
-      {payload.totalTokens > 0 && (
-        <text
-          x={isLeft ? x + Math.max(10, width) + 10 : x - 14}
-          y={valueY}
-          textAnchor={isLeft ? 'start' : 'end'}
-          dominantBaseline="central"
-          className="flow-node-value"
-        >
-          {formatCompact(payload.totalTokens)}
-        </text>
-      )}
     </g>
   );
 }
@@ -87,8 +57,7 @@ function SankeyLink({
       `}
       fill="none"
       stroke={payload.color}
-      strokeOpacity={0.2}
-      strokeLinecap="round"
+      strokeOpacity={0.28}
       strokeWidth={linkWidth}
     />
   );
@@ -97,13 +66,10 @@ function SankeyLink({
 export function FlowChart({ data }: { data?: SankeyGraph }) {
   const sankeyData = transformSankey(data);
   if (!sankeyData) return <EmptyState label="No flow data" />;
-
-  const sourceCount = sankeyData.nodes.filter((_, index) => sankeyData.links.some((link) => link.source === index)).length;
-  const targetCount = sankeyData.nodes.length - sourceCount;
-  const height = Math.max(420, Math.max(sourceCount, targetCount) * 48 + 40);
-
+  const nodeCount = sankeyData.nodes.length;
+  const height = Math.max(360, nodeCount * 40);
   return (
-    <div style={{ height }} className="flow-chart w-full">
+    <div style={{ height }} className="w-full">
       <ResponsiveContainer width="100%" height="100%">
         <Sankey
           data={sankeyData}
@@ -145,7 +111,7 @@ export function FlowChart({ data }: { data?: SankeyGraph }) {
               const val = Number(d.value ?? 0);
               if (srcNode?.name && tgtNode?.name) {
                 return (
-                  <div className="flow-tooltip rounded-lg border px-3 py-2 font-mono text-[12px]" style={{ background: 'var(--panel)', borderColor: 'var(--border)' }}>
+                  <div className="rounded-lg border px-3 py-2 font-mono text-[12px] shadow-lg" style={{ background: 'var(--panel)', borderColor: 'var(--border)' }}>
                     <div className="font-semibold" style={{ color: 'var(--fg)' }}>{srcNode.name} → {tgtNode.name}</div>
                     <div className="mt-0.5 tabular-nums" style={{ color: 'var(--fg2)' }}>{formatCompact(val)} tokens</div>
                   </div>
@@ -153,7 +119,7 @@ export function FlowChart({ data }: { data?: SankeyGraph }) {
               }
               if (nodeName) {
                 return (
-                  <div className="flow-tooltip rounded-lg border px-3 py-2 font-mono text-[12px]" style={{ background: 'var(--panel)', borderColor: 'var(--border)' }}>
+                  <div className="rounded-lg border px-3 py-2 font-mono text-[12px] shadow-lg" style={{ background: 'var(--panel)', borderColor: 'var(--border)' }}>
                     <div className="font-semibold" style={{ color: 'var(--fg)' }}>{nodeName}</div>
                     {val > 0 && <div className="mt-0.5 tabular-nums" style={{ color: 'var(--fg2)' }}>{formatCompact(val)} tokens</div>}
                     {rawModels && rawModels.length > 1 && (

@@ -35,8 +35,6 @@
   --hm3: #5fb7eb;
   --hm4: #167bc4;
   --track: #edf2f8;
-  --flow-target: #edf2f8;
-  --flow-target-edge: #9cafc5;
   --glow: rgba(22, 119, 255, 0.12);
   --glow-strong: rgba(22, 119, 255, 0.22);
   --green-glow: rgba(4, 184, 111, 0.10);
@@ -70,8 +68,6 @@
   --hm3: rgba(110, 165, 255, 0.72);
   --hm4: #6ea5ff;
   --track: #202b3a;
-  --flow-target: #202b3a;
-  --flow-target-edge: #7187a5;
   --glow: rgba(110, 165, 255, 0.14);
   --glow-strong: rgba(110, 165, 255, 0.25);
   --green-glow: rgba(66, 217, 154, 0.12);
@@ -950,41 +946,16 @@ button {
 }
 
 .flow-panel {
+  display: flex;
   min-width: 0;
-  overflow: hidden !important;
-  padding: 24px 26px 22px;
+  flex-direction: column;
+  padding: 24px;
 }
 
-.flow-chart {
-  display: block;
-  width: 100%;
-  min-width: 0;
-  overflow: visible;
-}
-
-.flow-chart .recharts-surface {
-  overflow: visible;
-}
-
-.flow-node-label,
-.flow-node-value {
-  font-family: var(--font-sans);
-}
-
-.flow-node-label {
-  fill: var(--fg2);
-  font-size: 13px;
-  font-weight: 600;
-}
-
-.flow-node-value {
-  fill: var(--fg3);
-  font-size: 12px;
-  font-weight: 500;
-}
-
-.flow-tooltip {
-  box-shadow: 0 12px 30px rgba(43, 61, 82, 0.12);
+/* Let the Sankey occupy any extra height introduced by the shared card row. */
+.flow-panel > div:has(.recharts-wrapper) {
+  flex: 1 1 auto;
+  min-height: 0;
 }
 
 .dashboard-share-stack {
@@ -1489,7 +1460,6 @@ button {
   .heatmap-card,
   .chart-card,
   .interaction-card,
-  .flow-panel,
   .share-panel {
     border-radius: 12px;
   }
@@ -1497,7 +1467,6 @@ button {
   .heatmap-card,
   .chart-card,
   .interaction-card,
-  .flow-panel,
   .share-panel {
     padding: 20px 16px;
   }
