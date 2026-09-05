@@ -305,7 +305,6 @@ export function App() {
 
   const {
     overview,
-    health,
     kpis,
     metricAvailability,
     fOpts,

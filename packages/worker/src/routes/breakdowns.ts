@@ -1,5 +1,4 @@
 import {
-	canonicalModelSqlExpression,
 	canonicalProviderSqlExpression,
 	canonicalizeModel,
 	canonicalizeProvider,
@@ -11,10 +10,11 @@ import {
 	resolvePublicProjectFilter,
 	toPublicProjectIdentity,
 } from "../utils/privacy.js";
+import { selectCanonicalModelValues } from "../utils/model-aggregation.js";
+import { prepareDashboardQuery } from "../utils/sql.js";
 import type { Env } from "../types.js";
 
 const PROVIDER_SQL = canonicalProviderSqlExpression("b.provider", "b.model");
-const MODEL_SQL = canonicalModelSqlExpression("b.model");
 const RAW_MODEL_SQL = `COALESCE(
   CASE WHEN json_valid(b.extra_metrics_json)
     THEN json_extract(b.extra_metrics_json, '$.raw_model')
@@ -28,7 +28,7 @@ const SORT_FIELDS: Record<string, string> = {
 	provider: PROVIDER_SQL,
 	product: "b.product",
 	channel: "b.channel",
-	model: MODEL_SQL,
+	model: "b.model",
 	project: "COALESCE(b.project_alias, b.project_display)",
 	event_count: "b.event_count",
 	input_tokens: "b.input_tokens",
@@ -46,6 +46,42 @@ const SORT_FIELDS: Record<string, string> = {
   `,
 };
 
+export function buildBreakdownQuery(
+	whereClause: string,
+	mergeModelAliases = true,
+	sort = "estimated_cost_usd",
+	order: "ASC" | "DESC" = "DESC",
+): string {
+	const modelExpression = mergeModelAliases ? "b.model" : RAW_MODEL_SQL;
+	const sortExpression = sort === "model" && !mergeModelAliases
+		? RAW_MODEL_SQL
+		: SORT_FIELDS[sort] ?? SORT_FIELDS.estimated_cost_usd;
+	return `
+    SELECT
+      b.device_id,
+      b.usage_date,
+      ${PROVIDER_SQL} AS provider,
+      b.product,
+      b.channel,
+      ${modelExpression} AS model,
+      ${RAW_MODEL_SQL} AS raw_model,
+      COALESCE(b.project_alias, b.project_display) AS project,
+      b.event_count,
+      b.input_tokens,
+      b.cached_input_tokens,
+      b.cache_write_tokens,
+      b.output_tokens,
+      b.reasoning_output_tokens,
+      (${SORT_FIELDS.total_tokens}) AS total_tokens,
+      b.estimated_cost_usd,
+      b.cost_status
+    FROM daily_usage_breakdown b
+    ${whereClause}
+    ORDER BY ${sortExpression} ${order}, b.usage_date DESC, b.estimated_cost_usd DESC
+    LIMIT ? OFFSET ?
+  `;
+}
+
 export async function handleBreakdowns(url: URL, env: Env): Promise<Response> {
 	const range = url.searchParams.get("range") ?? "30d";
 	const date = readTextParam(url, "date");
@@ -59,7 +95,7 @@ export async function handleBreakdowns(url: URL, env: Env): Promise<Response> {
 	const channel = readTextParam(url, "channel");
 	const project = readTextParam(url, "project");
 	const mergeModelAliases = readBooleanParam(url, "mergeModelAliases", true);
-	const modelExpression = mergeModelAliases ? MODEL_SQL : RAW_MODEL_SQL;
+	const modelExpression = mergeModelAliases ? "b.model" : RAW_MODEL_SQL;
 	const projectFilter = await resolvePublicProjectFilter(
 		project ? [project] : [],
 		env,
@@ -108,10 +144,6 @@ export async function handleBreakdowns(url: URL, env: Env): Promise<Response> {
 	const model = requestedModel
 		? (mergeModelAliases ? canonicalizeModel(requestedModel) : requestedModel)
 		: null;
-	if (model) {
-		conditions.push(`${modelExpression} = ?`);
-		params.push(model);
-	}
 	if (channel) {
 		conditions.push("b.channel = ?");
 		params.push(channel);
@@ -127,13 +159,40 @@ export async function handleBreakdowns(url: URL, env: Env): Promise<Response> {
 		params.push(...projectFilter.databaseValues);
 	}
 
+	if (model) {
+		if (mergeModelAliases) {
+			const candidateWhere =
+				conditions.length > 0 ? `WHERE ${conditions.join(" AND ")}` : "";
+			const candidateRows = await prepareQuery(env, `
+    SELECT DISTINCT b.model
+    FROM daily_usage_breakdown b
+    ${candidateWhere}
+  `)
+				.bind(...params)
+				.all<{ model: string | null }>();
+			const databaseValues = selectCanonicalModelValues(
+				(candidateRows.results ?? []).map((row) => row.model),
+				[model],
+			);
+			if (databaseValues.length === 0) {
+				conditions.push("1 = 0");
+			} else {
+				conditions.push(
+					databaseValues.length === 1
+						? "b.model = ?"
+						: `b.model IN (${databaseValues.map(() => "?").join(", ")})`,
+				);
+				params.push(...databaseValues);
+			}
+		} else {
+			conditions.push(`${modelExpression} = ?`);
+			params.push(model);
+		}
+	}
+
 	const whereClause =
 		conditions.length > 0 ? `WHERE ${conditions.join(" AND ")}` : "";
-	const sortExpression = sort === "model" && !mergeModelAliases
-		? RAW_MODEL_SQL
-		: SORT_FIELDS[sort];
-
-	const countResult = await env.DB.prepare(`
+	const countResult = await prepareQuery(env, `
     SELECT COUNT(*) AS total
     FROM daily_usage_breakdown b
     ${whereClause}
@@ -141,30 +200,12 @@ export async function handleBreakdowns(url: URL, env: Env): Promise<Response> {
 		.bind(...params)
 		.first<{ total: number }>();
 
-	const rows = await env.DB.prepare(`
-    SELECT
-      b.device_id,
-      b.usage_date,
-      ${PROVIDER_SQL} AS provider,
-      b.product,
-      b.channel,
-      ${modelExpression} AS model,
-      ${RAW_MODEL_SQL} AS raw_model,
-      COALESCE(b.project_alias, b.project_display) AS project,
-      b.event_count,
-      b.input_tokens,
-      b.cached_input_tokens,
-      b.cache_write_tokens,
-      b.output_tokens,
-      b.reasoning_output_tokens,
-      (${SORT_FIELDS.total_tokens}) AS total_tokens,
-      b.estimated_cost_usd,
-      b.cost_status
-    FROM daily_usage_breakdown b
-    ${whereClause}
-    ORDER BY ${sortExpression} ${order}, b.usage_date DESC, b.estimated_cost_usd DESC
-    LIMIT ? OFFSET ?
-  `)
+	const rows = await prepareQuery(env, buildBreakdownQuery(
+		whereClause,
+		mergeModelAliases,
+		sort,
+		order,
+	))
 		.bind(...params, limit, offset)
 		.all<{
 			device_id: string;
@@ -189,6 +230,7 @@ export async function handleBreakdowns(url: URL, env: Env): Promise<Response> {
 	const data = await Promise.all(
 		(rows.results ?? []).map(async (row) => ({
 			...row,
+			model: mergeModelAliases ? canonicalizeModel(row.model) : row.model,
 			raw_model: row.raw_model || row.model,
 			provider: canonicalizeProvider({ provider: row.provider, model: row.raw_model || row.model }),
 			estimated_cost_usd: roundUsd(row.estimated_cost_usd),
@@ -216,6 +258,10 @@ export async function handleBreakdowns(url: URL, env: Env): Promise<Response> {
 		CACHE_PRESETS.trend,
 		true,
 	);
+}
+
+function prepareQuery(env: Env, sql: string) {
+	return prepareDashboardQuery(env.DB, "breakdowns", sql);
 }
 
 function readTextParam(url: URL, key: string): string | null {

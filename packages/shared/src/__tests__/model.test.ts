@@ -1,7 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import {
   auditModelAliases,
-  canonicalModelSqlExpression,
   canonicalizeModel,
   displayModelName,
   modelProviderHint,
@@ -103,15 +102,5 @@ describe('model canonicalization', () => {
     expect(identity.pricingModelKey).toBe('deepseek-v4-flash-0731');
     expect(identity.canonicalModel).toBe('deepseek-v4-flash');
     expect(identity.displayName).toBe('DeepSeek V4 Flash');
-  });
-});
-
-describe('canonicalModelSqlExpression', () => {
-  it('contains the same fixed alias and namespace rules', () => {
-    const expression = canonicalModelSqlExpression('b.model');
-    expect(expression).toContain("'deepseek-v4-flash-0731'");
-    expect(expression).toContain("'deepseek-v4-flash'");
-    expect(expression).toContain("'anthropic/%'");
-    expect(expression).toContain('b.model');
   });
 });

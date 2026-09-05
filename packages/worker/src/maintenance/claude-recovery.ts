@@ -1,6 +1,7 @@
-import { canonicalModelSqlExpression } from "@aiusage/shared";
+import { MODEL_ALIASES, MODEL_PROVIDER_PREFIXES } from "@aiusage/shared";
 
-const MODEL_SQL = canonicalModelSqlExpression("b.model");
+const MODEL_PROVIDER_PREFIX_ENTRIES = Object.entries(MODEL_PROVIDER_PREFIXES)
+	.sort(([left], [right]) => right.length - left.length);
 
 export const CLAUDE_PRODUCT_ALIASES = [
 	"claude-code",
@@ -653,6 +654,46 @@ export function buildRestoreMissingClaudeSql(
 	return `${header}${statements.join("\n\n")}\n`;
 }
 
+function buildCanonicalModelTopQuery(
+	scope: string,
+	selectedColumn: "model" | "total_cost",
+): string {
+	const normalized = "lower(trim(raw_model))";
+	const knownPrefix = MODEL_PROVIDER_PREFIX_ENTRIES
+		.map(([prefix]) => `${normalized} LIKE ${sqlString(`${prefix}/%`)}`)
+		.join(" OR ");
+	const stripped = `(CASE
+      WHEN ${knownPrefix} THEN substr(${normalized}, instr(${normalized}, '/') + 1)
+      ELSE ${normalized}
+    END)`;
+	const aliases = Object.entries(MODEL_ALIASES)
+		.map(([from, to]) => `      WHEN model = ${sqlString(from)} THEN ${sqlString(to)}`)
+		.join("\n");
+	return `(WITH raw_model_totals AS (
+      SELECT b.model AS raw_model, SUM(b.estimated_cost_usd) AS total_cost
+      FROM daily_usage_breakdown b
+      WHERE ${scope}
+      GROUP BY b.model
+    ), normalized_model_totals AS (
+      SELECT ${stripped} AS model, total_cost
+      FROM raw_model_totals
+    ), aliased_model_totals AS (
+      SELECT CASE
+${aliases}
+        ELSE model
+      END AS model, total_cost
+      FROM normalized_model_totals
+    ), canonical_model_totals AS (
+      SELECT model, SUM(total_cost) AS total_cost
+      FROM aliased_model_totals
+      GROUP BY model
+    )
+    SELECT ${selectedColumn}
+    FROM canonical_model_totals
+    ORDER BY total_cost DESC, model ASC
+    LIMIT 1)`;
+}
+
 export function buildAffectedDailyUsageSql(
 	affectedDays: readonly AffectedDay[],
 	pricingVersion: string,
@@ -678,9 +719,9 @@ export function buildAffectedDailyUsageSql(
 			const usageDate = sqlString(day.usage_date);
 			const scope = `device_id = ${deviceId} AND usage_date = ${usageDate}`;
 			const topProject = `(SELECT COALESCE(project_alias, project_display)\n          FROM daily_usage_breakdown\n          WHERE ${scope}\n          GROUP BY COALESCE(project_alias, project_display)\n          ORDER BY SUM(estimated_cost_usd) DESC, COALESCE(project_alias, project_display) ASC\n          LIMIT 1)`;
-			const topModel = `(SELECT ${MODEL_SQL} AS model\n          FROM daily_usage_breakdown b\n          WHERE ${scope}\n          GROUP BY ${MODEL_SQL}\n          ORDER BY SUM(b.estimated_cost_usd) DESC, ${MODEL_SQL} ASC\n          LIMIT 1)`;
+			const topModel = buildCanonicalModelTopQuery(scope, "model");
 			const topProjectCost = `(SELECT SUM(estimated_cost_usd)\n          FROM daily_usage_breakdown\n          WHERE ${scope}\n          GROUP BY COALESCE(project_alias, project_display)\n          ORDER BY SUM(estimated_cost_usd) DESC, COALESCE(project_alias, project_display) ASC\n          LIMIT 1)`;
-			const topModelCost = `(SELECT SUM(b.estimated_cost_usd)\n          FROM daily_usage_breakdown b\n          WHERE ${scope}\n          GROUP BY ${MODEL_SQL}\n          ORDER BY SUM(b.estimated_cost_usd) DESC, ${MODEL_SQL} ASC\n          LIMIT 1)`;
+			const topModelCost = buildCanonicalModelTopQuery(scope, "total_cost");
 			return `UPDATE daily_usage
 SET event_count = COALESCE((SELECT SUM(event_count) FROM daily_usage_breakdown WHERE ${scope}), 0),
     input_tokens = COALESCE((SELECT SUM(input_tokens) FROM daily_usage_breakdown WHERE ${scope}), 0),

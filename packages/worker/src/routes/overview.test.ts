@@ -3,10 +3,13 @@ import {
   buildActivityWhere,
   buildDateWindow,
   buildWhere,
+  handleOverview,
   mergeProviderFacetItems,
   mergeProviderTrendRows,
   parseFilters,
 } from './overview.js';
+import { MAX_DASHBOARD_QUERY_BYTES, sqlUtf8Bytes } from '../utils/sql.js';
+import type { Env } from '../types.js';
 
 describe('provider canonical aggregation', () => {
   it('merges OpenAI aliases into one provider facet', () => {
@@ -126,5 +129,64 @@ describe('activity interaction metric aggregation', () => {
 
     expect(filters.provider).toEqual(['openai']);
     expect(where.whereClause).toContain('openai-codex');
+  });
+});
+
+describe('overview response contract', () => {
+  it('returns every dashboard section while keeping generated SQL bounded', async () => {
+    const queries: string[] = [];
+    const DB = {
+      prepare(sql: string) {
+        queries.push(sql);
+        return {
+          bind() {
+            return {
+              first: async <T>() => null as T | null,
+              all: async <T>() => ({ results: [] as T[] }),
+            };
+          },
+        };
+      },
+    };
+    const response = await handleOverview(
+      new URL('https://example.com/api/v1/public/overview?range=30d'),
+      {
+        DB,
+        PUBLIC_PROJECT_VISIBILITY: 'plain',
+      } as unknown as Env,
+    );
+    const body = await response.json() as Record<string, unknown>;
+
+    expect(response.status).toBe(200);
+    expect(body.ok).toBe(true);
+    expect(Object.keys(body)).toEqual(expect.arrayContaining([
+      'totalDays',
+      'activeDays',
+      'totalEvents',
+      'totalSessions',
+      'costBearingEvents',
+      'totalCostUsd',
+      'averageDailyCostUsd',
+      'dailyTrend',
+      'providerDailyTrend',
+      'tokenComposition',
+      'modelCostShare',
+      'channelCostShare',
+      'sankey',
+      'heatmap',
+      'interactionMetrics',
+      'comparison',
+      'filters',
+    ]));
+    const filters = body.filters as { options: Record<string, unknown> };
+    expect(Object.keys(filters.options)).toEqual(expect.arrayContaining([
+      'devices',
+      'providers',
+      'products',
+      'channels',
+      'models',
+      'projects',
+    ]));
+    expect(queries.every((sql) => sqlUtf8Bytes(sql) < MAX_DASHBOARD_QUERY_BYTES)).toBe(true);
   });
 });

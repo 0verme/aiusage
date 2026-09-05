@@ -297,7 +297,7 @@ describe("Claude recovery SQL", () => {
 		expect(sql).toContain("cost_status = 'estimated'");
 		expect(sql).toContain("pricing_version = '2026-08-27-v1'");
 		expect(sql).toContain("COALESCE(project_alias, project_display)");
-		expect(sql).toContain("GROUP BY (CASE");
+		expect(sql).toContain("GROUP BY b.model");
 		expect(sql).toContain(
 			"WHERE device_id = 'device-a' AND usage_date = '2026-06-18'",
 		);

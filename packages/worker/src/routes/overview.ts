@@ -4,15 +4,21 @@ import {
 	toPublicInteractionItems,
 	toPublicProjectIdentity,
 } from "../utils/privacy.js";
+import { prepareDashboardQuery } from "../utils/sql.js";
 import type { Env } from "../types.js";
 import {
-	canonicalModelSqlExpression,
 	canonicalProviderSqlExpression,
 	canonicalizeModel,
 	canonicalizeProvider,
 	displayModelName,
 	type OverviewComparisonPayload,
 } from "@aiusage/shared";
+import {
+	canonicalModelValue,
+	mergeCanonicalModelRows,
+	parseRawModelValues,
+	selectCanonicalModelValues,
+} from "../utils/model-aggregation.js";
 
 export const TOTAL_TOKENS_SQL = `
   COALESCE(b.input_tokens, 0) +
@@ -25,7 +31,6 @@ export const TOTAL_TOKENS_SQL = `
 const PROJECT_DISPLAY_SQL = `COALESCE(b.project_alias, b.project_display)`;
 const ACTIVITY_PROJECT_DISPLAY_SQL = `COALESCE(a.project_alias, a.project_display)`;
 const PROVIDER_SQL = canonicalProviderSqlExpression("b.provider", "b.model");
-const MODEL_SQL = canonicalModelSqlExpression("b.model");
 const RAW_MODEL_SQL = `COALESCE(
   CASE WHEN json_valid(b.extra_metrics_json)
     THEN json_extract(b.extra_metrics_json, '$.raw_model')
@@ -55,6 +60,8 @@ export interface DashboardFilters {
 	project: string[];
 	/** 默认 true；false 仅用于排查 raw model。 */
 	mergeModelAliases?: boolean;
+	/** canonical filter 已解析出的数据库 pricing model 值。 */
+	modelDatabaseValues?: string[];
 }
 
 export interface WhereParts {
@@ -71,6 +78,76 @@ interface FacetItem {
 	aliasCount?: number;
 }
 
+export function buildModelAggregationQuery(
+	whereClause: string,
+	mergeModelAliases = true,
+): string {
+	const modelExpression = mergeModelAliases ? "b.model" : RAW_MODEL_SQL;
+	return `
+      SELECT
+        ${modelExpression} AS value,
+        ${mergeModelAliases ? `GROUP_CONCAT(DISTINCT ${RAW_MODEL_SQL}) AS raw_models,` : ""}
+        COALESCE(SUM(b.estimated_cost_usd), 0) AS estimated_cost_usd,
+        COALESCE(SUM(b.event_count), 0) AS event_count,
+        COALESCE(SUM(${TOTAL_TOKENS_SQL}), 0) AS total_tokens
+      FROM daily_usage_breakdown b
+      ${whereClause}
+      GROUP BY ${modelExpression}
+      HAVING value IS NOT NULL AND value != ''
+      ORDER BY total_tokens DESC, value ASC
+    `;
+}
+
+export function buildSankeyQuery(
+	whereClause: string,
+	mergeModelAliases = true,
+): string {
+	const modelExpression = mergeModelAliases ? "b.model" : RAW_MODEL_SQL;
+	const modelSelect = mergeModelAliases ? "b.model" : `${RAW_MODEL_SQL} AS model`;
+	return `
+      SELECT
+        ${modelSelect},
+        GROUP_CONCAT(DISTINCT ${RAW_MODEL_SQL}) AS raw_models,
+        ${PROJECT_DISPLAY_SQL} AS project,
+        COALESCE(SUM(${TOTAL_TOKENS_SQL}), 0) AS total_tokens
+      FROM daily_usage_breakdown b
+      ${whereClause}
+      GROUP BY ${modelExpression}, ${PROJECT_DISPLAY_SQL}
+      HAVING COALESCE(SUM(${TOTAL_TOKENS_SQL}), 0) > 0
+      ORDER BY total_tokens DESC, b.model ASC, project ASC
+    `;
+}
+
+async function loadCanonicalModelFilterValues(
+	filters: DashboardFilters,
+	env: Env,
+): Promise<string[] | undefined> {
+	if (filters.mergeModelAliases === false || filters.model.length === 0) {
+		return undefined;
+	}
+	const where = buildWhere(
+		{
+			...filters,
+			minDate: null,
+			maxDate: null,
+			rangeDays: null,
+			range: "all",
+		},
+		"model",
+	);
+	const rows = await prepareQuery(env, `
+    SELECT DISTINCT b.model
+    FROM daily_usage_breakdown b
+    ${where.whereClause}
+  `)
+		.bind(...where.params)
+		.all<{ model: string | null }>();
+	return selectCanonicalModelValues(
+		(rows.results ?? []).map((row) => row.model),
+		filters.model,
+	);
+}
+
 export async function handleOverview(url: URL, env: Env): Promise<Response> {
 	const parsedFilters = parseFilters(url);
 	if (!parsedFilters)
@@ -80,9 +157,10 @@ export async function handleOverview(url: URL, env: Env): Promise<Response> {
 		parsedFilters.project,
 		env,
 	);
-	const filters = { ...parsedFilters, project: projectFilter.databaseValues };
+	const baseFilters = { ...parsedFilters, project: projectFilter.databaseValues };
+	const modelDatabaseValues = await loadCanonicalModelFilterValues(baseFilters, env);
+	const filters = { ...baseFilters, modelDatabaseValues };
 	const mergeModelAliases = filters.mergeModelAliases !== false;
-	const modelExpression = getModelExpression(filters);
 	const where = buildWhere(filters);
 	const previousFilters = buildPreviousFilters(filters);
 
@@ -118,7 +196,7 @@ export async function handleOverview(url: URL, env: Env): Promise<Response> {
 		interactionMetrics,
 		comparison,
 	] = await Promise.all([
-		env.DB.prepare(`
+		prepareQuery(env, `
       SELECT
         COUNT(DISTINCT b.usage_date) AS active_days,
         COALESCE(SUM(b.event_count), 0) AS total_events,
@@ -136,7 +214,7 @@ export async function handleOverview(url: URL, env: Env): Promise<Response> {
 				cost_bearing_events: number;
 				total_cost_usd: number;
 			}>(),
-		env.DB.prepare(`
+		prepareQuery(env, `
       SELECT
         b.usage_date,
         COALESCE(SUM(b.event_count), 0) AS event_count,
@@ -152,7 +230,7 @@ export async function handleOverview(url: URL, env: Env): Promise<Response> {
 				event_count: number;
 				estimated_cost_usd: number;
 			}>(),
-		env.DB.prepare(`
+		prepareQuery(env, `
       SELECT
         b.usage_date,
         ${PROVIDER_SQL} AS provider,
@@ -170,7 +248,7 @@ export async function handleOverview(url: URL, env: Env): Promise<Response> {
 				model?: string;
 				estimated_cost_usd: number;
 			}>(),
-		env.DB.prepare(`
+		prepareQuery(env, `
       SELECT
         b.usage_date,
         COALESCE(SUM(b.input_tokens), 0) AS input_tokens,
@@ -192,19 +270,7 @@ export async function handleOverview(url: URL, env: Env): Promise<Response> {
 				output_tokens: number;
 				reasoning_output_tokens: number;
 			}>(),
-		env.DB.prepare(`
-      SELECT
-        ${modelExpression} AS value,
-        GROUP_CONCAT(DISTINCT ${RAW_MODEL_SQL}) AS raw_models,
-        COALESCE(SUM(b.estimated_cost_usd), 0) AS estimated_cost_usd,
-        COALESCE(SUM(b.event_count), 0) AS event_count,
-        COALESCE(SUM(${TOTAL_TOKENS_SQL}), 0) AS total_tokens
-      FROM daily_usage_breakdown b
-      ${where.whereClause}
-      GROUP BY ${modelExpression}
-      HAVING value IS NOT NULL AND value != ''
-      ORDER BY total_tokens DESC, value ASC
-    `)
+		prepareQuery(env, buildModelAggregationQuery(where.whereClause, mergeModelAliases))
 			.bind(...where.params)
 			.all<{
 				value: string;
@@ -213,7 +279,7 @@ export async function handleOverview(url: URL, env: Env): Promise<Response> {
 				event_count: number;
 				total_tokens: number;
 			}>(),
-		env.DB.prepare(`
+		prepareQuery(env, `
       SELECT
         b.channel AS value,
         COALESCE(SUM(b.estimated_cost_usd), 0) AS estimated_cost_usd,
@@ -230,18 +296,7 @@ export async function handleOverview(url: URL, env: Env): Promise<Response> {
 				estimated_cost_usd: number;
 				event_count: number;
 			}>(),
-		env.DB.prepare(`
-      SELECT
-        ${mergeModelAliases ? "b.model" : `${RAW_MODEL_SQL} AS model`},
-        GROUP_CONCAT(DISTINCT ${RAW_MODEL_SQL}) AS raw_models,
-        ${PROJECT_DISPLAY_SQL} AS project,
-        COALESCE(SUM(${TOTAL_TOKENS_SQL}), 0) AS total_tokens
-      FROM daily_usage_breakdown b
-      ${where.whereClause}
-      GROUP BY ${mergeModelAliases ? "b.model" : RAW_MODEL_SQL}, ${PROJECT_DISPLAY_SQL}
-      HAVING COALESCE(SUM(${TOTAL_TOKENS_SQL}), 0) > 0
-      ORDER BY total_tokens DESC, b.model ASC, project ASC
-    `)
+		prepareQuery(env, buildSankeyQuery(where.whereClause, mergeModelAliases))
 			.bind(...where.params)
 			.all<{
 				model: string;
@@ -249,7 +304,7 @@ export async function handleOverview(url: URL, env: Env): Promise<Response> {
 				project: string;
 				total_tokens: number;
 			}>(),
-		env.DB.prepare(`
+		prepareQuery(env, `
       SELECT
         b.usage_date,
         COALESCE(SUM(${TOTAL_TOKENS_SQL}), 0) AS total_tokens,
@@ -282,6 +337,16 @@ export async function handleOverview(url: URL, env: Env): Promise<Response> {
 	const totalSessions = Number(summary?.total_sessions ?? 0);
 	const costBearingEvents = Number(summary?.cost_bearing_events ?? 0);
 	const totalCostUsd = roundUsd(summary?.total_cost_usd ?? 0);
+	const modelAggregates = mergeCanonicalModelRows(
+		(modelRows.results ?? []).map((row) => ({
+			model: row.value,
+			rawModels: row.raw_models,
+			estimatedCostUsd: row.estimated_cost_usd,
+			eventCount: row.event_count,
+			totalTokens: row.total_tokens,
+		})),
+		mergeModelAliases,
+	);
 
 	return jsonCached(
 		{
@@ -315,13 +380,13 @@ export async function handleOverview(url: URL, env: Env): Promise<Response> {
 					Number(row.output_tokens ?? 0) +
 					Number(row.reasoning_output_tokens ?? 0),
 			})),
-			modelCostShare: (modelRows.results ?? []).map((row) => ({
+			modelCostShare: modelAggregates.map((row) => ({
 				value: row.value,
-				label: mergeModelAliases ? displayModelName(row.value) : row.value,
-				estimatedCostUsd: roundUsd(row.estimated_cost_usd ?? 0),
-				eventCount: Number(row.event_count ?? 0),
-				totalTokens: Number(row.total_tokens ?? 0),
-				...modelMetadata(row.raw_models, row.value, mergeModelAliases),
+				label: row.displayName,
+				estimatedCostUsd: roundUsd(row.estimatedCostUsd),
+				eventCount: row.eventCount,
+				totalTokens: row.totalTokens,
+				...modelMetadata(row.rawModels, row.value, mergeModelAliases),
 			})),
 			channelCostShare: (channelRows.results ?? []).map((row) => ({
 				value: row.value,
@@ -433,25 +498,34 @@ function readBooleanParam(url: URL, key: string, fallback: boolean): boolean {
 	return fallback;
 }
 
-function getModelExpression(filters: Pick<DashboardFilters, "mergeModelAliases">): string {
-	return filters.mergeModelAliases === false ? RAW_MODEL_SQL : MODEL_SQL;
-}
-
-function parseRawModels(rawModels: string | null | undefined, fallback: string): string[] {
-	const values = (rawModels ?? "")
-		.split(",")
-		.map((value) => value.trim())
-		.filter(Boolean);
-	if (values.length === 0 && fallback) values.push(fallback);
-	return [...new Set(values)].sort((left, right) => left.localeCompare(right));
+function addModelFilter(
+	clauses: string[],
+	params: (string | number)[],
+	filters: DashboardFilters,
+): void {
+	if (filters.model.length === 0) return;
+	if (filters.mergeModelAliases !== false && filters.modelDatabaseValues !== undefined) {
+		if (filters.modelDatabaseValues.length === 0) {
+			clauses.push("1 = 0");
+		} else {
+			addValueFilter(clauses, params, "b.model", filters.modelDatabaseValues);
+		}
+		return;
+	}
+	addValueFilter(
+		clauses,
+		params,
+		filters.mergeModelAliases === false ? RAW_MODEL_SQL : "b.model",
+		filters.model,
+	);
 }
 
 function modelMetadata(
-	rawModels: string | null | undefined,
+	rawModels: string | readonly string[] | null | undefined,
 	fallback: string,
 	mergeAliases: boolean,
 ): { rawModels?: string[]; aliasCount?: number } {
-	const values = parseRawModels(rawModels, fallback);
+	const values = parseRawModelValues(rawModels, fallback);
 	if (!mergeAliases || values.length === 0) return {};
 	return {
 		rawModels: values,
@@ -482,8 +556,7 @@ export function buildWhere(
 		addProductFilter(clauses, params, "b", filters.product);
 	if (omit !== "channel")
 		addValueFilter(clauses, params, "b.channel", filters.channel);
-	if (omit !== "model")
-		addValueFilter(clauses, params, getModelExpression(filters), filters.model);
+	if (omit !== "model") addModelFilter(clauses, params, filters);
 	if (omit !== "project")
 		addValueFilter(clauses, params, PROJECT_DISPLAY_SQL, filters.project);
 
@@ -501,22 +574,25 @@ async function loadFacetOptions(
 	const omit = toFilterKey(column);
 	const where = buildWhere(filters, omit);
 	const isModelColumn = column === "model";
+	const mergeModelAliases = filters.mergeModelAliases !== false;
 	const columnExpr =
 		column === "project"
 			? PROJECT_DISPLAY_SQL
 			: column === "provider"
 				? PROVIDER_SQL
 				: isModelColumn
-					? getModelExpression(filters)
+					? (mergeModelAliases ? "b.model" : RAW_MODEL_SQL)
 					: `b.${column}`;
 	const modelSelect = column === "provider" ? "b.model AS model," : "";
-	const rawModelSelect = isModelColumn
+	const rawModelSelect = isModelColumn && mergeModelAliases
 		? `GROUP_CONCAT(DISTINCT ${RAW_MODEL_SQL}) AS raw_models,`
 		: "";
 	const groupExpr =
 		column === "provider" ? `${columnExpr}, b.model` : columnExpr;
-	const limitClause = column === "provider" ? "" : "LIMIT 80";
-	const rows = await env.DB.prepare(`
+	const limitClause = column === "provider" || (isModelColumn && mergeModelAliases)
+		? ""
+		: "LIMIT 80";
+	const rows = await prepareQuery(env, `
     SELECT
       ${columnExpr} AS value,
       ${modelSelect}
@@ -539,6 +615,26 @@ async function loadFacetOptions(
 			event_count: number;
 		}>();
 
+	if (isModelColumn) {
+		return mergeCanonicalModelRows(
+			(rows.results ?? []).map((row) => ({
+				model: row.value,
+				rawModels: row.raw_models,
+				estimatedCostUsd: row.estimated_cost_usd,
+				eventCount: row.event_count,
+			})),
+			mergeModelAliases,
+		)
+			.slice(0, 80)
+			.map((row) => ({
+				value: row.value,
+				label: row.displayName,
+				estimatedCostUsd: roundUsd(row.estimatedCostUsd),
+				eventCount: row.eventCount,
+				...modelMetadata(row.rawModels, row.value, mergeModelAliases),
+			}));
+	}
+
 	const deviceLabels =
 		column === "device_id"
 			? await loadDeviceLabels(
@@ -549,9 +645,6 @@ async function loadFacetOptions(
 
 	const items = await Promise.all(
 		(rows.results ?? []).map(async (row) => {
-			const modelValue = isModelColumn && filters.mergeModelAliases !== false
-				? canonicalizeModel(row.value)
-				: row.value;
 			const provider =
 				column === "provider"
 					? canonicalizeProvider({ provider: row.value, model: row.model })
@@ -561,29 +654,20 @@ async function loadFacetOptions(
 					? await toPublicProjectIdentity(row.value, env)
 					: null;
 			return {
-				value: identity?.value ?? (isModelColumn ? modelValue : provider),
+				value: identity?.value ?? provider,
 				label:
 					identity?.label ??
 					(column === "device_id"
 						? (deviceLabels?.get(row.value) ?? row.value)
 						: column === "product"
 							? productLabel(row.value, false)
-							: isModelColumn && filters.mergeModelAliases !== false
-								? displayModelName(modelValue)
-								: row.value),
+							: row.value),
 				estimatedCostUsd: roundUsd(row.estimated_cost_usd ?? 0),
 				eventCount: Number(row.event_count ?? 0),
-				...(isModelColumn
-					? modelMetadata(
-							row.raw_models,
-							row.value,
-							filters.mergeModelAliases !== false,
-						)
-					: {}),
 			};
 		}),
 	);
-	if (column === "project" || column === "model") return mergeFacetItems(items);
+	if (column === "project") return mergeFacetItems(items);
 	if (column === "provider") return mergeProviderFacetItems(items);
 	return column === "product" ? addCombinedTraeFacet(items) : items;
 }
@@ -664,9 +748,7 @@ async function loadDeviceLabels(
 	const map = new Map<string, string>();
 	if (!deviceIds.length) return map;
 	for (const id of deviceIds) {
-		const row = await env.DB.prepare(
-			"SELECT public_label, hostname FROM devices WHERE device_id = ?",
-		)
+		const row = await prepareQuery(env, "SELECT public_label, hostname FROM devices WHERE device_id = ?",)
 			.bind(id)
 			.first<{ public_label: string | null; hostname: string | null }>();
 		if (row) {
@@ -686,7 +768,7 @@ async function loadInteractionMetrics(filters: DashboardFilters, env: Env) {
 	let rows;
 	try {
 		rows = await Promise.all([
-			env.DB.prepare(`
+			prepareQuery(env, `
       SELECT
         COALESCE(SUM(CASE WHEN a.kind != 'user_message' AND a.confidence = 'exact' THEN a.event_count ELSE 0 END), 0) AS exact_count,
         COALESCE(SUM(CASE WHEN a.kind != 'user_message' AND a.confidence = 'proxy' THEN a.event_count ELSE 0 END), 0) AS proxy_count,
@@ -788,7 +870,7 @@ async function loadComparison(
 	const activityWhere = buildActivityWhere(filters);
 
 	const [summary, activity] = await Promise.all([
-		env.DB.prepare(`
+		prepareQuery(env, `
       SELECT
         COUNT(DISTINCT b.usage_date) AS active_days,
         COALESCE(SUM(b.event_count), 0) AS total_events,
@@ -814,7 +896,7 @@ async function loadComparison(
 				output_tokens: number;
 				reasoning_output_tokens: number;
 			}>(),
-		env.DB.prepare(`
+		prepareQuery(env, `
       SELECT
         COALESCE(SUM(CASE WHEN a.kind = 'user_message' THEN a.event_count ELSE 0 END), 0) AS user_message_count
       FROM daily_activity_breakdown a
@@ -891,7 +973,7 @@ async function loadActivityTopList(
 	const combinedWhere = where.whereClause
 		? `${where.whereClause} AND ${extraCondition}`
 		: `WHERE ${extraCondition}`;
-	const rows = await env.DB.prepare(`
+	const rows = await prepareQuery(env, `
     SELECT
       ${keyExpr} AS value,
       ${labelExpr} AS label,
@@ -988,9 +1070,9 @@ export async function buildSankey(
 		const value = Number(row.total_tokens ?? 0);
 		if (!value) continue;
 
-		const model = mergeModelAliases ? canonicalizeModel(row.model) : row.model || "unknown";
+		const model = canonicalModelValue(row.model, mergeModelAliases);
 		modelTotals.set(model, (modelTotals.get(model) ?? 0) + value);
-		const rawModels = parseRawModels(row.raw_models, row.model);
+		const rawModels = parseRawModelValues(row.raw_models, row.model);
 		const rawModelSet = modelRawModels.get(model) ?? new Set<string>();
 		for (const rawModel of rawModels) rawModelSet.add(rawModel);
 		modelRawModels.set(model, rawModelSet);
@@ -1061,6 +1143,10 @@ function sortedLinkEntries(map: Map<string, number>): Array<[string, number]> {
 
 function roundUsd(value: number): number {
 	return Math.round(Number(value || 0) * 10000) / 10000;
+}
+
+function prepareQuery(env: Env, sql: string) {
+	return prepareDashboardQuery(env.DB, "overview", sql);
 }
 
 export function buildDateWindow(
