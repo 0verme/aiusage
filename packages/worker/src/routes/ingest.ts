@@ -1,5 +1,4 @@
 import {
-	canonicalModelSqlExpression,
 	canonicalizeProvider,
 	type CostStatus,
 	type IngestActivityItem,
@@ -13,9 +12,8 @@ import {
 	getWorstCostStatus,
 	PRICING_VERSION,
 } from "../utils/pricing.js";
+import { mergeCanonicalModelRows } from "../utils/model-aggregation.js";
 import type { Env } from "../types.js";
-
-const MODEL_SQL = canonicalModelSqlExpression("b.model");
 
 interface PreparedBreakdown {
 	breakdown: IngestBreakdown;
@@ -364,14 +362,20 @@ export async function handleIngest(
 			.bind(tokenPayload.deviceId, day.usageDate)
 			.first<{ project: string; total_cost: number }>();
 
-		const topModel = await env.DB.prepare(`
-      SELECT ${MODEL_SQL} AS model, SUM(estimated_cost_usd) as total_cost
+		const topModelRows = await env.DB.prepare(`
+      SELECT b.model, SUM(estimated_cost_usd) AS total_cost
       FROM daily_usage_breakdown b
       WHERE b.device_id = ? AND b.usage_date = ?
-      GROUP BY ${MODEL_SQL} ORDER BY total_cost DESC LIMIT 1
+      GROUP BY b.model ORDER BY total_cost DESC, b.model ASC
     `)
 			.bind(tokenPayload.deviceId, day.usageDate)
-			.first<{ model: string; total_cost: number }>();
+			.all<{ model: string; total_cost: number }>();
+		const topModel = mergeCanonicalModelRows(
+			(topModelRows.results ?? []).map((row) => ({
+				model: row.model,
+				estimatedCostUsd: row.total_cost,
+			})),
+		)[0];
 
 		await env.DB.prepare(`
       UPDATE daily_usage
@@ -383,8 +387,8 @@ export async function handleIngest(
 			.bind(
 				topProject?.project ?? "unknown",
 				topProject?.total_cost ?? 0,
-				topModel?.model ?? "unknown",
-				topModel?.total_cost ?? 0,
+				topModel?.value ?? "unknown",
+				topModel?.estimatedCostUsd ?? 0,
 				now,
 				tokenPayload.deviceId,
 				day.usageDate,

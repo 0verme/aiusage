@@ -43,6 +43,7 @@ describe('ingest provider canonicalization', () => {
                 }
                 return null;
               },
+              all: async <T>() => ({ results: [] as T[] }),
               run: async () => ({ success: true }),
             };
           },

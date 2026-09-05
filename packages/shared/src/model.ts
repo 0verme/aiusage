@@ -145,9 +145,6 @@ export const MODEL_ALIASES = {
   'claude-haiku-4-5-20251001': 'claude-haiku-4.5',
 } as const satisfies Readonly<Record<string, string>>;
 
-const MODEL_PROVIDER_PREFIX_ENTRIES = Object.entries(MODEL_PROVIDER_PREFIXES)
-  .sort(([left], [right]) => right.length - left.length);
-
 /** 安全规范化：只处理空白、大小写、下划线和重复分隔符。 */
 export function normalizeModelKey(rawModel?: string | null): NormalizedModelKey {
   const input = typeof rawModel === 'string' ? rawModel.trim() : '';
@@ -244,28 +241,6 @@ export function auditModelAliases(
     knownAliases,
     remainingUnknownAliases,
   };
-}
-
-/**
- * 生成与 canonicalizeModel 等价的 SQLite 表达式。
- * 表达式只由代码内的固定规则生成，调用方不得把用户输入作为 expression 传入。
- */
-export function canonicalModelSqlExpression(modelExpression: string): string {
-  const normalized = sqlNormalizeModel(modelExpression);
-  const stripped = `(CASE
-${MODEL_PROVIDER_PREFIX_ENTRIES.map(([prefix]) =>
-    `    WHEN ${normalized} LIKE ${sqlString(`${prefix}/%`)} THEN substr(${normalized}, ${prefix.length + 2})`,
-  ).join('\n')}
-    ELSE ${normalized}
-  END)`;
-  const aliases = Object.entries(MODEL_ALIASES)
-    .map(([from, to]) => `    WHEN ${stripped} = ${sqlString(from)} THEN ${sqlString(to)}`)
-    .join('\n');
-
-  return `(CASE
-${aliases}
-    ELSE ${stripped}
-  END)`;
 }
 
 function buildModelAliasGroups(
@@ -436,18 +411,4 @@ function formatModelToken(token: string): string {
 
 function capitalizeBrand(value: string): string {
   return MODEL_BRANDS[value] ?? value.charAt(0).toUpperCase() + value.slice(1);
-}
-
-function sqlNormalizeModel(expression: string): string {
-  let normalized = `replace(replace(replace(replace(replace(lower(trim(${expression})), '_', '-'), ' ', '-'), char(9), '-'), char(10), '-'), char(13), '-')`;
-  // Model names are short; a bounded repeated replace keeps the SQL expression
-  // portable across D1/SQLite while matching the runtime collapse rule.
-  for (let index = 0; index < 8; index += 1) {
-    normalized = `replace(${normalized}, '--', '-')`;
-  }
-  return `trim(${normalized}, '-')`;
-}
-
-function sqlString(value: string): string {
-  return `'${value.replaceAll("'", "''")}'`;
 }
