@@ -13,12 +13,12 @@
    ──────────────────────────────────────── */
 :root {
   color-scheme: light;
-  --bg: #fbfcfe;
-  --bg2: #f4f7fb;
+  --bg: #f7f9fc;
+  --bg2: #f1f5f9;
   --panel: #ffffff;
-  --panel-soft: #f7f9fc;
-  --border: #e4eaf2;
-  --border-strong: #d7e0eb;
+  --panel-soft: #fbfcfe;
+  --border: #e7ecf3;
+  --border-strong: #d9e2ee;
   --fg: #101828;
   --fg2: #50627c;
   --fg3: #8b9ab1;
@@ -38,10 +38,10 @@
   --glow: rgba(22, 119, 255, 0.12);
   --glow-strong: rgba(22, 119, 255, 0.22);
   --green-glow: rgba(4, 184, 111, 0.10);
-  --shadow: 0 1px 2px rgba(16, 24, 40, 0.025), 0 8px 28px rgba(43, 61, 82, 0.035);
-  --shadow-hover: 0 2px 4px rgba(16, 24, 40, 0.035), 0 12px 30px rgba(43, 61, 82, 0.06);
-  --card-radius: 14px;
-  --control-radius: 10px;
+  --shadow: 0 1px 2px rgba(16, 24, 40, 0.025), 0 4px 14px rgba(43, 61, 82, 0.025);
+  --shadow-hover: 0 2px 4px rgba(16, 24, 40, 0.035), 0 8px 20px rgba(43, 61, 82, 0.045);
+  --card-radius: 16px;
+  --control-radius: 9px;
 }
 
 .dark {
@@ -116,6 +116,7 @@ button {
 #root {
   position: relative;
   z-index: 1;
+  min-height: 100vh;
 }
 
 ::selection {
@@ -128,15 +129,16 @@ button {
 
 /* ── Dashboard shell and rhythm ── */
 .dashboard-shell {
-  width: min(1360px, calc(100% - 48px));
+  width: min(1280px, calc(100% - 48px));
+  min-height: 100vh;
   margin-inline: auto;
-  max-width: none !important;
+  max-width: 1280px !important;
   padding-left: 0 !important;
   padding-right: 0 !important;
 }
 
 .dashboard-header {
-  padding-top: 32px !important;
+  padding-top: 28px !important;
   padding-bottom: 0 !important;
 }
 
@@ -144,9 +146,9 @@ button {
   display: flex;
   flex-wrap: nowrap;
   align-items: center;
-  gap: 14px;
-  margin-top: 8px;
-  margin-bottom: 22px;
+  gap: 12px;
+  margin-top: 14px;
+  margin-bottom: 20px;
 }
 
 .dashboard-range-scroll,
@@ -163,11 +165,11 @@ button {
 }
 
 .dashboard-content {
-  gap: 22px !important;
+  gap: 20px !important;
 }
 
 .dashboard-kpi-grid {
-  gap: 18px !important;
+  gap: 16px !important;
 }
 
 .header-refresh {
@@ -187,8 +189,8 @@ button {
 .pill-group {
   display: inline-flex;
   align-items: center;
-  gap: 3px;
-  padding: 3px;
+  gap: 2px;
+  padding: 2px;
   background: var(--panel-soft);
   border: 1px solid var(--border);
   border-radius: 999px;
@@ -212,8 +214,8 @@ button {
 .pill-active {
   background: var(--accent);
   color: #fff;
-  font-weight: 700;
-  box-shadow: 0 1px 4px var(--glow);
+  font-weight: 650;
+  box-shadow: 0 1px 3px var(--glow);
 }
 
 .pill-active:hover {
@@ -223,22 +225,22 @@ button {
 .dashboard-range-control {
   display: grid;
   grid-template-columns: repeat(6, minmax(0, 1fr));
-  width: 540px;
-  min-width: 540px;
-  height: 54px;
+  width: 500px;
+  min-width: 500px;
+  height: 40px;
   gap: 2px;
-  padding: 6px;
-  border-radius: 14px;
+  padding: 3px;
+  border-radius: 10px;
   background: var(--panel-soft);
   box-shadow: 0 1px 2px rgba(16, 24, 40, 0.02);
 }
 
 .dashboard-range-option {
   min-width: 0;
-  height: 40px;
-  padding: 0 18px !important;
+  height: 32px;
+  padding: 0 10px !important;
   color: #27364d;
-  font-size: 15px !important;
+  font-size: 12.5px !important;
   font-weight: 600;
 }
 
@@ -253,17 +255,17 @@ button {
 }
 
 .filter-trigger {
-  height: 54px !important;
-  min-width: 142px;
+  height: 40px !important;
+  min-width: 128px;
   justify-content: flex-start;
-  gap: 8px !important;
-  padding: 0 18px !important;
+  gap: 6px !important;
+  padding: 0 12px !important;
   border: 1px solid var(--border);
   border-radius: var(--control-radius) !important;
   background: rgba(255, 255, 255, 0.9) !important;
   color: var(--fg2) !important;
   box-shadow: 0 1px 2px rgba(16, 24, 40, 0.015);
-  font-size: 14px !important;
+  font-size: 12.5px !important;
 }
 
 .filter-trigger:hover,
@@ -289,15 +291,16 @@ button {
 }
 
 .filter-toggle {
-  height: 54px;
+  height: 40px;
+  min-width: 168px;
   flex: 0 0 auto;
-  gap: 9px;
-  padding: 0 18px;
+  gap: 8px;
+  padding: 0 12px;
   border: 1px solid var(--border);
   border-radius: var(--control-radius);
   background: rgba(255, 255, 255, 0.9);
   color: var(--fg2);
-  font-size: 14px;
+  font-size: 12.5px;
   box-shadow: 0 1px 2px rgba(16, 24, 40, 0.015);
 }
 
@@ -308,15 +311,15 @@ button {
 
 .filter-check {
   display: inline-flex;
-  width: 18px;
-  height: 18px;
+  width: 16px;
+  height: 16px;
   align-items: center;
   justify-content: center;
-  flex: 0 0 18px;
+  flex: 0 0 16px;
   border: 1px solid var(--border-strong);
   border-radius: 4px;
   color: #fff;
-  font-size: 13px;
+  font-size: 11px;
   font-weight: 800;
   line-height: 1;
   transition: background-color 0.15s ease, border-color 0.15s ease;
@@ -364,7 +367,7 @@ button {
 .kpi {
   position: relative;
   display: flex;
-  min-height: 175px;
+  min-height: 150px;
   overflow: hidden;
   background: var(--panel);
   border: 1px solid var(--border);
@@ -373,14 +376,7 @@ button {
 }
 
 .kpi::after {
-  content: "";
-  position: absolute;
-  right: 0;
-  bottom: 0;
-  left: 0;
-  height: 2px;
-  background: linear-gradient(90deg, transparent, var(--glow-strong), transparent);
-  opacity: 0.7;
+  display: none;
 }
 
 .kpi-cost {
@@ -390,8 +386,7 @@ button {
 }
 
 .kpi-cost::after {
-  background: linear-gradient(90deg, transparent, var(--green), transparent);
-  opacity: 0.42;
+  display: none;
 }
 
 .kpi-content {
@@ -399,41 +394,43 @@ button {
   width: 100%;
   flex-direction: column;
   gap: 0;
-  padding: 22px 24px 20px;
+  padding: 18px 18px 17px;
 }
 
 .kpi-header {
   display: flex;
-  align-items: center;
+  align-items: flex-start;
   justify-content: space-between;
-  gap: 12px;
+  gap: 8px;
 }
 
 .kpi-label {
   display: flex;
   min-width: 0;
-  align-items: center;
-  gap: 9px;
+  flex: 1 1 auto;
+  align-items: flex-start;
+  gap: 7px;
   color: var(--fg2);
-  font-size: 15px;
+  font-size: 14px;
   font-weight: 600;
+  line-height: 1.25;
 }
 
 .kpi-label-text {
   min-width: 0;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
+  overflow-wrap: anywhere;
+  line-height: 1.25;
+  white-space: normal;
 }
 
 .kpi-icon {
   display: inline-flex;
-  width: 34px;
-  height: 34px;
+  width: 28px;
+  height: 28px;
   align-items: center;
   justify-content: center;
-  flex: 0 0 34px;
-  border-radius: 50%;
+  flex: 0 0 28px;
+  border-radius: 8px;
   background: var(--accent-soft);
   color: #174e9b;
 }
@@ -464,15 +461,16 @@ button {
 .kpi-delta {
   display: inline-flex;
   align-items: center;
-  gap: 5px;
+  gap: 4px;
   flex: 0 0 auto;
-  font-size: 13px;
-  font-weight: 700;
+  padding-top: 2px;
+  font-size: 11.5px;
+  font-weight: 650;
   white-space: nowrap;
 }
 
 .kpi-delta > span {
-  font-size: 19px;
+  font-size: 14px;
   line-height: 1;
 }
 
@@ -490,21 +488,27 @@ button {
   display: flex;
   min-width: 0;
   align-items: baseline;
-  margin-top: 20px;
+  margin-top: 16px;
   color: var(--fg);
-  font-family: var(--font-mono);
+  font-family: var(--font-sans);
   font-size: 38px;
-  font-weight: 700;
-  line-height: 1.05;
-  letter-spacing: -0.035em;
+  font-weight: 600;
+  line-height: 1;
+  letter-spacing: -0.045em;
   font-variant-numeric: tabular-nums;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
 }
 
+.kpi-value-main {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
 .kpi-value:has(.kpi-value-suffix) {
-  font-size: 34px;
+  font-size: 33px;
   letter-spacing: -0.045em;
 }
 
@@ -516,20 +520,26 @@ button {
   color: var(--green);
 }
 
+.kpi-value-unit,
 .kpi-value-suffix {
   color: var(--fg3);
-  font-size: 0.78em;
-  font-weight: 700;
+  font-size: 0.56em;
+  font-weight: 600;
+  letter-spacing: -0.01em;
+}
+
+.kpi-value-suffix {
+  margin-left: 2px;
 }
 
 .kpi-sub {
   display: flex;
   min-height: 18px;
   align-items: center;
-  margin-top: 12px;
+  margin-top: 8px;
   color: var(--fg3);
   font-family: var(--font-sans);
-  font-size: 15px;
+  font-size: 13px;
   font-weight: 500;
 }
 
@@ -558,54 +568,53 @@ button {
 /* ── Section headers ── */
 .section-header {
   display: flex;
-  min-height: 27px;
+  min-height: 22px;
   align-items: flex-start;
   justify-content: space-between;
-  gap: 16px;
-  margin-bottom: 20px !important;
+  gap: 12px;
+  margin-bottom: 16px !important;
 }
 
 .section-heading {
   display: flex;
   min-width: 0;
   align-items: center;
-  gap: 12px;
+  gap: 9px;
 }
 
 .section-bar {
-  width: 5px;
-  height: 27px;
-  flex: 0 0 5px;
-  border-radius: 5px;
+  width: 3px;
+  height: 18px;
+  flex: 0 0 3px;
+  border-radius: 999px;
   background: var(--accent);
-  box-shadow: 0 0 12px var(--glow-strong);
 }
 
 .section-header h2,
 .section-heading h2 {
   margin: 0;
   color: var(--fg);
-  font-size: 20px;
-  font-weight: 750;
-  letter-spacing: -0.015em;
-  line-height: 1.25;
+  font-size: 16px;
+  font-weight: 650;
+  letter-spacing: -0.012em;
+  line-height: 1.35;
 }
 
 .section-stat {
   display: flex;
   min-width: 0;
   align-items: baseline;
-  gap: 6px;
-  padding-top: 4px;
+  gap: 5px;
+  padding-top: 2px;
 }
 
 .section-stat-value {
   color: var(--accent);
-  font-family: var(--font-mono);
-  font-size: 21px;
-  font-weight: 750;
+  font-family: var(--font-sans);
+  font-size: 14px;
+  font-weight: 650;
   line-height: 1;
-  letter-spacing: -0.035em;
+  letter-spacing: -0.02em;
   font-variant-numeric: tabular-nums;
 }
 
@@ -615,14 +624,14 @@ button {
 
 .section-stat-label {
   color: var(--fg3);
-  font-size: 13px;
+  font-size: 11px;
   font-weight: 500;
   white-space: nowrap;
 }
 
 /* ── Chart containers ── */
 .chart-card {
-  padding: 28px 30px 24px;
+  padding: 24px 26px 22px;
 }
 
 .chart-scroll {
@@ -638,21 +647,21 @@ button {
 }
 
 .trend-chart-container {
-  height: 320px;
+  height: 280px;
 }
 
 .composition-chart-container {
-  height: 300px;
+  height: 270px;
 }
 
 .chart-legend {
   display: flex;
   flex-wrap: wrap;
   align-items: center;
-  gap: 10px 24px;
+  gap: 8px 20px;
   margin: 8px 8px 0;
   color: var(--fg2);
-  font-size: 13px;
+  font-size: 12px;
   font-weight: 500;
 }
 
@@ -723,7 +732,7 @@ button {
 
 /* ── Interaction metrics ── */
 .interaction-card {
-  padding: 28px 34px 30px;
+  padding: 24px 26px 26px;
 }
 
 .interaction-card .section-header {
@@ -740,33 +749,33 @@ button {
 
 .interaction-total b {
   color: var(--accent);
-  font-family: var(--font-mono);
-  font-size: 32px;
-  font-weight: 800;
+  font-family: var(--font-sans);
+  font-size: 26px;
+  font-weight: 650;
   line-height: 1;
-  letter-spacing: -0.035em;
+  letter-spacing: -0.03em;
   font-variant-numeric: tabular-nums;
 }
 
 .interaction-total span {
-  font-size: 14px;
+  font-size: 12px;
   font-weight: 500;
 }
 
 .interaction-summary {
   display: grid;
   grid-template-columns: repeat(4, minmax(0, 1fr));
-  margin-top: 25px !important;
-  padding: 0 8px 30px;
+  margin-top: 20px !important;
+  padding: 0 0 24px;
   border-bottom: 1px solid var(--border);
 }
 
 .interaction-summary-stat {
   display: flex;
-  min-height: 74px;
+  min-height: 62px;
   flex-direction: column;
   justify-content: center;
-  padding: 0 42px;
+  padding: 0 24px;
   border-right: 1px solid var(--border);
 }
 
@@ -780,17 +789,17 @@ button {
 
 .summary-label {
   color: var(--fg2);
-  font-size: 14px;
+  font-size: 12px;
   font-weight: 600;
-  letter-spacing: 0.04em;
+  letter-spacing: 0.025em;
 }
 
 .interaction-summary-stat > div:last-child {
-  margin-top: 10px;
+  margin-top: 8px;
   color: var(--fg);
-  font-family: var(--font-mono);
-  font-size: 32px;
-  font-weight: 750;
+  font-family: var(--font-sans);
+  font-size: 26px;
+  font-weight: 650;
   line-height: 1;
   font-variant-numeric: tabular-nums;
 }
@@ -804,12 +813,13 @@ button {
 .interaction-rankings {
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));
-  margin-top: 27px !important;
+  column-gap: 0;
+  margin-top: 24px !important;
 }
 
 .interaction-ranking-col {
   min-width: 0;
-  padding: 0 42px;
+  padding: 0 24px;
   border-right: 1px solid var(--border);
 }
 
@@ -825,17 +835,17 @@ button {
 .interaction-list-title {
   display: flex;
   align-items: center;
-  gap: 12px;
+  gap: 9px;
   color: var(--fg) !important;
-  font-size: 18px !important;
-  font-weight: 750 !important;
+  font-size: 14px !important;
+  font-weight: 650 !important;
 }
 
 .interaction-list-title::before {
-  width: 5px;
-  height: 27px;
-  flex: 0 0 5px;
-  border-radius: 5px;
+  width: 3px;
+  height: 18px;
+  flex: 0 0 3px;
+  border-radius: 999px;
   background: var(--interaction-accent);
   content: "";
 }
@@ -872,23 +882,23 @@ button {
 
 /* ── Activity heatmap ── */
 .heatmap-card {
-  min-height: 355px;
-  padding: 30px;
+  min-height: 0;
+  padding: 24px 26px 22px;
 }
 
 .heatmap-layout {
   display: grid;
-  grid-template-columns: 190px minmax(0, 1fr);
+  grid-template-columns: 174px minmax(0, 1fr);
   align-items: center;
-  gap: 28px;
+  gap: 24px;
   padding-top: 0;
 }
 
 .heatmap-streaks {
   align-self: stretch;
   justify-content: center;
-  gap: 34px !important;
-  padding-right: 28px !important;
+  gap: 26px !important;
+  padding-right: 24px !important;
 }
 
 .heatmap-streaks > div {
@@ -898,19 +908,19 @@ button {
 
 .heatmap-streaks > div > div:first-child {
   color: var(--fg) !important;
-  font-size: 40px !important;
+  font-size: 32px !important;
   line-height: 0.95 !important;
 }
 
 .heatmap-streaks > div > div:first-child span {
   color: var(--fg3) !important;
-  font-size: 19px !important;
+  font-size: 14px !important;
 }
 
 .heatmap-streaks > div > div:last-child {
-  margin-top: 14px !important;
+  margin-top: 8px !important;
   color: var(--fg2) !important;
-  font-size: 14px !important;
+  font-size: 12px !important;
 }
 
 .heatmap-main {
@@ -919,19 +929,19 @@ button {
 
 .heatmap-summary {
   position: absolute;
-  top: -47px;
+  top: -39px;
   right: 0;
   justify-content: flex-end;
   margin-bottom: 0 !important;
-  gap: 5px 24px !important;
+  gap: 5px 16px !important;
   color: var(--fg2) !important;
-  font-size: 13px !important;
+  font-size: 11px !important;
   z-index: 1;
 }
 
 .heatmap-summary .font-mono {
   color: var(--accent) !important;
-  font-size: 15px;
+  font-size: 13px;
 }
 
 .heatmap-tooltip {
@@ -943,14 +953,14 @@ button {
   display: grid;
   grid-template-columns: minmax(0, 1.55fr) minmax(0, 1fr);
   align-items: stretch;
-  gap: 18px !important;
+  gap: 16px !important;
 }
 
 .flow-panel {
   display: flex;
   min-width: 0;
   flex-direction: column;
-  padding: 24px;
+  padding: 22px 24px;
 }
 
 /* Let the Sankey occupy any extra height introduced by the shared card row. */
@@ -963,7 +973,7 @@ button {
   display: flex;
   min-width: 0;
   flex-direction: column;
-  gap: 18px;
+  gap: 16px;
 }
 
 .share-panel {
@@ -971,7 +981,7 @@ button {
   min-width: 0;
   flex: 1 1 0;
   flex-direction: column;
-  padding: 20px 24px;
+  padding: 18px 22px;
 }
 
 .share-section {
@@ -984,22 +994,22 @@ button {
 .share-section-header {
   display: flex;
   align-items: center;
-  gap: 12px;
-  margin-bottom: 14px;
+  gap: 9px;
+  margin-bottom: 10px;
 }
 
 .share-section-header .section-bar {
-  width: 4px;
-  height: 24px;
-  flex-basis: 4px;
+  width: 3px;
+  height: 18px;
+  flex-basis: 3px;
 }
 
 .share-section-header h3 {
   margin: 0;
   color: var(--fg);
-  font-size: 18px;
-  font-weight: 750;
-  letter-spacing: -0.015em;
+  font-size: 16px;
+  font-weight: 650;
+  letter-spacing: -0.012em;
 }
 
 .share-section-body {
@@ -1093,8 +1103,8 @@ button {
 
 /* ── Footer ── */
 .dashboard-footer {
-  margin-top: 48px !important;
-  padding-top: 20px !important;
+  margin-top: 40px !important;
+  padding-top: 18px !important;
   padding-bottom: 24px !important;
 }
 
@@ -1211,11 +1221,11 @@ button {
 /* ── Responsive layout ── */
 @media (min-width: 1251px) {
   .trend-chart-container {
-    height: 350px;
+    height: 300px;
   }
 
   .composition-chart-container {
-    height: 320px;
+    height: 290px;
   }
 }
 
@@ -1334,7 +1344,7 @@ button {
   }
 
   .section-stat-value {
-    font-size: 19px;
+    font-size: 16px;
   }
 
   .interaction-header .section-header {
@@ -1413,11 +1423,11 @@ button {
   }
 
   .kpi {
-    min-height: 156px;
+    min-height: 144px;
   }
 
   .kpi-content {
-    padding: 17px 16px 16px;
+    padding: 15px 14px 14px;
   }
 
   .kpi-label {
@@ -1475,7 +1485,7 @@ button {
 
   .section-header h2,
   .section-heading h2 {
-    font-size: 18px;
+    font-size: 16px;
   }
 
   .section-stat {
@@ -1483,7 +1493,7 @@ button {
   }
 
   .section-stat-value {
-    font-size: 17px;
+    font-size: 15px;
   }
 
   .section-stat-label {
