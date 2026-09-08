@@ -20,7 +20,7 @@ export class ChartBoundary extends React.Component<
 
 export function EmptyState({ label }: { label: string }) {
   return (
-    <div className="flex min-h-[200px] items-center justify-center text-[13px]" style={{ color: 'var(--fg3)' }}>
+    <div className="dashboard-empty-state flex min-h-[200px] items-center justify-center text-[13px]" style={{ color: 'var(--fg3)' }}>
       {label}
     </div>
   );

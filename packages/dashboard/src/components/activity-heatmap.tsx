@@ -9,17 +9,17 @@ import type { Locale } from '../i18n';
 
 // ── 常量 ──
 
-const MIN_CELL = 12;
-const MAX_CELL = 20;
-const DEFAULT_CELL = 14;
-const GAP = 4;
+const MIN_CELL = 10;
+const MAX_CELL = 16;
+const DEFAULT_CELL = 12;
+const GAP = 3;
 const DAYS = 7;
-const DAY_LABEL_W = 46;
+const DAY_LABEL_W = 40;
 const MONTH_LABELS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
 const GAMMA = 0.7;
-const MONTH_ROW = 24;
-const LEGEND_ROW = 36;
-// Less(~22px) gap 5格 gap More(~26px)；宽度随格子尺寸同步变化
+const MONTH_ROW = 20;
+const LEGEND_ROW = 30;
+// Less(~18px) gap 5格 gap More(~22px)；宽度随格子尺寸同步变化
 
 // ── 颜色配置 ──
 // CSS variables auto-switch between light/dark, so a single level array suffices.
@@ -158,7 +158,7 @@ export function ActivityHeatmap({ days, metricLabel = 'tokens', locale = 'en', c
   const legendX = Math.max(DAY_LABEL_W, svgW - legendW);
   let lastMonthLabelX = -Infinity;
   const monthLabelMarks = monthMarks.map((mark) => {
-    const x = Math.max(mark.weekIdx * step, lastMonthLabelX + 32);
+    const x = Math.max(mark.weekIdx * step, lastMonthLabelX + 28);
     lastMonthLabelX = x;
     return { ...mark, x };
   });
@@ -169,8 +169,8 @@ export function ActivityHeatmap({ days, metricLabel = 'tokens', locale = 'en', c
   const totalLabel = locale === 'zh'
     ? `${metricLabel === 'tokens' ? 'Token' : '会话'}总计`
     : `${metricLabel} total`;
-  const tooltipWidth = 140;
-  const tooltipHeight = 64;
+  const tooltipWidth = 132;
+  const tooltipHeight = 60;
   const tooltipMaxX = Math.max(4, (rootRef.current?.clientWidth ?? containerWidth) - tooltipWidth - 4);
   const tooltipMaxY = Math.max(4, (rootRef.current?.clientHeight ?? totalH) - tooltipHeight - 4);
 
@@ -239,9 +239,9 @@ export function ActivityHeatmap({ days, metricLabel = 'tokens', locale = 'en', c
               {[1, 3, 5].map((dayIdx) => (
                 <text
                   key={dayIdx}
-                  x={DAY_LABEL_W - 6}
+                  x={DAY_LABEL_W - 5}
                   y={MONTH_ROW + dayIdx * step + cellSize / 2}
-                  fontSize={11}
+                  fontSize={10}
                   fill={LABEL_FILL}
                   fontFamily="system-ui, sans-serif"
                   textAnchor="end"
@@ -257,8 +257,8 @@ export function ActivityHeatmap({ days, metricLabel = 'tokens', locale = 'en', c
                   <text
                     key={label + weekIdx}
                     x={x}
-                    y={MONTH_ROW - 4}
-                    fontSize={11}
+                    y={MONTH_ROW - 3}
+                    fontSize={10}
                     fill={LABEL_FILL}
                     fontFamily="system-ui, sans-serif"
                   >
@@ -311,11 +311,11 @@ export function ActivityHeatmap({ days, metricLabel = 'tokens', locale = 'en', c
 
               {/* 图例：右下角，不抢热力图主体焦点 */}
               <g transform={`translate(${legendX}, ${totalH - LEGEND_ROW + 10})`}>
-                <text x={0} y={10} fontSize={11} fill={LABEL_FILL} fontFamily="system-ui, sans-serif">{locale === 'zh' ? '少' : 'Less'}</text>
+                <text x={0} y={9} fontSize={10} fill={LABEL_FILL} fontFamily="system-ui, sans-serif">{locale === 'zh' ? '少' : 'Less'}</text>
                 {[0, 1, 2, 3, 4].map((lvl) => (
                   <rect
                     key={lvl}
-                    x={24 + lvl * step}
+                    x={22 + lvl * step}
                     y={0}
                     width={cellSize}
                     height={cellSize}
@@ -325,7 +325,7 @@ export function ActivityHeatmap({ days, metricLabel = 'tokens', locale = 'en', c
                     strokeWidth={1}
                   />
                 ))}
-                <text x={24 + 5 * step} y={10} fontSize={11} fill={LABEL_FILL} fontFamily="system-ui, sans-serif">{locale === 'zh' ? '多' : 'More'}</text>
+                <text x={22 + 5 * step} y={9} fontSize={10} fill={LABEL_FILL} fontFamily="system-ui, sans-serif">{locale === 'zh' ? '多' : 'More'}</text>
               </g>
             </svg>
           )}
