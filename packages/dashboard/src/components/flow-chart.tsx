@@ -67,13 +67,13 @@ export function FlowChart({ data }: { data?: SankeyGraph }) {
   const sankeyData = transformSankey(data);
   if (!sankeyData) return <EmptyState label="No flow data" />;
   const nodeCount = sankeyData.nodes.length;
-  const height = Math.max(360, nodeCount * 40);
+  const height = Math.max(300, nodeCount * 32);
   return (
     <div style={{ height }} className="w-full">
       <ResponsiveContainer width="100%" height="100%">
         <Sankey
           data={sankeyData}
-          nodePadding={28}
+          nodePadding={22}
           nodeWidth={8}
           margin={{ left: 0, right: 0, top: 4, bottom: 4 }}
           link={(props: DashboardSankeyLink & {
