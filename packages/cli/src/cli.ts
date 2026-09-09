@@ -18,7 +18,7 @@ import {
   upsertTarget,
   writeConfig,
 } from './config.js';
-import { defaultLookbackDays, enrollDevice, fetchHealth, uploadDailyUsage } from './api.js';
+import { defaultLookbackDays, enrollDevice, fetchHealth, uploadDailyUsage, uploadMemory } from './api.js';
 import { disableSchedule, enableSchedule, getScheduleStatus, parseInterval } from './schedule.js';
 import { runDoctor } from './doctor.js';
 import { getVersion } from './version.js';
@@ -29,6 +29,7 @@ import { getPricingStatus, resolvePricingCatalog } from './pricing.js';
 import { syncTraeCnUsage } from './trae-sync.js';
 import { syncTraeIntlUsage } from './trae-intl-sync.js';
 import { batchIngestDays } from './sync-batches.js';
+import { processMemoryDates, runMemoryCommand } from './memory-command.js';
 
 const argv = process.argv.slice(2);
 const command = argv[0];
@@ -53,6 +54,10 @@ try {
     const parsed = parseArgs(argv.slice(1));
     if (parsed.flags.help) return helpForSubcommand('activity');
     await runActivity(parsed.flags, parsed.positionals);
+  } else if (command === 'memory') {
+    const parsed = parseArgs(argv.slice(1));
+    if (parsed.flags.help) return helpForSubcommand('memory');
+    await runMemoryCommand(parsed.flags, parsed.positionals, await readConfig());
   } else if (command === 'health') {
     const parsed = parseArgs(argv.slice(1));
     if (parsed.flags.help) return helpForSubcommand('health');
@@ -433,13 +438,17 @@ async function runSync(flags: Record<string, string | boolean>, positionals: str
   for (const warning of pricing.info.warnings ?? []) console.warn(`警告: ${warning}`);
   console.log(`扫描 ${targetDates.length} 天 (${targetDates[0]} ~ ${targetDates[targetDates.length - 1]}) ...`);
 
-  const [results, activityReport] = await Promise.all([
+  const [results, activityReport, memoryProcess] = await Promise.all([
     scanDates(targetDates, {
       projectAliases: config.projectAliases,
       opencodeDbPaths: config.scanner?.opencodeDbPaths,
       pricingCatalog: pricing.catalog,
     }),
     buildActivityReport('all', { dates: targetDates, projectAliases: config.projectAliases }),
+    processMemoryDates(targetDates, config).catch((error) => {
+      console.warn(`Memory pipeline skipped: ${error instanceof Error ? error.message : String(error)}`);
+      return undefined;
+    }),
   ]);
   const visibility = config.privacy?.projectVisibility;
   const resultsByDate = new Map(results.map(result => [result.usageDate, result]));
@@ -452,12 +461,18 @@ async function runSync(flags: Record<string, string | boolean>, positionals: str
     })
     .filter(day => day.breakdowns.length > 0 || (day.activity?.items.length ?? 0) > 0);
 
-  if (allDays.length === 0) {
+  const memoryPayload = memoryProcess?.cloudPayload;
+  if (allDays.length === 0 && !memoryPayload) {
     console.log('没有可上传的数据。');
     return;
   }
 
-  console.log(`发现 ${allDays.length} 天有数据，开始上传 ...`);
+  if (allDays.length > 0) {
+    console.log(`发现 ${allDays.length} 天有数据，开始上传 ...`);
+  }
+  if (memoryPayload && config.memory?.mode === 'cloud') {
+    console.log('Memory 已启用 cloud mode，将上传结构化 Memory（不上传原始 conversation）。');
+  }
 
   // 逐 target 上传
   const uploadResults: Array<{ target: string; daysProcessed: number; costSummary: Record<string, { estimatedCostUsd: number; costStatus: string }> }> = [];
@@ -488,6 +503,14 @@ async function runSync(flags: Record<string, string | boolean>, positionals: str
       );
       totalProcessed += response.daysProcessed;
       Object.assign(allCostSummary, response.costSummary);
+    }
+
+    if (memoryPayload && config.memory?.mode === 'cloud') {
+      await uploadMemory(
+        target.apiBaseUrl,
+        { siteId: target.siteId, deviceId, deviceAlias: config.deviceAlias, deviceToken: target.deviceToken },
+        memoryPayload,
+      );
     }
 
     // 更新该 target 的 lastSuccessfulUploadAt
@@ -957,6 +980,7 @@ function printHelp(zh = false) {
     ['report [--tool 工具] [--range 7d|1m|3m|6m|all] [--detail] [--json]', '本地用量报告'],
     ['audit-models [--tool 工具] [--range ...] [--json]', '扫描模型别名并输出 Remaining Unknown Aliases'],
     ['activity [--today] [--range 7d|1m|3m|6m|all] [--detail] [--json]', '本地交互指标'],
+    ['memory scan|list|projects|show <project>', '项目工作记忆（默认本地）'],
     ['sync [--today|--yesterday] [--range 7d|1m|3m|6m]',             '上传用量到服务端'],
     ['trae sync [--edition cn|intl|all] [--since 180]',           '同步 Trae CN/国际版用量'],
     ['scan/report/sync --from YYYY-MM-DD [--to YYYY-MM-DD]',      '指定日期范围（--start/--end 同义）'],
@@ -973,6 +997,7 @@ function printHelp(zh = false) {
     ['report [--tool TOOL] [--range 7d|1m|3m|6m|all] [--detail] [--json]', 'Local usage report'],
     ['audit-models [--tool TOOL] [--range ...] [--json]', 'Scan aliases and report Remaining Unknown Aliases'],
     ['activity [--today] [--range 7d|1m|3m|6m|all] [--detail] [--json]', 'Local interaction metrics'],
+    ['memory scan|list|projects|show <project>', 'Project work memory (local by default)'],
     ['sync [--today|--yesterday] [--range 7d|1m|3m|6m]',             'Upload usage to server'],
     ['trae sync [--edition cn|intl|all] [--since 180]',           'Sync Trae CN/International usage'],
     ['scan/report/sync --from YYYY-MM-DD [--to YYYY-MM-DD]',      'Date range (--start/--end aliases)'],
@@ -1004,6 +1029,7 @@ function printUsageHint(zh = false) {
     ['report [--tool 工具] [--range 7d|1m|3m|6m|all]', '本地用量报告'],
     ['audit-models [--tool 工具] [--range ...]', '扫描模型别名'],
     ['activity [--range 7d|1m|3m|6m|all]',       '本地交互指标'],
+    ['memory scan|list|projects|show <project>', '项目工作记忆（默认本地）'],
     ['sync [--today|--yesterday] [--range 7d|1m|3m|6m]', '上传用量到服务端'],
     ['trae sync [--edition cn|intl|all]',        '同步 Trae CN/国际版用量'],
     ['project [list|alias]',                  '项目管理与别名设置'],
@@ -1016,6 +1042,7 @@ function printUsageHint(zh = false) {
     ['report [--tool TOOL] [--range 7d|1m|3m|6m|all]', 'Local usage report'],
     ['audit-models [--tool TOOL] [--range ...]', 'Scan model aliases'],
     ['activity [--range 7d|1m|3m|6m|all]',       'Local interaction metrics'],
+    ['memory scan|list|projects|show <project>', 'Project work memory (local by default)'],
     ['sync [--today|--yesterday] [--range 7d|1m|3m|6m]', 'Upload usage to server'],
     ['trae sync [--edition cn|intl|all]',        'Sync Trae CN/International usage'],
     ['project [list|alias]',                  'Project management & aliases'],

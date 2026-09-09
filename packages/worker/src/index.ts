@@ -5,6 +5,7 @@ import { handleOverview } from './routes/overview.js';
 import { handleBreakdowns } from './routes/breakdowns.js';
 import { handlePricingApi } from './routes/pricing-api.js';
 import { handleTextTokens } from './routes/text-metrics.js';
+import { handleMemoryIngest, handleMemoryOverview } from './routes/memory.js';
 import { corsHeaders, jsonError, withCacheHeaders, withNoStoreHeaders } from './utils/response.js';
 import type { Env } from './types.js';
 
@@ -54,6 +55,9 @@ export default {
       if (pathname === '/api/v1/public/text/tokens') {
         return headAware(await handleTextTokens(url, env), isHead);
       }
+      if (pathname === '/api/v1/public/memory') {
+        return headAware(await handleMemoryOverview(url, env), isHead);
+      }
 
       if (pathname.startsWith('/api/')) {
         return headAware(withNoStoreHeaders(jsonError(404, 'NOT_FOUND', 'API route not found')), isHead);
@@ -75,6 +79,9 @@ async function handleMutableRequest(request: Request, env: Env, url: URL): Promi
     }
     if (pathname === '/api/v1/ingest/daily' && request.method === 'POST') {
       return handleIngest(request, env);
+    }
+    if (pathname === '/api/v1/memory/ingest' && request.method === 'POST') {
+      return handleMemoryIngest(request, env);
     }
     if (pathname.startsWith('/api/')) {
       return jsonError(404, 'NOT_FOUND', 'API route not found');
