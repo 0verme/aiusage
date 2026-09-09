@@ -4,7 +4,12 @@ import { promisify } from 'node:util';
 import type { AIUsageConfig } from './config.js';
 import { getLocalTimezone } from './config.js';
 import { getVersion } from './version.js';
-import type { IngestDay } from '@aiusage/shared';
+import type {
+  IngestDay,
+  MemoryIngestPayload,
+  MemoryIngestResponse,
+  MemoryIngestRequest,
+} from '@aiusage/shared';
 
 const SCHEMA_VERSION = '1.0';
 const DEFAULT_LOOKBACK_DAYS = 7;
@@ -92,6 +97,34 @@ export async function uploadDailyUsage(
       },
       days,
     }),
+  });
+}
+
+export async function uploadMemory(
+  apiBaseUrl: string,
+  config: Pick<AIUsageConfig, 'siteId' | 'deviceId' | 'deviceAlias' | 'deviceToken'>,
+  memory: MemoryIngestPayload,
+): Promise<{ ok: boolean } & MemoryIngestResponse> {
+  const payload: MemoryIngestRequest = {
+    siteId: config.siteId ?? '',
+    schemaVersion: 'memory-v1',
+    generatedAt: new Date().toISOString(),
+    device: {
+      deviceId: config.deviceId ?? '',
+      deviceAlias: config.deviceAlias,
+      hostname: hostname(),
+      timezone: getLocalTimezone(),
+      appVersion: getVersion(),
+    },
+    memory,
+  };
+  return requestJson(`${apiBaseUrl}/api/v1/memory/ingest`, {
+    method: 'POST',
+    headers: {
+      Authorization: `Bearer ${config.deviceToken}`,
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify(payload),
   });
 }
 

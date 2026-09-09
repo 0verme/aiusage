@@ -27,6 +27,7 @@
   },
   "dependencies": {
     "@aiusage/dashboard": "workspace:*",
+    "@aiusage/memory-core": "workspace:*",
     "@aiusage/shared": "workspace:*"
   },
   "devDependencies": {
