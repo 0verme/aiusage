@@ -1,15 +1,5 @@
 import { useEffect, useMemo, useRef, useState, useCallback } from 'react';
 import {
-  Activity,
-  ArrowDownLeft,
-  ArrowUpRight,
-  CalendarDays,
-  Database,
-  DollarSign,
-  Gauge,
-  HardDrive,
-  MessageSquare,
-  ReceiptText,
   RotateCw,
   Sun,
   Moon,
@@ -396,7 +386,7 @@ export function App() {
   }, [overview, kpis]);
 
   return (
-    <main className="dashboard-shell mx-auto w-full max-w-[1548px] px-4 pb-16 sm:px-6 lg:px-8">
+    <main className="dashboard-shell mx-auto w-full max-w-[1200px] px-4 pb-16 sm:px-6 lg:px-8">
 
       {/* ── Header ── */}
       <header className="dashboard-header fade-up relative z-20 py-6 sm:py-8">
@@ -511,38 +501,36 @@ export function App() {
             className="dashboard-kpi-grid fade-up grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-5"
             style={{ animationDelay: '50ms' }}
           >
-            <div className="kpi kpi-cost">
+            <div className="kpi kpi-cost kpi-wide">
               <CostKpiCard
                 label={t.estimatedCost}
                 value={unavailable ? t.unavailable : formatUsd(overview?.totalCostUsd ?? 0)}
                 sub={rangeSub}
                 delta={unavailable ? undefined : kpiDeltas.totalCostUsd}
-                icon={DollarSign}
                 help
               />
             </div>
             <div className="kpi">
-              <KpiCard icon={Database} label={t.totalTokens} value={unavailable ? t.unavailable : formatCompact(kpis?.totalTokens ?? 0, locale)} sub={locale === 'zh' ? '累计消耗' : 'Cumulative'} delta={unavailable ? undefined : kpiDeltas.totalTokens} />
+              <KpiCard label={t.totalTokens} value={unavailable ? t.unavailable : formatCompact(kpis?.totalTokens ?? 0, locale)} sub={locale === 'zh' ? '累计消耗' : 'Cumulative'} delta={unavailable ? undefined : kpiDeltas.totalTokens} />
             </div>
             <div className="kpi">
-              <KpiCard icon={ArrowDownLeft} label={t.inputTokens} value={unavailable ? t.unavailable : formatCompact(kpis?.inputTokens ?? 0, locale)} sub="Prompt" delta={unavailable ? undefined : kpiDeltas.inputTokens} />
+              <KpiCard label={t.inputTokens} value={unavailable ? t.unavailable : formatCompact(kpis?.inputTokens ?? 0, locale)} sub="Prompt" delta={unavailable ? undefined : kpiDeltas.inputTokens} />
             </div>
             <div className="kpi">
-              <KpiCard icon={ArrowUpRight} label={t.outputTokens} value={unavailable ? t.unavailable : formatCompact(kpis?.outputTokens ?? 0, locale)} sub="Completion" delta={unavailable ? undefined : kpiDeltas.outputTokens} />
+              <KpiCard label={t.outputTokens} value={unavailable ? t.unavailable : formatCompact(kpis?.outputTokens ?? 0, locale)} sub="Completion" delta={unavailable ? undefined : kpiDeltas.outputTokens} />
             </div>
             <div className="kpi">
-              <KpiCard icon={HardDrive} label={t.cachedTokens} value={unavailable ? t.unavailable : formatCompact(kpis?.cachedTokens ?? 0, locale)} sub="Cached" delta={unavailable ? undefined : kpiDeltas.cachedTokens} />
+              <KpiCard label={t.cachedTokens} value={unavailable ? t.unavailable : formatCompact(kpis?.cachedTokens ?? 0, locale)} sub="Cached" delta={unavailable ? undefined : kpiDeltas.cachedTokens} />
             </div>
 
           {/* ── KPI metrics continued ── */}
-            <div className="kpi">
+            <div className="kpi kpi-wide">
               <KpiCard
                 label={t.activeDays}
                 value={String(overview?.activeDays ?? 0)}
                 suffix={` / ${overview?.totalDays ?? 0}`}
                 sub={locale === 'zh' ? '区间内' : 'In range'}
                 delta={kpiDeltas.activeDays}
-                icon={Activity}
                 help
               />
             </div>
@@ -553,17 +541,16 @@ export function App() {
                 suffix={(overview?.totalSessions ?? 0) > 0 && overview!.totalSessions !== overview!.totalEvents ? ` / ${formatNumber(overview!.totalEvents)}` : undefined}
                 sub={locale === 'zh' ? '对话 / 消息' : 'Sessions / Msgs'}
                 delta={kpiDeltas.sessions}
-                icon={MessageSquare}
               />
             </div>
             <div className="kpi">
-              <KpiCard icon={ReceiptText} label={t.costPerSession} value={unavailable ? t.unavailable : formatUsd(kpis?.costPerSession ?? 0)} sub={locale === 'zh' ? '每会话' : 'Per session'} delta={unavailable ? undefined : kpiDeltas.costPerSession} />
+              <KpiCard label={t.costPerSession} value={unavailable ? t.unavailable : formatUsd(kpis?.costPerSession ?? 0)} sub={locale === 'zh' ? '每会话' : 'Per session'} delta={unavailable ? undefined : kpiDeltas.costPerSession} />
             </div>
             <div className="kpi">
-              <KpiCard icon={CalendarDays} label={t.avgDailyCost} value={unavailable ? t.unavailable : formatUsd(overview?.averageDailyCostUsd ?? 0)} sub={locale === 'zh' ? '平均' : 'Average'} delta={unavailable ? undefined : kpiDeltas.averageDailyCostUsd} />
+              <KpiCard label={t.avgDailyCost} value={unavailable ? t.unavailable : formatUsd(overview?.averageDailyCostUsd ?? 0)} sub={locale === 'zh' ? '平均' : 'Average'} delta={unavailable ? undefined : kpiDeltas.averageDailyCostUsd} />
             </div>
             <div className="kpi">
-              <KpiCard icon={Gauge} label={t.cacheHitRate} value={unavailable ? t.unavailable : formatPercent(kpis?.cacheHitRate ?? 0)} sub={locale === 'zh' ? '高效复用' : 'Reuse'} delta={unavailable ? undefined : kpiDeltas.cacheHitRate} />
+              <KpiCard label={t.cacheHitRate} value={unavailable ? t.unavailable : formatPercent(kpis?.cacheHitRate ?? 0)} sub={locale === 'zh' ? '高效复用' : 'Reuse'} delta={unavailable ? undefined : kpiDeltas.cacheHitRate} />
             </div>
           </div>
 

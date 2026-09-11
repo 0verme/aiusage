@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import type { ReactNode } from 'react';
-import { Activity, ArrowRightLeft } from 'lucide-react';
+import { ArrowRightLeft } from 'lucide-react';
 import type { LucideIcon } from 'lucide-react';
 import { toggleCurrency, useCurrencyStore } from '../hooks/use-cny-rate';
 
@@ -27,12 +27,9 @@ function Delta({ value, cost = false }: { value?: string; cost?: boolean }) {
   );
 }
 
-function KpiLabel({ label, icon: Icon = Activity, highlight, help }: Pick<KpiCardProps, 'label' | 'icon' | 'highlight' | 'help'>) {
+function KpiLabel({ label, help }: Pick<KpiCardProps, 'label' | 'help'>) {
   return (
     <div className="kpi-label">
-      <span className={`kpi-icon${highlight ? ' kpi-icon-cost' : ''}`} aria-hidden="true">
-        <Icon className="h-4 w-4" strokeWidth={1.9} />
-      </span>
       <span className="kpi-label-text">{label}</span>
       {help && <span className="kpi-help" title={label} aria-label={`${label} info`}>?</span>}
     </div>
@@ -50,7 +47,7 @@ function KpiValue({
   highlight?: boolean;
   trailing?: ReactNode;
 }) {
-  const unitMatch = value.match(/^(.*?)(\s+(?:亿|万)|[KMB])$/u);
+  const unitMatch = value.match(/^(.*?)(?:\s+)?(亿|万|[KMB])$/u);
   const mainValue = unitMatch?.[1] ?? value;
   const unit = unitMatch?.[2];
 
@@ -58,7 +55,7 @@ function KpiValue({
     <div className={`kpi-value${highlight ? ' kpi-value-cost' : ''}`}>
       <span className="kpi-value-main">{mainValue}</span>
       {unit && <span className="kpi-value-unit">{unit}</span>}
-      {suffix && <span className="kpi-value-suffix">{suffix}</span>}
+      {suffix && <span className="kpi-value-suffix">{suffix.trim()}</span>}
       {trailing}
     </div>
   );
@@ -71,18 +68,19 @@ export function KpiCard({
   suffix,
   highlight = false,
   delta,
-  icon,
   help = false,
 }: KpiCardProps) {
   return (
     <div className="kpi-content">
       <div className="kpi-header">
-        <KpiLabel label={label} icon={icon} highlight={highlight} help={help} />
-        <Delta value={delta} />
+        <KpiLabel label={label} help={help} />
       </div>
       <KpiValue value={value} suffix={suffix} highlight={highlight} />
-      <div className="kpi-sub">
-        <span>{sub}</span>
+      <div className="kpi-footer">
+        <div className="kpi-sub">
+          <span>{sub}</span>
+        </div>
+        <Delta value={delta} />
       </div>
     </div>
   );
@@ -93,7 +91,6 @@ export function CostKpiCard({
   value,
   sub,
   delta,
-  icon,
   help = false,
 }: {
   label: string;
@@ -113,8 +110,7 @@ export function CostKpiCard({
       onMouseLeave={() => setHovered(false)}
     >
       <div className="kpi-header">
-        <KpiLabel label={label} icon={icon} highlight help={help} />
-        <Delta value={delta} cost />
+        <KpiLabel label={label} help={help} />
       </div>
       <KpiValue
         value={value}
@@ -130,8 +126,11 @@ export function CostKpiCard({
           </button>
         )}
       />
-      <div className="kpi-sub">
-        <span>{sub}</span>
+      <div className="kpi-footer">
+        <div className="kpi-sub">
+          <span>{sub}</span>
+        </div>
+        <Delta value={delta} cost />
       </div>
     </div>
   );
