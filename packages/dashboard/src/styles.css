@@ -466,7 +466,7 @@ button {
 .kpi {
   position: relative;
   display: flex;
-  min-height: 126px;
+  min-height: 112px;
   overflow: hidden;
   background: var(--panel);
   border: 1px solid var(--border);
@@ -492,8 +492,9 @@ button {
   display: flex;
   width: 100%;
   flex-direction: column;
-  gap: 0;
-  padding: 16px 16px 15px;
+  row-gap: 0;
+  justify-content: flex-start;
+  padding: 12px 14px 10px;
 }
 
 .kpi-header {
@@ -594,7 +595,7 @@ button {
   display: flex;
   min-width: 0;
   align-items: baseline;
-  margin-top: 12px;
+  margin-top: 8px;
   color: var(--fg);
   font-family: var(--font-sans);
   font-size: var(--dashboard-font-kpi);
@@ -642,7 +643,7 @@ button {
   display: flex;
   min-height: 16px;
   align-items: center;
-  margin-top: 6px;
+  margin-top: 4px;
   color: var(--fg3);
   font-family: var(--font-sans);
   font-size: var(--dashboard-font-body);
@@ -1552,11 +1553,11 @@ button {
   }
 
   .kpi {
-    min-height: 136px;
+    min-height: 104px;
   }
 
   .kpi-content {
-    padding: 15px 14px 14px;
+    padding: 10px 11px 8px;
   }
 
   .kpi-label {
@@ -1571,7 +1572,7 @@ button {
   }
 
   .kpi-value {
-    margin-top: 14px;
+    margin-top: 7px;
     font-size: 27px;
   }
 
@@ -1581,7 +1582,7 @@ button {
   }
 
   .kpi-sub {
-    margin-top: 8px;
+    margin-top: 3px;
     font-size: 12px;
   }
 
