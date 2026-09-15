@@ -35,6 +35,7 @@
   // - ENROLL_TOKEN
   // - DEVICE_TOKEN_SECRET
   // - PROJECT_NAME_SALT
+  // Set MEMORY_PUBLIC = "true" only when structured Memory may be read by the public Dashboard.
   "vars": {
     "MAX_DEVICES": "10",
     "PUBLIC_PROJECT_VISIBILITY": "masked",

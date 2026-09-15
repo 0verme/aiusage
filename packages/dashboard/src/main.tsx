@@ -5,6 +5,7 @@ import { EmbedApp } from './embed/embed-app';
 import { Layout } from './components/layout';
 import { PricingPage } from './pages/pricing-page';
 import { EmbedDocsPage } from './pages/embed-docs-page';
+import { MemoryPage } from './pages/memory-page';
 import './styles.css';
 
 if ('scrollRestoration' in history) {
@@ -19,6 +20,7 @@ function Page() {
   if (isEmbed) return <EmbedApp />;
   if (path === '/pricing') return <Layout><PricingPage /></Layout>;
   if (path === '/embed/docs') return <Layout><EmbedDocsPage /></Layout>;
+  if (path === '/memory') return <Layout><MemoryPage /></Layout>;
   return <App />;
 }
 

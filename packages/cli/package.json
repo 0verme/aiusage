@@ -38,6 +38,7 @@
     "node": ">=18"
   },
   "dependencies": {
+    "@aiusage/memory-core": "workspace:*",
     "ws": "^8.18.0"
   },
   "scripts": {

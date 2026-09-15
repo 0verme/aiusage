@@ -25,6 +25,10 @@ export interface AIUsageConfig {
   privacy?: {
     projectVisibility?: 'hidden' | 'masked' | 'plain';
   };
+  /** Structured Memory is local-only unless explicitly switched to cloud. */
+  memory?: {
+    mode?: 'local-only' | 'cloud';
+  };
   scanner?: {
     /** Extra OpenCode databases outside XDG_DATA_HOME/opencode. */
     opencodeDbPaths?: string[];
@@ -70,6 +74,7 @@ function migrateConfig(config: AIUsageConfig): AIUsageConfig {
     lookbackDays: config.lookbackDays,
     projectAliases: config.projectAliases,
     privacy: config.privacy,
+    memory: config.memory,
     scanner: config.scanner,
     pricing: config.pricing,
     lang: config.lang,
@@ -175,6 +180,15 @@ export function setConfigValue(
       throw new Error('privacy.projectVisibility 仅支持 hidden、masked、plain');
     }
     next.privacy = { ...(next.privacy ?? {}), projectVisibility: value };
+    return next;
+  }
+
+  if (keyPath === 'memory.mode') {
+    const value = requireSingleValue(keyPath, values);
+    if (value !== 'local-only' && value !== 'cloud') {
+      throw new Error('memory.mode 仅支持 local-only 或 cloud');
+    }
+    next.memory = { ...(next.memory ?? {}), mode: value };
     return next;
   }
 

@@ -58,6 +58,11 @@ export const I18N = {
     currency: 'Currency',
     filterDevice: 'Filter by Device', filterProduct: 'Filter by Product', items: 'Items',
     demoBanner: 'Demo data — backend unavailable, showing sample numbers',
+    memory: 'Memory', memorySearch: 'Search memories...', memoryCurrentState: 'Current State',
+    memoryRecentDecisions: 'Recent Decisions', memoryRecentActivity: 'Recent Activity',
+    memoryNextActions: 'Next Actions', memoryUnavailable: 'Memory is not available in this dashboard',
+    memoryLocalOnlyNotice: 'This instance is local-only or Memory public read is disabled. Use aiusage memory list on the device that scanned the sessions.',
+    memoryEmpty: 'No structured project memory found.',
     total: 'Total',
   },
   zh: {
@@ -112,6 +117,11 @@ export const I18N = {
     currency: '货币',
     filterDevice: '按设备筛选', filterProduct: '按产品筛选', items: '子项',
     demoBanner: '演示数据 — 后端无法连接，以下为示例数字',
+    memory: 'Memory', memorySearch: '搜索项目记忆…', memoryCurrentState: '当前状态',
+    memoryRecentDecisions: '近期决策', memoryRecentActivity: '近期活动',
+    memoryNextActions: '下一步', memoryUnavailable: 'Memory 暂不可用',
+    memoryLocalOnlyNotice: '当前实例为本地模式，或未开启 Memory 公开读取。请在扫描会话的设备上运行 aiusage memory list。',
+    memoryEmpty: '暂无结构化项目记忆。',
     total: '合计',
   },
 } as const;
