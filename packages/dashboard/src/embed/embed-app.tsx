@@ -90,7 +90,7 @@ function StatsRow({
       style={{ gridTemplateColumns: `repeat(${visible.length}, 1fr)` }}
     >
       {visible.map((c) => (
-        <div key={c.label} className="card">
+        <div key={c.label} className="kpi">
           <KpiCard label={c.label} value={c.value} highlight={c.highlight} suffix={c.suffix} />
         </div>
       ))}

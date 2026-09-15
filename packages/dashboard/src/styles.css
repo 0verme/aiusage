@@ -478,7 +478,7 @@ button {
 .kpi {
   position: relative;
   display: flex;
-  min-height: 112px;
+  min-height: 80px;
   overflow: hidden;
   background: var(--panel);
   border: 1px solid var(--border);
@@ -496,9 +496,8 @@ button {
   display: flex;
   width: 100%;
   flex-direction: column;
-  row-gap: 0;
   justify-content: flex-start;
-  padding: 12px 14px 10px;
+  padding: 10px 14px;
 }
 
 .kpi-header {
@@ -584,7 +583,7 @@ button {
   display: flex;
   min-width: 0;
   align-items: baseline;
-  margin-top: 6px;
+  margin-top: 4px;
   color: var(--fg);
   font-family: var(--font-sans);
   font-size: var(--dashboard-font-kpi);
@@ -1558,11 +1557,11 @@ button {
   }
 
   .kpi {
-    min-height: 104px;
+    min-height: 76px;
   }
 
   .kpi-content {
-    padding: 10px 11px 8px;
+    padding: 8px 11px;
   }
 
   .kpi-label {
@@ -1571,8 +1570,8 @@ button {
   }
 
   .kpi-value {
-    margin-top: 6px;
-    font-size: 24px;
+    margin-top: 3px;
+    font-size: 22px;
   }
 
   .kpi-footer {
@@ -1584,11 +1583,11 @@ button {
   }
 
   .kpi-delta {
-    font-size: 12px;
+    font-size: 11px;
   }
 
   .kpi-delta > span {
-    font-size: 11px;
+    font-size: 10px;
   }
 
   .heatmap-card,

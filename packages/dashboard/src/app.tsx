@@ -479,9 +479,16 @@ export function App() {
         <div className="dashboard-content grid gap-4">
           <div className="dashboard-kpi-grid grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-5">
             {Array.from({ length: 10 }).map((_, i) => (
-              <div key={`sk-${i}`} className="card px-5 py-5">
-                <Skeleton className="mb-3 h-2.5 w-14" />
-                <Skeleton className="h-6 w-20" />
+              <div key={`sk-${i}`} className="kpi">
+                <div className="kpi-content">
+                  <div className="kpi-header">
+                    <Skeleton className="h-2.5 w-14" />
+                  </div>
+                  <Skeleton className="my-1 h-5 w-20" />
+                  <div className="kpi-footer">
+                    <Skeleton className="h-2.5 w-12" />
+                  </div>
+                </div>
               </div>
             ))}
           </div>

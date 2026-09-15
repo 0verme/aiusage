@@ -70,18 +70,21 @@ export function KpiCard({
   delta,
   help = false,
 }: KpiCardProps) {
+  const hasFooter = Boolean(sub || delta);
   return (
     <div className="kpi-content">
       <div className="kpi-header">
         <KpiLabel label={label} help={help} />
       </div>
       <KpiValue value={value} suffix={suffix} highlight={highlight} />
-      <div className="kpi-footer">
-        <div className="kpi-sub">
-          <span>{sub}</span>
+      {hasFooter && (
+        <div className="kpi-footer">
+          <div className="kpi-sub">
+            <span>{sub}</span>
+          </div>
+          <Delta value={delta} />
         </div>
-        <Delta value={delta} />
-      </div>
+      )}
     </div>
   );
 }
@@ -102,6 +105,7 @@ export function CostKpiCard({
 }) {
   const [hovered, setHovered] = useState(false);
   const { showCny, rate } = useCurrencyStore();
+  const hasFooter = Boolean(sub || delta);
 
   return (
     <div
@@ -126,12 +130,14 @@ export function CostKpiCard({
           </button>
         )}
       />
-      <div className="kpi-footer">
-        <div className="kpi-sub">
-          <span>{sub}</span>
+      {hasFooter && (
+        <div className="kpi-footer">
+          <div className="kpi-sub">
+            <span>{sub}</span>
+          </div>
+          <Delta value={delta} cost />
         </div>
-        <Delta value={delta} cost />
-      </div>
+      )}
     </div>
   );
 }
