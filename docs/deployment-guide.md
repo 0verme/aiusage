@@ -245,7 +245,7 @@ The controller automatically detects and scans all installed tools:
 | Copilot CLI | GitHub | `~/.copilot/otel/`, `~/.copilot/session-state/` |
 | Copilot for VS Code | GitHub | VS Code logs and `User/workspaceStorage/**/chatSessions/*.{json,jsonl}` |
 | Gemini CLI | Google | `~/.gemini/tmp/` |
-| Antigravity | Google | `~/.gemini/antigravity/` interaction metadata |
+| Antigravity | Google | `~/.gemini/antigravity/conversations/*.db` `gen_metadata` (real tokens); `brain/` + browser-recording interaction metadata as fallback |
 | Amp | Model provider (Sourcegraph product) | `~/.local/share/amp/threads/` |
 | Kimi Code | Moonshot | `$KIMI_CODE_HOME/sessions/` (default `~/.kimi-code/sessions/`) |
 | Kimi CLI (legacy) | Moonshot | `~/.kimi/sessions/` |

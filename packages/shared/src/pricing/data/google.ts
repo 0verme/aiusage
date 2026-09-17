@@ -9,7 +9,8 @@ import type { ProductPricing } from '../types.js';
  * 多模态文本/图像/视频/音频价格不同时，统一按 text 价；audio 等专用模型走单独 product（如 TTS、Live API）。
  */
 export const google: Record<string, ProductPricing> = {
-  // Antigravity 本地不输出 token 信息，仅事件计数；保留空 models 不算费用
+  // Token 由 conversations/*.db 的 gen_metadata 提供；model 单价尚未收录，catalog
+  // 查不到时 costStatus 为 unavailable，但 usage 仍会被保留。
   antigravity: { models: {} },
 
   'gemini-cli': {
