@@ -3,6 +3,7 @@ import { homedir } from 'node:os';
 import { basename, dirname, join } from 'node:path';
 import { calculateCost, canonicalizeModel, PRICING_VERSION, type IngestBreakdown, type PricingCatalog } from '@aiusage/shared';
 import { scanDates } from './scan.js';
+import { discoverAntigravityDbDates } from './scanners/antigravity.js';
 import { parseTs, dateKey, fileModifiedTs } from './scanners/utils.js';
 import { getCodexBaseDir } from './scanners/codex.js';
 import { resolveKimiCodeHome } from './scanners/kimi.js';
@@ -462,6 +463,14 @@ async function discoverCopilotVscodeDates(dates: Set<string>): Promise<void> {
 
 async function discoverAntigravityDates(dates: Set<string>): Promise<void> {
   const home = homedir();
+
+  // 新版 Antigravity 的真实 usage 存于 conversations/*.db（gen_metadata），
+  // 日期按 session createdAt 归属；brain/browser_recordings 的 JSON 布局随版本变化，
+  // 不能作为唯一日期来源，仅作旧版本兼容补充。
+  for (const dbDate of await discoverAntigravityDbDates()) {
+    dates.add(dbDate);
+  }
+
   const brainFiles: string[] = [];
   const browserFiles: string[] = [];
   await walkForFiles(join(home, '.gemini', 'antigravity', 'brain'), '.json', brainFiles);

@@ -210,6 +210,24 @@ export async function scanAntigravityDates(
   return finalize(grouped);
 }
 
+/**
+ * 日期发现：遍历 conversations/*.db，读取每个 session 的创建日期。
+ * antigravity 的 usage 归属 session createdAt，brain/browser 的 JSON 布局
+ * 随 Antigravity 版本变化，不能作为唯一日期来源。
+ */
+export async function discoverAntigravityDbDates(baseDir?: string): Promise<Set<string>> {
+  const dir = baseDir ?? join(homedir(), '.gemini', 'antigravity');
+  const dates = new Set<string>();
+
+  for (const dbPath of await listConversationDatabases(join(dir, CONVERSATIONS_DIR))) {
+    const session = await readSessionInfo(dbPath);
+    const timestamp = session.createdAt ?? await fileModifiedTs(dbPath);
+    if (timestamp) dates.add(dateKey(timestamp));
+  }
+
+  return dates;
+}
+
 async function listConversationDatabases(dir: string): Promise<string[]> {
   let entries;
   try {
