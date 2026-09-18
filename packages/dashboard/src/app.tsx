@@ -28,11 +28,14 @@ import { KpiCard, CostKpiCard } from './components/kpi-card';
 import { useFetchCnyRate, useCurrencyStore } from './hooks/use-cny-rate';
 import { CostTrendChart } from './components/cost-trend-chart';
 import { TokenTrendChart } from './components/token-trend-chart';
+import { CumulativeTokenChart } from './components/cumulative-token-chart';
 import { TokenCompositionChart } from './components/token-composition-chart';
 import { FlowChart } from './components/flow-chart';
 import { DonutSection } from './components/donut-section';
 import { ActivityHeatmap } from './components/activity-heatmap';
 import { buildActivityHeatmapData } from './utils/activity-heatmap-data';
+import { buildCumulativeTokenSeries } from './utils/cumulative-token';
+import { useTokenHistory } from './hooks/use-token-history';
 import { HeaderLogo, useFaviconFromLogo } from './components/site-logo';
 import { SITE_TITLE } from './site-config';
 import type { InteractionMetricItem, InteractionMetricsPayload } from '@aiusage/shared';
@@ -364,6 +367,13 @@ export function App() {
     dailyTrend: overview?.dailyTrend ?? [],
     tokenMetricsUnavailable: unavailable,
   }), [overview, unavailable]);
+  // 累计 Token：基于完整历史（range=all）计算，展示窗口交给当前 range 裁剪
+  const tokenHistory = useTokenHistory(filters);
+  const cumulativeTokens = useMemo(() => buildCumulativeTokenSeries({
+    history: tokenHistory.series,
+    windowDates: (overview?.tokenComposition ?? []).map((d) => d.usageDate),
+  }), [tokenHistory.series, overview]);
+  const cumulativeTotal = cumulativeTokens.points.at(-1)?.cumulativeTokens ?? kpis?.totalTokens ?? 0;
   const kpiDeltas = useMemo(() => {
     const previous = overview?.comparison;
     if (!overview || !kpis || !previous) return {};
@@ -398,7 +408,7 @@ export function App() {
             <ThemeToggle value={theme} onChange={setTheme} locale={locale} />
             <LangToggle value={locale} onChange={setLocale} />
             <button
-              onClick={refresh}
+              onClick={() => { refresh(); tokenHistory.refresh(); }}
               className="header-refresh hidden h-[34px] w-[34px] items-center justify-center rounded-[10px] border transition-colors sm:inline-flex"
               style={{ background: 'var(--panel)', borderColor: 'var(--border)', color: 'var(--fg2)' }}
               aria-label="Refresh"
@@ -606,6 +616,30 @@ export function App() {
                   legendItems={tokenLegend}
                 />
               </ChartBoundary>
+            )}
+          </div>
+
+          {/* ── Cumulative Token ── */}
+          <div className="card chart-card fade-up p-6" style={{ animationDelay: '255ms' }}>
+            <SectionHeader
+              title={locale === 'zh' ? '累计 Token' : 'Cumulative Tokens'}
+              stat={unavailable ? t.unavailable : formatCompact(cumulativeTotal, locale)}
+              statLabel={locale === 'zh' ? '累计' : 'Cumulative'}
+            />
+            {unavailable ? (
+              <EmptyState label={t.tokenUnavailable} />
+            ) : cumulativeTokens.points.length > 0 ? (
+              <ChartBoundary name="Cumulative Tokens">
+                <CumulativeTokenChart
+                  points={cumulativeTokens.points}
+                  fastestGrowth={cumulativeTokens.fastestGrowth}
+                  locale={locale}
+                />
+              </ChartBoundary>
+            ) : tokenHistory.loading ? (
+              <Skeleton className="h-[240px] rounded-lg sm:h-[250px]" />
+            ) : (
+              <EmptyState label={t.noData} />
             )}
           </div>
 
