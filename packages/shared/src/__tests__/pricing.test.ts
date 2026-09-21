@@ -43,6 +43,9 @@ describe('pricing identity normalization', () => {
     ['openai-codex', 'pi', 'gpt-5.6-luna', 'openai', 'codex', 'gpt-5.6-luna'],
     ['openai_codex', 'pi', 'gpt-5.6-luna', 'openai', 'codex', 'gpt-5.6-luna'],
     ['openai-codex', 'pi', 'gpt-5.6-sol', 'openai', 'codex', 'gpt-5.6-sol'],
+    ['openai', 'codex', 'gpt-6-astra', 'openai', 'codex', 'gpt-6-astra'],
+    ['openai-codex', 'pi', 'gpt-6-astra', 'openai', 'codex', 'gpt-6-astra'],
+    ['openai_codex', 'pi', 'gpt-6-astra', 'openai', 'codex', 'gpt-6-astra'],
     ['xai', 'pi', 'grok-4.5', 'xai', 'grok-build', 'grok-4.5'],
     ['xai', 'grok-build', 'grok-4.5', 'xai', 'grok-build', 'grok-4.5'],
     ['opencode-go', 'pi', 'deepseek-v4-flash', 'opencode-go', 'deepseek-chat', 'deepseek-v4-flash'],
@@ -87,10 +90,11 @@ describe('calculateCost — 关键模型', () => {
     ['anthropic', 'claude-code', 'claude-opus-4-7', 30], // 5 + 25
     ['anthropic', 'claude-code', 'claude-sonnet-5', 12], // 2 + 10 (intro through 2026-08-31)
     ['anthropic', 'claude-code', 'claude-sonnet-4-6', 18],
+    ['openai', 'codex', 'gpt-6-astra', 95], // 长上下文档 20 + 75
     ['openai', 'codex', 'gpt-5.4', 27.5], // 1M input → 长上下文档 5 + 22.5
-    ['openai', 'codex', 'gpt-5.6', 55], // alias → sol 长上下文档 10 + 45
-    ['openai', 'codex', 'gpt-5.6-terra', 27.5], // 长上下文档 5 + 22.5
-    ['openai', 'codex', 'gpt-5.6-luna', 11], // 长上下文档 2 + 9
+    ['openai', 'codex', 'gpt-5.6', 38], // alias → sol 长上下文档 8 + 30
+    ['openai', 'codex', 'gpt-5.6-terra', 22], // 长上下文档 4 + 18
+    ['openai', 'codex', 'gpt-5.6-luna', 2.2], // 长上下文档 0.4 + 1.8
     ['openai', 'codex', 'gpt-5.5-pro', 330], // 长上下文档 60 + 270
     ['openai', 'codex', 'o3-deep-research', 25], // 5 + 20，修正后
     ['openai', 'codex', 'computer-use-preview', 7.5], // 1.5 + 6，修正后
@@ -208,9 +212,10 @@ describe('production-realistic pricing coverage', () => {
   };
 
   it.each([
-    ['openai-codex', 'pi', 'gpt-5.6-luna', 'exact', 11],
-    ['openai-codex', 'pi', 'gpt-5.6-sol', 'exact', 55],
-    ['openai', 'codex', 'gpt-5.6-terra', 'exact', 27.5],
+    ['openai-codex', 'pi', 'gpt-6-astra', 'exact', 95],
+    ['openai-codex', 'pi', 'gpt-5.6-luna', 'exact', 2.2],
+    ['openai-codex', 'pi', 'gpt-5.6-sol', 'exact', 38],
+    ['openai', 'codex', 'gpt-5.6-terra', 'exact', 22],
     ['openai', 'codex', 'gpt-5.5', 'exact', 55],
     ['openai', 'codex', 'gpt-5.4', 'exact', 27.5],
     ['xai', 'pi', 'grok-4.5', 'estimated', 16],
@@ -326,6 +331,24 @@ describe('Fast 模式白名单', () => {
     expect(priority.estimatedCostUsd).toBeCloseTo(normal.estimatedCostUsd * 2.5, 3);
   });
 
+  it('Codex GPT-6 Astra fast 应 ×2', () => {
+    const fast = calculateCost('openai', 'codex', 'gpt-6-astra-fast', tokens);
+    const normal = calculateCost('openai', 'codex', 'gpt-6-astra', tokens);
+    expect(fast.estimatedCostUsd).toBeCloseTo(normal.estimatedCostUsd * 2, 3);
+  });
+
+  it('Codex GPT-6 Astra priority 应 ×2', () => {
+    const priority = calculateCost('openai', 'codex', 'gpt-6-astra-priority', tokens);
+    const normal = calculateCost('openai', 'codex', 'gpt-6-astra', tokens);
+    expect(priority.estimatedCostUsd).toBeCloseTo(normal.estimatedCostUsd * 2, 3);
+  });
+
+  it('Codex GPT-5.6 Sol fast 仍不放大（官方仅 priority 生效）', () => {
+    const fast = calculateCost('openai', 'codex', 'gpt-5.6-sol-fast', tokens);
+    const normal = calculateCost('openai', 'codex', 'gpt-5.6-sol', tokens);
+    expect(fast.estimatedCostUsd).toBe(normal.estimatedCostUsd);
+  });
+
   it('Codex GPT-5.4 fast 应 ×2', () => {
     const fast = calculateCost('openai', 'codex', 'gpt-5.4-fast', tokens);
     const normal = calculateCost('openai', 'codex', 'gpt-5.4', tokens);
@@ -412,6 +435,62 @@ describe('多币种折算', () => {
 // ─── 阶梯定价 ───
 
 describe('阶梯定价', () => {
+  it('GPT-6 Astra 在 272K input 内使用标准价格并区分缓存读写', () => {
+    const r = calculateCost('openai', 'codex', 'gpt-6-astra', {
+      inputTokens: 10_000,
+      cachedInputTokens: 60_000,
+      cacheWriteTokens: 30_000,
+      outputTokens: 10_000,
+    });
+    expect(r.matchedTierIndex).toBe(0);
+    // 总 input 100K；0.01M * $10 + 0.06M * $1 + 0.03M * $12.5 + 0.01M * $50 = $1.035
+    // 三类 input 各自计费，不叠加：100K = 60K cached + 30K write + 10K normal
+    expect(r.estimatedCostUsd).toBeCloseTo(1.035, 4);
+  });
+
+  it('GPT-6 Astra 超过 272K input 时整次请求切换到长上下文价格', () => {
+    const r = calculateCost('openai', 'codex', 'gpt-6-astra', {
+      inputTokens: 300_000,
+      cachedInputTokens: 0,
+      cacheWriteTokens: 0,
+      outputTokens: 100_000,
+    });
+    expect(r.matchedTierIndex).toBe(1);
+    // 0.3M * $20 + 0.1M * $75 = $13.5
+    expect(r.estimatedCostUsd).toBeCloseTo(13.5, 4);
+  });
+
+  it('GPT-6 Astra 在 272K 边界上仍使用短上下文价格', () => {
+    const atThreshold = calculateCost('openai', 'codex', 'gpt-6-astra', {
+      inputTokens: 272_000,
+      cachedInputTokens: 0,
+      cacheWriteTokens: 0,
+      outputTokens: 0,
+    });
+    const overThreshold = calculateCost('openai', 'codex', 'gpt-6-astra', {
+      inputTokens: 272_001,
+      cachedInputTokens: 0,
+      cacheWriteTokens: 0,
+      outputTokens: 0,
+    });
+    expect(atThreshold.matchedTierIndex).toBe(0);
+    expect(overThreshold.matchedTierIndex).toBe(1);
+    expect(atThreshold.estimatedCostUsd).toBeCloseTo(2.72, 4); // 0.272M * $10
+    expect(overThreshold.estimatedCostUsd).toBeCloseTo(5.44002, 4); // 0.272001M * $20
+  });
+
+  it('GPT-6 Astra 的 cache write 也计入阶梯总 input', () => {
+    const r = calculateCost('openai', 'codex', 'gpt-6-astra', {
+      inputTokens: 0,
+      cachedInputTokens: 0,
+      cacheWriteTokens: 300_000,
+      outputTokens: 0,
+    });
+    expect(r.matchedTierIndex).toBe(1);
+    // 0.3M * $25 = $7.5
+    expect(r.estimatedCostUsd).toBeCloseTo(7.5, 4);
+  });
+
   it('GPT-5.6 Sol 在 272K input 内使用标准价格', () => {
     const r = calculateCost('openai', 'codex', 'gpt-5.6-sol', {
       inputTokens: 100_000,
@@ -420,8 +499,8 @@ describe('阶梯定价', () => {
       outputTokens: 100_000,
     });
     expect(r.matchedTierIndex).toBe(0);
-    // 0.1M * $5 + 0.1M * $0.5 + 0.1M * $30 = $3.55
-    expect(r.estimatedCostUsd).toBeCloseTo(3.55, 4);
+    // 0.1M * $4 + 0.1M * $0.4 + 0.1M * $20 = $2.44
+    expect(r.estimatedCostUsd).toBeCloseTo(2.44, 4);
   });
 
   it('GPT-5.6 Sol 超过 272K input 时使用长上下文价格', () => {
@@ -432,8 +511,8 @@ describe('阶梯定价', () => {
       outputTokens: 1_000_000,
     });
     expect(r.matchedTierIndex).toBe(1);
-    // 0.3M * $10 + 1M * $45 = $48
-    expect(r.estimatedCostUsd).toBeCloseTo(48, 4);
+    // 0.3M * $8 + 1M * $30 = $32.4
+    expect(r.estimatedCostUsd).toBeCloseTo(32.4, 4);
   });
 
   it('多事件汇总阶梯按平均 input 估档并标 estimated', () => {
@@ -452,8 +531,8 @@ describe('阶梯定价', () => {
     );
     expect(r.matchedTierIndex).toBe(0);
     expect(r.costStatus).toBe('estimated');
-    // 0.2M * $5 + 0.02M * $30 = $1 + $0.6 = $1.6
-    expect(r.estimatedCostUsd).toBeCloseTo(1.6, 4);
+    // 0.2M * $4 + 0.02M * $20 = $0.8 + $0.4 = $1.2
+    expect(r.estimatedCostUsd).toBeCloseTo(1.2, 4);
   });
 
   it('GPT-5.5 的短请求继续使用短上下文价格', () => {

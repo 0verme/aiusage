@@ -32,11 +32,11 @@ describe('calculateCost: 基本计费', () => {
       cacheWriteTokens: 0,
       outputTokens: 20_000,
       reasoningOutputTokens: 0,
-      costUSD: 5.25,
+      costUSD: 4.1,
       pricingVersion: getPricingCatalog().version,
     });
 
-    expect(result.estimatedCostUsd).toBe(5.25);
+    expect(result.estimatedCostUsd).toBe(4.1);
     expect(result.costStatus).toBe('exact');
   });
 
@@ -74,11 +74,11 @@ describe('calculateCost: 基本计费', () => {
       cacheWriteTokens: 0,
       outputTokens: 20_000,
       reasoningOutputTokens: 0,
-      costUSD: 5.25,
+      costUSD: 4.1,
       pricingVersion: 'stale-catalog',
     });
 
-    expect(result.estimatedCostUsd).toBe(3.1);
+    expect(result.estimatedCostUsd).toBe(2.4);
     expect(result.costStatus).toBe('estimated');
   });
 
@@ -118,9 +118,30 @@ describe('calculateCost: 基本计费', () => {
       reasoningOutputTokens: 0,
     });
 
-    expect(result.estimatedCostUsd).toBe(11);
+    expect(result.estimatedCostUsd).toBe(2.2);
     expect(result.costStatus).toBe('exact');
     expect(result.pricingIdentity?.canonical).toMatchObject({ provider: 'openai', product: 'codex', model: 'gpt-5.6-luna' });
+  });
+
+  it('通过 shared normalization 计算 openai-codex/pi 的 GPT-6 Astra（含 cache write 拆分）', () => {
+    const result = calculateIngestBreakdownCost({
+      provider: 'openai-codex',
+      product: 'pi',
+      channel: 'cli',
+      model: 'gpt-6-astra',
+      project: '/tmp/project',
+      eventCount: 1,
+      inputTokens: 10_000,
+      cachedInputTokens: 60_000,
+      cacheWriteTokens: 30_000,
+      outputTokens: 10_000,
+      reasoningOutputTokens: 0,
+    });
+
+    // 0.01M*$10 + 0.06M*$1 + 0.03M*$12.5 + 0.01M*$50 = $1.035
+    expect(result.estimatedCostUsd).toBeCloseTo(1.035, 4);
+    expect(result.costStatus).toBe('exact');
+    expect(result.pricingIdentity?.canonical).toMatchObject({ provider: 'openai', product: 'codex', model: 'gpt-6-astra' });
   });
 
   it('通过 shared normalization 计算 xai/pi 的 Grok 4.5', () => {
@@ -158,7 +179,7 @@ describe('calculateCost: 基本计费', () => {
       costUSD: 0,
     });
 
-    expect(result.estimatedCostUsd).toBe(2.6);
+    expect(result.estimatedCostUsd).toBe(2);
     expect(result.costStatus).toBe('estimated');
   });
 
@@ -222,8 +243,8 @@ describe('calculateCost: 基本计费', () => {
       cacheWriteTokens: 0,
       outputTokens: 500_000,
     });
-    // 长上下文：1*$10 + 1*$1 + 0.5*$45 = $33.5
-    expect(result.estimatedCostUsd).toBe(33.5);
+    // 长上下文：1*$8 + 1*$0.8 + 0.5*$30 = $23.8
+    expect(result.estimatedCostUsd).toBe(23.8);
     expect(result.costStatus).toBe('exact');
   });
 
