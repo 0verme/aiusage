@@ -16,7 +16,13 @@ test('catalog.json exposes the public pricing catalog', async () => {
   assert.equal(catalog.aliases?.['gpt-5.6'], 'gpt-5.6-sol');
   assert.equal(catalog.aliases?.['claude-fibre-5'], 'claude-fable-5');
   assert.equal(catalog.providers.anthropic['claude-code'].models['claude-opus-5']?.output_per_million, 25);
-  assert.equal(catalog.providers.openai.codex.models['gpt-5.6-sol']?.input_per_million, 5);
+  assert.equal(catalog.providers.openai.codex.models['gpt-6-astra']?.input_per_million, 10);
+  assert.equal(catalog.providers.openai.codex.models['gpt-6-astra']?.cache_write_per_million, 12.5);
+  assert.equal(catalog.providers.openai.codex.models['gpt-6-astra']?.tiers?.[1]?.input_per_million, 20);
+  assert.equal(catalog.providers.openai.codex.models['gpt-6-astra']?.tiers?.[1]?.output_per_million, 75);
+  assert.equal(catalog.providers.openai.codex.models['gpt-5.6-sol']?.input_per_million, 4);
+  assert.equal(catalog.providers.openai.codex.models['gpt-5.6-terra']?.input_per_million, 2);
+  assert.equal(catalog.providers.openai.codex.models['gpt-5.6-luna']?.input_per_million, 0.2);
   assert.equal(catalog.providers.xai['grok-build'].models['grok-4.5']?.tiers?.[0]?.output_per_million, 6);
   assert.equal(catalog.providers.xai['grok-build'].models['grok-4.6']?.tiers?.[1]?.cached_input_per_million, 1);
 });

@@ -56,9 +56,9 @@ describe('pricing authority and cache freshness', () => {
     );
 
     expect(resolved.info.source).toBe('remote');
-    expect(resolved.info.url).toBe('https://token.example/api/v1/public/pricing?pricingVersion=2026-08-23-pricing-truth-v1');
+    expect(resolved.info.url).toBe(`https://token.example/api/v1/public/pricing?pricingVersion=${catalog.version}`);
     expect(fetchMock).toHaveBeenCalledWith(
-      'https://token.example/api/v1/public/pricing?pricingVersion=2026-08-23-pricing-truth-v1',
+      `https://token.example/api/v1/public/pricing?pricingVersion=${catalog.version}`,
       expect.objectContaining({ headers: { Accept: 'application/json' } }),
     );
   });
@@ -79,7 +79,7 @@ describe('pricing authority and cache freshness', () => {
 
   it('uses a newer cache as an explicit fallback and reports fetchedAt', async () => {
     const cachePath = join(state.home, '.aiusage', 'pricing-cache.json');
-    state.files.set(cachePath, cacheFile('2026-08-24-future-v1'));
+    state.files.set(cachePath, cacheFile('2026-09-22-future-v1'));
     vi.stubGlobal('fetch', vi.fn(async () => { throw new Error('offline'); }));
 
     const resolved = await resolvePricingCatalog({
@@ -87,7 +87,7 @@ describe('pricing authority and cache freshness', () => {
     });
 
     expect(resolved.info.source).toBe('cache');
-    expect(resolved.info.version).toBe('2026-08-24-future-v1');
+    expect(resolved.info.version).toBe('2026-09-22-future-v1');
     expect(resolved.info.fetchedAt).toBe('2026-07-26T00:00:00.000Z');
     expect(resolved.info.warnings?.[0]).toContain('cached catalog');
   });

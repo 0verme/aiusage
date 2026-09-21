@@ -76,13 +76,13 @@ describe('historical cost recalculation plan', () => {
       to: '2026-08-01',
     });
 
-    expect(plan.breakdowns[0]).toMatchObject({ estimatedCostUsd: 11, costStatus: 'exact', changed: true });
+    expect(plan.breakdowns[0]).toMatchObject({ estimatedCostUsd: 2.2, costStatus: 'exact', changed: true });
     expect(plan.breakdowns[1]).toMatchObject({ estimatedCostUsd: 0, costStatus: 'unavailable', changed: true });
     expect(plan.daily[0]).toMatchObject({
-      estimatedCostUsd: 11,
+      estimatedCostUsd: 2.2,
       costStatus: 'unavailable',
       topModel: 'gpt-5.6-luna',
-      topProjectCostUsd: 11,
+      topProjectCostUsd: 2.2,
       changed: true,
     });
     expect(plan.summary.before).toEqual({
@@ -94,7 +94,7 @@ describe('historical cost recalculation plan', () => {
     expect(plan.summary.after).toEqual({
       totalEvents: 2,
       totalTokens: 2_000_150,
-      totalCostUsd: 11,
+      totalCostUsd: 2.2,
       costBearingEvents: 1,
     });
     expect(plan.summary.modelsStillUnavailable).toEqual([

@@ -51,7 +51,7 @@ packages/shared/src/pricing/
 | `currency: 'USD' \| 'CNY'` | 价格币种。Worker 端结算时按 `catalog.fx` 折算到 USD |
 | `input_per_million` / `output_per_million` | 基础单价 / 1M tokens |
 | `cached_input_per_million` | cache hit 价（Anthropic 叫 cache_read，Kimi 叫缓存命中） |
-| `cache_write_per_million` | 通用 cache write 价（Kimi 的缓存未命中按普通输入价） |
+| `cache_write_per_million` | 通用 cache write 价（OpenAI GPT-6 / GPT-5.6 按未缓存 input × 1.25；Kimi 的缓存未命中按普通输入价） |
 | `cache_write_5m_per_million` / `cache_write_1h_per_million` | Anthropic 风格 prompt caching write |
 | `tiers?: PricingTier[]` | 阶梯定价：按 input token 数命中不同档位（Qwen / Gemini 2.5 Pro / GLM 等） |
 | `effective_from` / `effective_to` | 价格生效区间（审计用） |
@@ -95,6 +95,23 @@ tiers: [
 ```
 
 > **限制**：Gemini 2.5 Flash 等模型还按 **output** 长度分档；GLM-4.7 同样有 input × output 双维度。当前实现只按 input 命中，output 分档暂用保守取低档（标了 `notes`）。
+
+### OpenAI Codex 的长上下文与 cache write
+
+GPT-6 Astra 与 GPT-5.6 系列（Sol / Terra / Luna）单次 prompt input **> 272K** 时，整次请求按长上下文档计费（input / cached 2x，output 1.5x），因此这两个系列的 `tiers` 写为「短档 = 顶层价」+「长档无 threshold」。
+
+新版 Codex JSONL 的 `payload.info.{last,total}_token_usage.cache_write_input_tokens` 会被 scanner 从普通 input 中拆出：
+
+```text
+total input
+├── cached read   （cached_input_tokens / cache_read_input_tokens）
+├── cache write   （cache_write_input_tokens）
+└── normal uncached input
+```
+
+三者各自按 `cached_input_per_million` / `cache_write_per_million` / `input_per_million` 计费，不会重复计入；老日志缺失该字段时按 0 处理。
+
+模型名后缀 `-fast` / `-priority` 会先剥离为基础模型再应用倍率；`gpt-6-astra-fast` 与 `gpt-6-astra-priority` 均按 Fast mode 2x，其他 OpenAI Codex 型号按各自 `OPENAI_CODEX_TIER_MULTIPLIERS` 登记值处理（未登记则不放大）。
 
 ## 贡献新模型 / 修订单价
 
