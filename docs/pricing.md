@@ -98,7 +98,7 @@ tiers: [
 
 ### OpenAI Codex 的长上下文与 cache write
 
-GPT-6 Astra 与 GPT-5.6 系列（Sol / Terra / Luna）单次 prompt input **> 272K** 时，整次请求按长上下文档计费（input / cached 2x，output 1.5x），因此这两个系列的 `tiers` 写为「短档 = 顶层价」+「长档无 threshold」。
+GPT-6 Astra / Sol / Luna 与 GPT-5.6 系列（Sol / Terra / Luna）单次 prompt input **> 272K** 时，整次请求按长上下文档计费（input / cached 2x，output 1.5x），因此这两个系列的 `tiers` 写为「短档 = 顶层价」+「长档无 threshold」。
 
 新版 Codex JSONL 的 `payload.info.{last,total}_token_usage.cache_write_input_tokens` 会被 scanner 从普通 input 中拆出：
 

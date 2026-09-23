@@ -144,6 +144,30 @@ describe('calculateCost: 基本计费', () => {
     expect(result.pricingIdentity?.canonical).toMatchObject({ provider: 'openai', product: 'codex', model: 'gpt-6-astra' });
   });
 
+  it.each([
+    ['gpt-6-sol', 1.4],
+    ['gpt-6-luna', 0.07],
+  ])('通过 shared normalization exact 计算 openai-codex/pi 的 %s', (model, expectedCost) => {
+    const result = calculateIngestBreakdownCost({
+      provider: 'openai-codex',
+      product: 'pi',
+      channel: 'cli',
+      model,
+      project: '/tmp/project',
+      eventCount: 1,
+      inputTokens: 100_000,
+      cachedInputTokens: 100_000,
+      cacheWriteTokens: 72_000,
+      outputTokens: 100_000,
+      reasoningOutputTokens: 0,
+    });
+
+    expect(result.estimatedCostUsd).toBeCloseTo(expectedCost, 4);
+    expect(result.costStatus).toBe('exact');
+    expect(result.resolvedModel).toBe(model);
+    expect(result.pricingIdentity?.canonical).toMatchObject({ provider: 'openai', product: 'codex', model });
+  });
+
   it('通过 shared normalization 计算 xai/pi 的 Grok 4.5', () => {
     const result = calculateIngestBreakdownCost({
       provider: 'xai',
