@@ -44,6 +44,8 @@ describe('pricing identity normalization', () => {
     ['openai_codex', 'pi', 'gpt-5.6-luna', 'openai', 'codex', 'gpt-5.6-luna'],
     ['openai-codex', 'pi', 'gpt-5.6-sol', 'openai', 'codex', 'gpt-5.6-sol'],
     ['openai', 'codex', 'gpt-6-astra', 'openai', 'codex', 'gpt-6-astra'],
+    ['openai', 'codex', 'gpt-6-sol', 'openai', 'codex', 'gpt-6-sol'],
+    ['openai-codex', 'pi', 'gpt-6-luna', 'openai', 'codex', 'gpt-6-luna'],
     ['openai-codex', 'pi', 'gpt-6-astra', 'openai', 'codex', 'gpt-6-astra'],
     ['openai_codex', 'pi', 'gpt-6-astra', 'openai', 'codex', 'gpt-6-astra'],
     ['xai', 'pi', 'grok-4.5', 'xai', 'grok-build', 'grok-4.5'],
@@ -489,6 +491,34 @@ describe('阶梯定价', () => {
     expect(r.matchedTierIndex).toBe(1);
     // 0.3M * $25 = $7.5
     expect(r.estimatedCostUsd).toBeCloseTo(7.5, 4);
+  });
+
+  it.each([
+    ['gpt-6-sol', 1.4, 15.94],
+    ['gpt-6-luna', 0.07, 0.797],
+  ])('%s 使用 exact 短上下文价格及 >272K 长上下文价格', (model, standardCost, longContextCost) => {
+    const standard = calculateCost('openai', 'codex', model, {
+      inputTokens: 100_000,
+      cachedInputTokens: 100_000,
+      cacheWriteTokens: 72_000,
+      outputTokens: 100_000,
+    });
+    expect(standard.resolvedModel).toBe(model);
+    expect(standard.matchedTierIndex).toBe(0);
+    expect(standard.costStatus).toBe('exact');
+    // 总 input 正好 272K：普通 input、cached input、cache write 与 output 均按标准价计费。
+    expect(standard.estimatedCostUsd).toBeCloseTo(standardCost, 4);
+
+    const longContext = calculateCost('openai', 'codex', model, {
+      inputTokens: 100_000,
+      cachedInputTokens: 100_000,
+      cacheWriteTokens: 100_000,
+      outputTokens: 1_000_000,
+    });
+    expect(longContext.matchedTierIndex).toBe(1);
+    expect(longContext.costStatus).toBe('exact');
+    // 总 input 300K：整次请求（包括 cached input / cache write）使用长上下文档。
+    expect(longContext.estimatedCostUsd).toBeCloseTo(longContextCost, 4);
   });
 
   it('GPT-5.6 Sol 在 272K input 内使用标准价格', () => {
