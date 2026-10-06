@@ -87,6 +87,8 @@ pnpm setup
 
 ### 0verme Fork
 
+This project is based on the upstream [**imetn/aiusage**](https://github.com/imetn/aiusage) project. Thanks to the original project and its contributors for the foundation this fork builds on.
+
 This repository is the 0verme fork and ships an independent CLI package:
 `@0verme/aiusage-cli`.
 
