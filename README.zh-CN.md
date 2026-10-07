@@ -83,6 +83,8 @@ pnpm setup
 
 ### 0verme Fork
 
+本项目基于上游项目 [**imetn/aiusage**](https://github.com/imetn/aiusage) 持续演进。感谢原项目及其贡献者提供的基础实现。
+
 本仓库是 0verme fork，并提供独立的 CLI package：
 `@0verme/aiusage-cli`。
 
