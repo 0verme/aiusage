@@ -14,6 +14,7 @@ import { resolvePiSessionDirs } from "./scanners/pi.js";
 import {
   dateKey,
   fileModifiedTs,
+  mapWithConcurrency,
   parseTs,
   resolveProjectFields,
   walkFiles,
@@ -21,6 +22,7 @@ import {
 import { resolveMemoryProject, type MemoryProjectResolverOptions } from "./memory-project.js";
 
 const MAX_LINE_BYTES = 64 * 1024 * 1024;
+const MEMORY_FILE_CONCURRENCY = 8;
 
 export interface ScanMemorySessionsOptions extends MemoryProjectResolverOptions {
   dates: readonly string[];
@@ -53,9 +55,21 @@ export async function scanMemorySessions(
     collectPiFiles(options.piDir),
   ]);
   const builders = [
-    ...(await Promise.all(codexFiles.map((filePath) => parseCodexFile(filePath, dates)))),
-    ...(await Promise.all(claudeFiles.map((job) => parseClaudeFile(job.filePath, job.fallbackCwd, dates)))),
-    ...(await Promise.all(piFiles.map((filePath) => parsePiFile(filePath, dates)))),
+    ...(await mapWithConcurrency(
+      codexFiles,
+      MEMORY_FILE_CONCURRENCY,
+      (filePath) => parseCodexFile(filePath, dates),
+    )),
+    ...(await mapWithConcurrency(
+      claudeFiles,
+      MEMORY_FILE_CONCURRENCY,
+      (job) => parseClaudeFile(job.filePath, job.fallbackCwd, dates),
+    )),
+    ...(await mapWithConcurrency(
+      piFiles,
+      MEMORY_FILE_CONCURRENCY,
+      (filePath) => parsePiFile(filePath, dates),
+    )),
   ];
 
   const merged = mergeSessionBuilders(builders);

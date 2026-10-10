@@ -7,6 +7,7 @@ import {
   resolveProjectFields,
   normalizeModelName,
   scannerModelFields,
+  mapWithConcurrency,
 } from '../utils.js';
 
 describe('parseTs', () => {
@@ -54,6 +55,23 @@ describe('dateKey', () => {
   it('formats local date as YYYY-MM-DD', () => {
     const d = new Date(2026, 5, 2); // 本地 6/2
     expect(dateKey(d)).toBe('2026-06-02');
+  });
+});
+
+describe('mapWithConcurrency', () => {
+  it('bounds active workers and preserves input ordering', async () => {
+    let activeWorkers = 0;
+    let peakWorkers = 0;
+    const results = await mapWithConcurrency([0, 1, 2, 3, 4], 2, async (value) => {
+      activeWorkers += 1;
+      peakWorkers = Math.max(peakWorkers, activeWorkers);
+      await new Promise<void>((resolve) => setTimeout(resolve, 2));
+      activeWorkers -= 1;
+      return value * 2;
+    });
+
+    expect(peakWorkers).toBe(2);
+    expect(results).toEqual([0, 2, 4, 6, 8]);
   });
 });
 

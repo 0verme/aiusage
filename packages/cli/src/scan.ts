@@ -36,6 +36,8 @@ export interface ScanOptions {
   pricingCatalog?: PricingCatalog;
   /** Product ids selected by the user-facing --tool filter. */
   tools?: readonly string[];
+  /** Emit per-scanner progress for long-running sync operations. */
+  progress?: boolean;
 }
 
 export const TOOL_IDS = [
@@ -103,31 +105,34 @@ export async function scanDates(targetDates: string[], options: ScanOptions = {}
   if (uniqueDates.length === 0) return [];
 
   const selected = options.tools ? new Set(options.tools) : undefined;
-  const scannerDefinitions: Array<{ products: string[]; scan: () => Promise<Map<string, IngestBreakdown[]>> }> = [
-    { products: ['antigravity'], scan: () => scanAntigravityDates(uniqueDates) },
-    { products: ['claude-code'], scan: () => scanClaudeDates(uniqueDates, undefined, options.projectAliases) },
+  const scannerDefinitions: Array<{ name: string; products: string[]; scan: () => Promise<Map<string, IngestBreakdown[]>> }> = [
+    { name: 'antigravity', products: ['antigravity'], scan: () => scanAntigravityDates(uniqueDates) },
+    { name: 'claude-code', products: ['claude-code'], scan: () => scanClaudeDates(uniqueDates, undefined, options.projectAliases) },
     {
+      name: 'codex',
       products: ['codex'],
       scan: () => scanCodexDates(uniqueDates, undefined, options.projectAliases, options.pricingCatalog),
     },
-    { products: ['copilot-cli'], scan: () => scanCopilotDates(uniqueDates, undefined, options.projectAliases) },
-    { products: ['copilot-vscode'], scan: () => scanCopilotVscodeDates(uniqueDates, undefined, options.projectAliases) },
-    { products: ['cursor'], scan: () => scanCursorDates(uniqueDates) },
-    { products: ['gemini-cli'], scan: () => scanGeminiDates(uniqueDates, undefined, options.projectAliases) },
-    { products: ['qwen-code'], scan: () => scanQwenDates(uniqueDates, undefined, options.projectAliases) },
-    { products: ['kimi-code'], scan: () => scanKimiDates(uniqueDates, undefined, options.projectAliases) },
-    { products: ['amp'], scan: () => scanAmpDates(uniqueDates, undefined, options.projectAliases) },
-    { products: ['droid'], scan: () => scanDroidDates(uniqueDates, undefined, options.projectAliases) },
+    { name: 'copilot-cli', products: ['copilot-cli'], scan: () => scanCopilotDates(uniqueDates, undefined, options.projectAliases) },
+    { name: 'copilot-vscode', products: ['copilot-vscode'], scan: () => scanCopilotVscodeDates(uniqueDates, undefined, options.projectAliases) },
+    { name: 'cursor', products: ['cursor'], scan: () => scanCursorDates(uniqueDates) },
+    { name: 'gemini-cli', products: ['gemini-cli'], scan: () => scanGeminiDates(uniqueDates, undefined, options.projectAliases) },
+    { name: 'qwen-code', products: ['qwen-code'], scan: () => scanQwenDates(uniqueDates, undefined, options.projectAliases) },
+    { name: 'kimi-code', products: ['kimi-code'], scan: () => scanKimiDates(uniqueDates, undefined, options.projectAliases) },
+    { name: 'amp', products: ['amp'], scan: () => scanAmpDates(uniqueDates, undefined, options.projectAliases) },
+    { name: 'droid', products: ['droid'], scan: () => scanDroidDates(uniqueDates, undefined, options.projectAliases) },
     {
+      name: 'opencode',
       products: ['opencode'],
       scan: () => scanOpencodeDates(uniqueDates, {
         projectAliases: options.projectAliases,
         dbPaths: options.opencodeDbPaths,
       }),
     },
-    { products: ['pi'], scan: () => scanPiDates(uniqueDates, undefined, options.projectAliases) },
-    { products: ['grok-build'], scan: () => scanGrokBuildDates(uniqueDates, undefined, options.projectAliases) },
+    { name: 'pi', products: ['pi'], scan: () => scanPiDates(uniqueDates, undefined, options.projectAliases) },
+    { name: 'grok-build', products: ['grok-build'], scan: () => scanGrokBuildDates(uniqueDates, undefined, options.projectAliases) },
     {
+      name: 'trae',
       products: ['trae-cn', 'trae-intl', 'trae'],
       scan: () => scanTraeDates(uniqueDates, { projectAliases: options.projectAliases }),
     },
@@ -135,7 +140,21 @@ export async function scanDates(targetDates: string[], options: ScanOptions = {}
 
   const scanners = scannerDefinitions
     .filter(definition => !selected || definition.products.some(product => selected.has(product)))
-    .map(definition => definition.scan());
+    .map(async ({ name, scan }) => {
+      const startedAt = Date.now();
+      if (options.progress) console.log(`[scan] ${name} started`);
+      try {
+        const result = await scan();
+        if (options.progress) {
+          const breakdownCount = [...result.values()].reduce((count, breakdowns) => count + breakdowns.length, 0);
+          console.log(`[scan] ${name} completed in ${Date.now() - startedAt} ms (${breakdownCount} breakdowns)`);
+        }
+        return result;
+      } catch (error) {
+        if (options.progress) console.error(`[scan] ${name} failed after ${Date.now() - startedAt} ms`);
+        throw error;
+      }
+    });
 
   const results = await Promise.all(scanners);
 

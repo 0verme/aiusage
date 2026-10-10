@@ -404,9 +404,24 @@ function prompt(question: string): Promise<string> {
   });
 }
 
+async function runSyncStage<T>(name: string, action: () => Promise<T>, zh: boolean): Promise<T> {
+  const startedAt = Date.now();
+  const prefix = zh ? '同步阶段' : 'Sync stage';
+  console.log(`${prefix}: ${name} ${zh ? '开始' : 'started'}`);
+  try {
+    const result = await action();
+    console.log(`${prefix}: ${name} ${zh ? '完成' : 'completed'} (${Date.now() - startedAt} ms)`);
+    return result;
+  } catch (error) {
+    console.error(`${prefix}: ${name} ${zh ? '失败' : 'failed'} (${Date.now() - startedAt} ms)`);
+    throw error;
+  }
+}
+
 async function runSync(flags: Record<string, string | boolean>, positionals: string[] = []) {
   const config = await readConfig();
-  assertNoPositionals('sync', positionals, config.lang === 'zh');
+  const zh = config.lang === 'zh';
+  assertNoPositionals('sync', positionals, zh);
   if (flags.tool != null) {
     throw new Error(config.lang === 'zh'
       ? '--tool 仅用于 scan/report；sync 始终上传所选日期的完整快照'
@@ -439,16 +454,19 @@ async function runSync(flags: Record<string, string | boolean>, positionals: str
   console.log(`扫描 ${targetDates.length} 天 (${targetDates[0]} ~ ${targetDates[targetDates.length - 1]}) ...`);
 
   const [results, activityReport, memoryProcess] = await Promise.all([
-    scanDates(targetDates, {
+    runSyncStage(zh ? 'Token 扫描' : 'Token scan', () => scanDates(targetDates, {
       projectAliases: config.projectAliases,
       opencodeDbPaths: config.scanner?.opencodeDbPaths,
       pricingCatalog: pricing.catalog,
-    }),
-    buildActivityReport('all', { dates: targetDates, projectAliases: config.projectAliases }),
-    processMemoryDates(targetDates, config).catch((error) => {
-      console.warn(`Memory pipeline skipped: ${error instanceof Error ? error.message : String(error)}`);
-      return undefined;
-    }),
+      progress: true,
+    }), zh),
+    runSyncStage(zh ? 'Activity 扫描' : 'Activity scan', () =>
+      buildActivityReport('all', { dates: targetDates, projectAliases: config.projectAliases }), zh),
+    runSyncStage(zh ? 'Memory 处理' : 'Memory processing', () =>
+      processMemoryDates(targetDates, config).catch((error) => {
+        console.warn(`Memory pipeline skipped: ${error instanceof Error ? error.message : String(error)}`);
+        return undefined;
+      }), zh),
   ]);
   const visibility = config.privacy?.projectVisibility;
   const resultsByDate = new Map(results.map(result => [result.usageDate, result]));

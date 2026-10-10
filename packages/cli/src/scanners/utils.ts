@@ -169,3 +169,15 @@ export async function runWithConcurrency<T>(
   };
   await Promise.all(Array.from({ length: limit }, () => runWorker()));
 }
+
+export async function mapWithConcurrency<T, R>(
+  items: T[],
+  concurrency: number,
+  worker: (item: T, index: number) => Promise<R>,
+): Promise<R[]> {
+  const results = new Array<R>(items.length);
+  await runWithConcurrency(items, concurrency, async (item, index) => {
+    results[index] = await worker(item, index);
+  });
+  return results;
+}
