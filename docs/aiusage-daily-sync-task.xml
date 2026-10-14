@@ -42,7 +42,7 @@
   <Actions Context="Author">
     <Exec>
       <Command>D:\nodejs\aiusage.cmd</Command>
-      <Arguments>sync --today</Arguments>
+      <Arguments>sync --yesterday</Arguments>
       <WorkingDirectory>C:\Users\sakur</WorkingDirectory>
     </Exec>
   </Actions>

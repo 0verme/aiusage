@@ -5,7 +5,7 @@ import type { Provider, Product } from '@aiusage/shared';
 import { getCodexBaseDir } from './scanners/codex.js';
 import { getClaudeProjectDirs } from './scanners/claude-paths.js';
 import { resolvePiSessionDirs } from './scanners/pi.js';
-import { dateKey, inferProviderFromModel, parseTs, resolveProjectFields, runWithConcurrency, walkFiles, type ProjectFields } from './scanners/utils.js';
+import { dateKey, dateWindowStartMs, filterFilesModifiedSince, inferProviderFromModel, parseTs, resolveProjectFields, runWithConcurrency, walkFiles, type ProjectFields } from './scanners/utils.js';
 import type { ReportRange } from './report.js';
 
 const FILE_CONCURRENCY = 16;
@@ -658,7 +658,12 @@ async function scanPiActivity(
 ): Promise<ScanResult> {
   const acc = createAccumulator(targetDates, options.projectAliases);
   const sessionDirs = resolvePiSessionDirs(options.piDir);
-  const files = [...new Set((await Promise.all(sessionDirs.map(dir => walkFiles(dir, '.jsonl')))).flat())];
+  const discovered = [...new Set((await Promise.all(sessionDirs.map(dir => walkFiles(dir, '.jsonl')))).flat())];
+  // 与 token 扫描同理：mtime 早于窗口下界的会话文件不可能贡献目标日期的记录。
+  const files = await filterFilesModifiedSince(
+    discovered,
+    targetDates ? dateWindowStartMs(targetDates) : undefined,
+  );
   acc.stats.filesScanned = files.length;
   await runWithConcurrency(files, FILE_CONCURRENCY, async filePath => {
     await processPiFile(filePath, acc);

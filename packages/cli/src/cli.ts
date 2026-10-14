@@ -30,6 +30,7 @@ import { syncTraeCnUsage } from './trae-sync.js';
 import { syncTraeIntlUsage } from './trae-intl-sync.js';
 import { batchIngestDays } from './sync-batches.js';
 import { processMemoryDates, runMemoryCommand } from './memory-command.js';
+import { planSyncDays, resolveMemoryStageTimeoutMs, withStageTimeout } from './sync-plan.js';
 
 const argv = process.argv.slice(2);
 const command = argv[0];
@@ -404,9 +405,24 @@ function prompt(question: string): Promise<string> {
   });
 }
 
+async function runSyncStage<T>(name: string, action: () => Promise<T>, zh: boolean): Promise<T> {
+  const startedAt = Date.now();
+  const prefix = zh ? '同步阶段' : 'Sync stage';
+  console.log(`${prefix}: ${name} ${zh ? '开始' : 'started'}`);
+  try {
+    const result = await action();
+    console.log(`${prefix}: ${name} ${zh ? '完成' : 'completed'} (${Date.now() - startedAt} ms)`);
+    return result;
+  } catch (error) {
+    console.error(`${prefix}: ${name} ${zh ? '失败' : 'failed'} (${Date.now() - startedAt} ms)`);
+    throw error;
+  }
+}
+
 async function runSync(flags: Record<string, string | boolean>, positionals: string[] = []) {
   const config = await readConfig();
-  assertNoPositionals('sync', positionals, config.lang === 'zh');
+  const zh = config.lang === 'zh';
+  assertNoPositionals('sync', positionals, zh);
   if (flags.tool != null) {
     throw new Error(config.lang === 'zh'
       ? '--tool 仅用于 scan/report；sync 始终上传所选日期的完整快照'
@@ -439,27 +455,50 @@ async function runSync(flags: Record<string, string | boolean>, positionals: str
   console.log(`扫描 ${targetDates.length} 天 (${targetDates[0]} ~ ${targetDates[targetDates.length - 1]}) ...`);
 
   const [results, activityReport, memoryProcess] = await Promise.all([
-    scanDates(targetDates, {
+    runSyncStage(zh ? 'Token 扫描' : 'Token scan', () => scanDates(targetDates, {
       projectAliases: config.projectAliases,
       opencodeDbPaths: config.scanner?.opencodeDbPaths,
       pricingCatalog: pricing.catalog,
-    }),
-    buildActivityReport('all', { dates: targetDates, projectAliases: config.projectAliases }),
-    processMemoryDates(targetDates, config).catch((error) => {
-      console.warn(`Memory pipeline skipped: ${error instanceof Error ? error.message : String(error)}`);
-      return undefined;
-    }),
+      progress: true,
+    }), zh),
+    runSyncStage(zh ? 'Activity 扫描' : 'Activity scan', () =>
+      buildActivityReport('all', { dates: targetDates, projectAliases: config.projectAliases }), zh),
+    runSyncStage(zh ? 'Memory 处理' : 'Memory processing', () =>
+      // Memory 是非核心阶段：既不能无限期拖住上传，也不允许它的失败影响 token 上传。
+      withStageTimeout('Memory', resolveMemoryStageTimeoutMs(), (signal) =>
+        processMemoryDates(targetDates, config, { signal })).catch((error) => {
+        const reason = error instanceof Error ? error.message : String(error);
+        console.warn(zh
+          ? `Memory 阶段已跳过（不影响 token 上传）: ${reason}`
+          : `Memory stage skipped (token upload unaffected): ${reason}`);
+        return undefined;
+      }), zh),
   ]);
   const visibility = config.privacy?.projectVisibility;
   const resultsByDate = new Map(results.map(result => [result.usageDate, result]));
   const activityByDate = buildActivityPayloadByDate(activityReport.items, visibility);
-  const allDays: IngestDay[] = targetDates
-    .map((usageDate) => {
-      const breakdowns = applyPrivacy(resultsByDate.get(usageDate)?.breakdowns ?? [], visibility);
-      const activity = activityByDate.get(usageDate);
-      return { usageDate, breakdowns, activity };
-    })
-    .filter(day => day.breakdowns.length > 0 || (day.activity?.items.length ?? 0) > 0);
+  const candidates = targetDates.map((usageDate) => {
+    const breakdowns = applyPrivacy(resultsByDate.get(usageDate)?.breakdowns ?? [], visibility);
+    const activity = activityByDate.get(usageDate);
+    return {
+      usageDate,
+      breakdowns,
+      activity,
+      breakdownCount: breakdowns.length,
+      activityItemCount: activity?.items.length ?? 0,
+    };
+  });
+  // 服务端按「整天替换」写入，空 token 快照会把该日汇总清零并删光明细，因此必须显式挡下。
+  const syncPlan = planSyncDays(candidates);
+  for (const usageDate of syncPlan.skippedEmptyTokenDates) {
+    console.warn(zh
+      ? `已跳过 ${usageDate}: 本次未扫到 token 明细；空 token 快照会清空服务端该日汇总与明细，因此拒绝上传。`
+      : `Skipped ${usageDate}: no token breakdowns were scanned; an empty token snapshot would wipe the server's daily totals and breakdown rows for that day.`);
+  }
+  const uploadableDates = new Set(syncPlan.uploadDates);
+  const allDays: IngestDay[] = candidates
+    .filter(candidate => uploadableDates.has(candidate.usageDate))
+    .map(({ usageDate, breakdowns, activity }) => ({ usageDate, breakdowns, activity }));
 
   const memoryPayload = memoryProcess?.cloudPayload;
   if (allDays.length === 0 && !memoryPayload) {

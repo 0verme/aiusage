@@ -131,6 +131,21 @@ npm install -g @0verme/aiusage-cli@1.1.0
 
 The CLI and server are backwards-compatible — a newer CLI works with an older server and vice versa, as long as the `schemaVersion` matches.
 
+### Keep building and daily syncing separate
+
+Build the CLI in its own step; **never** let a scheduled sync job run `pnpm install` or
+`pnpm build`. A failing rebuild inside the sync job consumes the scheduler's time budget and
+can kill the upload before it happens, which is exactly how six consecutive days of data went
+missing in 2026-10. Run the prebuilt bundle instead:
+
+```bash
+node packages/cli/dist/daily-sync.js          # sync --yesterday, no install/build
+```
+
+Every build also writes `dist/build-info.json`; `aiusage doctor` prints it under
+**Configuration → Build** so you can tell which commit the scheduled run is actually using.
+See [**Daily Sync**](./daily-sync.md) for the full setup and troubleshooting order.
+
 ## Database Migrations
 
 When an update includes database schema changes (new migration files in `packages/worker/migrations/`), you need to apply them:

@@ -13,7 +13,10 @@ import { getClaudeProjectDirs } from "./scanners/claude-paths.js";
 import { resolvePiSessionDirs } from "./scanners/pi.js";
 import {
   dateKey,
+  dateWindowStartMs,
   fileModifiedTs,
+  filterFilesModifiedSince,
+  mapWithConcurrency,
   parseTs,
   resolveProjectFields,
   walkFiles,
@@ -21,12 +24,25 @@ import {
 import { resolveMemoryProject, type MemoryProjectResolverOptions } from "./memory-project.js";
 
 const MAX_LINE_BYTES = 64 * 1024 * 1024;
+const MEMORY_FILE_CONCURRENCY = 8;
+
+/** 非核心阶段的取消信号：abort 后立刻抛出，让调用方的超时能真正止损。 */
+function throwIfAborted(signal?: AbortSignal): void {
+  if (signal?.aborted) {
+    throw new Error('Memory 扫描已被取消（阶段超时）');
+  }
+}
 
 export interface ScanMemorySessionsOptions extends MemoryProjectResolverOptions {
   dates: readonly string[];
   codexDir?: string;
   claudeProjectsDirs?: string[];
   piDir?: string;
+  /**
+   * 可选取消信号。Memory 是非核心阶段，调用方可给它设超时；
+   * abort 后会在下一个文件边界尽快停下，不再继续读整段历史。
+   */
+  signal?: AbortSignal;
 }
 
 interface SessionBuilder {
@@ -46,17 +62,50 @@ export async function scanMemorySessions(
 ): Promise<NormalizedSession[]> {
   const dates = new Set(options.dates);
   if (dates.size === 0) return [];
+  const signal = options.signal;
 
-  const [codexFiles, claudeFiles, piFiles] = await Promise.all([
+  const [codexDiscovered, claudeJobs, piDiscovered] = await Promise.all([
     collectCodexFiles(options.codexDir),
     collectClaudeFiles(options.claudeProjectsDirs),
     collectPiFiles(options.piDir),
   ]);
+  // 与 token 扫描同理：会话文件是追加写入的，mtime 早于窗口下界的文件不可能贡献目标日期的记录。
+  const windowStartMs = dateWindowStartMs(dates);
+  const [codexFiles, keptClaudePaths, piFiles] = await Promise.all([
+    filterFilesModifiedSince(codexDiscovered, windowStartMs),
+    filterFilesModifiedSince(claudeJobs.map((job) => job.filePath), windowStartMs),
+    filterFilesModifiedSince(piDiscovered, windowStartMs),
+  ]);
+  const keptClaude = new Set(keptClaudePaths);
+  const claudeFiles = claudeJobs.filter((job) => keptClaude.has(job.filePath));
   const builders = [
-    ...(await Promise.all(codexFiles.map((filePath) => parseCodexFile(filePath, dates)))),
-    ...(await Promise.all(claudeFiles.map((job) => parseClaudeFile(job.filePath, job.fallbackCwd, dates)))),
-    ...(await Promise.all(piFiles.map((filePath) => parsePiFile(filePath, dates)))),
+    ...(await mapWithConcurrency(
+      codexFiles,
+      MEMORY_FILE_CONCURRENCY,
+      (filePath) => {
+        throwIfAborted(signal);
+        return parseCodexFile(filePath, dates);
+      },
+    )),
+    ...(await mapWithConcurrency(
+      claudeFiles,
+      MEMORY_FILE_CONCURRENCY,
+      (job) => {
+        throwIfAborted(signal);
+        return parseClaudeFile(job.filePath, job.fallbackCwd, dates);
+      },
+    )),
+    ...(await mapWithConcurrency(
+      piFiles,
+      MEMORY_FILE_CONCURRENCY,
+      (filePath) => {
+        throwIfAborted(signal);
+        return parsePiFile(filePath, dates);
+      },
+    )),
   ];
+
+  throwIfAborted(signal);
 
   const merged = mergeSessionBuilders(builders);
   const projectCache = new Map<string, Promise<ProjectIdentity>>();

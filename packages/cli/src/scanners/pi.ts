@@ -14,6 +14,8 @@ import {
   accumulate,
   finalize,
   emptyResult,
+  dateWindowStartMs,
+  filterFilesModifiedSince,
   type ProjectFields,
   scannerModelFields,
 } from './utils.js';
@@ -59,7 +61,9 @@ export async function scanPiDates(
 ): Promise<Map<string, IngestBreakdown[]>> {
   const dates = new Set(targetDates);
   const sessionDirs = resolvePiSessionDirs(baseDir);
-  const files = [...new Set((await Promise.all(sessionDirs.map(dir => walkFiles(dir, '.jsonl')))).flat())];
+  const discovered = [...new Set((await Promise.all(sessionDirs.map(dir => walkFiles(dir, '.jsonl')))).flat())];
+  // Pi 会话目录会累积到 GB 级，先用 mtime 跳过不可能落在目标日期集合内的历史文件。
+  const files = await filterFilesModifiedSince(discovered, dateWindowStartMs(dates));
   if (files.length === 0) return emptyResult(dates);
 
   const grouped = initDateMap(dates);
