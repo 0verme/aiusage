@@ -13,7 +13,9 @@ import { getClaudeProjectDirs } from "./scanners/claude-paths.js";
 import { resolvePiSessionDirs } from "./scanners/pi.js";
 import {
   dateKey,
+  dateWindowStartMs,
   fileModifiedTs,
+  filterFilesModifiedSince,
   mapWithConcurrency,
   parseTs,
   resolveProjectFields,
@@ -49,11 +51,20 @@ export async function scanMemorySessions(
   const dates = new Set(options.dates);
   if (dates.size === 0) return [];
 
-  const [codexFiles, claudeFiles, piFiles] = await Promise.all([
+  const [codexDiscovered, claudeJobs, piDiscovered] = await Promise.all([
     collectCodexFiles(options.codexDir),
     collectClaudeFiles(options.claudeProjectsDirs),
     collectPiFiles(options.piDir),
   ]);
+  // 与 token 扫描同理：会话文件是追加写入的，mtime 早于窗口下界的文件不可能贡献目标日期的记录。
+  const windowStartMs = dateWindowStartMs(dates);
+  const [codexFiles, keptClaudePaths, piFiles] = await Promise.all([
+    filterFilesModifiedSince(codexDiscovered, windowStartMs),
+    filterFilesModifiedSince(claudeJobs.map((job) => job.filePath), windowStartMs),
+    filterFilesModifiedSince(piDiscovered, windowStartMs),
+  ]);
+  const keptClaude = new Set(keptClaudePaths);
+  const claudeFiles = claudeJobs.filter((job) => keptClaude.has(job.filePath));
   const builders = [
     ...(await mapWithConcurrency(
       codexFiles,

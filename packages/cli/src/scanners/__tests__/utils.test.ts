@@ -1,4 +1,7 @@
 import { describe, it, expect } from 'vitest';
+import { mkdtemp, rm, stat, utimes, writeFile } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 import {
   parseTs,
   dateKey,
@@ -8,6 +11,8 @@ import {
   normalizeModelName,
   scannerModelFields,
   mapWithConcurrency,
+  dateWindowStartMs,
+  filterFilesModifiedSince,
 } from '../utils.js';
 
 describe('parseTs', () => {
@@ -72,6 +77,69 @@ describe('mapWithConcurrency', () => {
 
     expect(peakWorkers).toBe(2);
     expect(results).toEqual([0, 2, 4, 6, 8]);
+  });
+});
+
+describe('dateWindowStartMs', () => {
+  it('returns local midnight of the earliest requested date', () => {
+    expect(dateWindowStartMs(['2026-10-09', '2026-10-07', '2026-10-11']))
+      .toBe(new Date(2026, 9, 7).getTime());
+  });
+
+  it('returns undefined when no usable date is supplied', () => {
+    expect(dateWindowStartMs([])).toBeUndefined();
+    expect(dateWindowStartMs(['not-a-date'])).toBeUndefined();
+  });
+});
+
+describe('filterFilesModifiedSince', () => {
+  it('drops files last modified before the window and keeps the rest', async () => {
+    const dir = await mkdtemp(join(tmpdir(), 'aiusage-window-'));
+    try {
+      const stale = join(dir, 'stale.jsonl');
+      const recent = join(dir, 'recent.jsonl');
+      await writeFile(stale, '{}\n', 'utf-8');
+      await writeFile(recent, '{}\n', 'utf-8');
+      await utimes(stale, new Date(2026, 9, 1), new Date(2026, 9, 1));
+      await utimes(recent, new Date(2026, 9, 10), new Date(2026, 9, 10));
+
+      const kept = await filterFilesModifiedSince([stale, recent], new Date(2026, 9, 9).getTime());
+      expect(kept).toEqual([recent]);
+    } finally {
+      await rm(dir, { recursive: true, force: true });
+    }
+  });
+
+  it('keeps every file when no window bound is supplied', async () => {
+    const dir = await mkdtemp(join(tmpdir(), 'aiusage-window-'));
+    try {
+      const file = join(dir, 'a.jsonl');
+      await writeFile(file, '{}\n', 'utf-8');
+      await utimes(file, new Date(2020, 0, 1), new Date(2020, 0, 1));
+      expect(await filterFilesModifiedSince([file], undefined)).toEqual([file]);
+    } finally {
+      await rm(dir, { recursive: true, force: true });
+    }
+  });
+
+  it('treats the window bound as inclusive', async () => {
+    const dir = await mkdtemp(join(tmpdir(), 'aiusage-window-'));
+    try {
+      const file = join(dir, 'edge.jsonl');
+      await writeFile(file, '{}\n', 'utf-8');
+      await utimes(file, new Date(2026, 9, 9), new Date(2026, 9, 9));
+      const observedMtimeMs = (await stat(file)).mtimeMs;
+
+      expect(await filterFilesModifiedSince([file], observedMtimeMs)).toEqual([file]);
+      expect(await filterFilesModifiedSince([file], observedMtimeMs + 1)).toEqual([]);
+    } finally {
+      await rm(dir, { recursive: true, force: true });
+    }
+  });
+
+  it('keeps files whose stat fails so callers still get a chance to read them', async () => {
+    const missing = join(tmpdir(), 'aiusage-window-does-not-exist.jsonl');
+    expect(await filterFilesModifiedSince([missing], Date.now())).toEqual([missing]);
   });
 });
 

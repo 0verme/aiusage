@@ -170,6 +170,47 @@ export async function runWithConcurrency<T>(
   await Promise.all(Array.from({ length: limit }, () => runWorker()));
 }
 
+/**
+ * 目标日期集合的窗口下界（本地零点），与 dateKey() 的本地时区语义保持一致。
+ * 日期为空或格式非法时返回 undefined，调用方应视为“不启用窗口过滤”。
+ */
+export function dateWindowStartMs(dates: Iterable<string>): number | undefined {
+  let start: number | undefined;
+  for (const value of dates) {
+    const match = /^(\d{4})-(\d{2})-(\d{2})$/.exec(value);
+    if (!match) continue;
+    const ms = new Date(Number(match[1]), Number(match[2]) - 1, Number(match[3])).getTime();
+    if (!Number.isFinite(ms)) continue;
+    if (start === undefined || ms < start) start = ms;
+  }
+  return start;
+}
+
+/**
+ * 丢弃 mtime 早于窗口下界的会话文件，避免用单日扫描读取整段历史。
+ *
+ * 会话文件是追加写入的，因此 mtime 是文件内所有记录时间戳的上界：当 mtime 早于窗口下界时，
+ * 文件内不可能存在落在目标日期集合里的记录。缺少时间戳的记录会回退到 mtime
+ * （见 fileModifiedTs），其日期同样早于窗口，本来就会被丢弃 —— 所以提前跳过与全量读取的
+ * 统计结果完全一致。stat 失败时保守保留文件，交由读取阶段处理。
+ */
+export async function filterFilesModifiedSince(
+  files: readonly string[],
+  windowStartMs: number | undefined,
+  concurrency = 16,
+): Promise<string[]> {
+  if (windowStartMs === undefined || files.length === 0) return [...files];
+  const keep = new Array<boolean>(files.length).fill(false);
+  await runWithConcurrency([...files], concurrency, async (filePath, index) => {
+    try {
+      keep[index] = (await stat(filePath)).mtimeMs >= windowStartMs;
+    } catch {
+      keep[index] = true;
+    }
+  });
+  return files.filter((_, index) => keep[index]);
+}
+
 export async function mapWithConcurrency<T, R>(
   items: T[],
   concurrency: number,
