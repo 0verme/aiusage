@@ -141,6 +141,7 @@ See the [**Update Guide**](./docs/update-guide.md) for detailed instructions, in
 | ---------- | ------------- |
 | [**Deployment Guide**](./docs/deployment-guide.md) | Full setup walkthrough, CLI reference, API docs |
 | [**Update Guide**](./docs/update-guide.md) | Fork-based update mechanism and auto-deploy setup |
+| [**Daily Sync**](./docs/daily-sync.md) | Build/sync separation, scheduler setup, build provenance |
 | [**CLI README**](./packages/cli/README.md) | CLI tool details and all commands |
 
 ## License

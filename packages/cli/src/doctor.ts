@@ -8,6 +8,7 @@ import { getCodexBaseDir } from './scanners/codex.js';
 import { resolveKimiCodeHome } from './scanners/kimi.js';
 import { detectOpenCodeSqliteRuntime, resolveOpenCodeSources } from './scanners/opencode.js';
 import { resolveTraeNativeCacheDir, resolveTokscaleTraeCacheDir } from './scanners/trae.js';
+import { formatBuildInfo, getBuildInfo } from './version.js';
 import type { Lang } from './i18n.js';
 
 export interface Check {
@@ -34,6 +35,8 @@ const msgs = {
     server: 'Server',
     lastSync: 'Last sync',
     lastSyncNone: 'No record',
+    build: 'Build',
+    buildUnknown: 'dist/build-info.json missing - the running bundle cannot be tied to a revision; rebuild or install a pinned version',
     notInstalled: 'Not installed',
     installedNoData: 'Installed, no usage data yet',
     hasData: (n: number) => `${n} session${n > 1 ? 's' : ''} found`,
@@ -62,6 +65,8 @@ const msgs = {
     server: '服务端',
     lastSync: '上次同步',
     lastSyncNone: '暂无记录',
+    build: '构建来源',
+    buildUnknown: '缺少 dist/build-info.json，无法确认当前 bundle 出自哪次提交；请重新构建或安装固定版本',
     notInstalled: '未安装',
     installedNoData: '已安装，暂无使用数据',
     hasData: (n: number) => `发现 ${n} 个会话`,
@@ -128,6 +133,15 @@ export async function runDoctor(lang: Lang = 'zh'): Promise<Check[]> {
   } else {
     checks.push({ group: g1, name: s.deviceId, status: 'warn', message: s.deviceIdMissing });
   }
+
+  // 构建来源：dist/ 不入版本管理，这里是唯一能判断「调度在跑哪份代码」的地方。
+  const buildInfo = getBuildInfo();
+  checks.push({
+    group: g1,
+    name: s.build,
+    status: buildInfo.missing ? 'warn' : 'ok',
+    message: buildInfo.missing ? s.buildUnknown : formatBuildInfo(buildInfo),
+  });
 
   // 同步目标
   const g2 = s.groupSync;
