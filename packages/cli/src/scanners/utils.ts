@@ -187,26 +187,66 @@ export function dateWindowStartMs(dates: Iterable<string>): number | undefined {
 }
 
 /**
- * 丢弃 mtime 早于窗口下界的会话文件，避免用单日扫描读取整段历史。
+ * mtime 预过滤的保守安全边界，默认 7 天。
  *
- * 会话文件是追加写入的，因此 mtime 是文件内所有记录时间戳的上界：当 mtime 早于窗口下界时，
- * 文件内不可能存在落在目标日期集合里的记录。缺少时间戳的记录会回退到 mtime
- * （见 fileModifiedTs），其日期同样早于窗口，本来就会被丢弃 —— 所以提前跳过与全量读取的
- * 统计结果完全一致。stat 失败时保守保留文件，交由读取阶段处理。
+ * 预过滤的推导前提是「追加写入 ⇒ 文件 mtime 不小于文件内任何记录的时间戳」。
+ * 该前提在下列情况下会被打破，此时若直接按窗口下界裁剪就会漏掉窗口内的记录：
+ *   - 系统时钟回拨（先写出带较新时间戳的记录，再以旧 mtime 落盘）；
+ *   - 写入方时区理解错误（把本地时间当 UTC 解释，可让记录时间戳比 mtime 大最多 8 小时）；
+ *   - 会话文件从其它机器/备份按原 mtime 回灌，而对方时钟与本机不一致。
+ *
+ * 因此只有当 mtime 比窗口下界早出这个边界时才真的跳过。实测本机 Pi 会话库
+ * （786 文件 / 1057 MB）在 7 天下仍能跳过 94.66% 的文件、只需读 69.65 MB，
+ * 代价可以忽略。
+ */
+export const MTIME_PREFILTER_MARGIN_MS = 7 * 24 * 60 * 60 * 1000;
+
+/**
+ * 保留全部文件、不做 mtime 裁剪。
+ *
+ * 当运维怀疑时钟异常、时区错位或刚做过历史回灌时，可用它强制全量扫描，
+ * 作为“宁可慢、不可错”的逃生通道：`AIUSAGE_MTIME_PREFILTER=off`。
+ */
+export function isMtimePrefilterEnabled(env: NodeJS.ProcessEnv = process.env): boolean {
+  const value = env.AIUSAGE_MTIME_PREFILTER?.trim().toLowerCase();
+  if (!value) return true;
+  return !['off', '0', 'false', 'no', 'disabled', 'disable'].includes(value);
+}
+
+/**
+ * 丢弃 mtime 明显早于窗口下界的会话文件，避免用单日扫描读取整段历史。
+ *
+ * 安全策略（任何一项不满足都回退到“保留文件”）：
+ *   1. 未提供窗口下界（例如 --range all）→ 不过滤；
+ *   2. AIUSAGE_MTIME_PREFILTER=off → 不过滤；
+ *   3. stat 失败或抛错 → 保留；
+ *   4. mtime 非有限值，或早于 2015-01-01（与 parseTs 的脏数据下界一致）→ 保留；
+ *   5. 只当 mtime < 窗口下界 − MTIME_PREFILTER_MARGIN_MS 时才跳过。
+ *
+ * 因此判定为“跳过”需要同时满足「stat 成功」和「mtime 正常且足够旧」两个条件，
+ * 任何异常一律保守保留，交给读取阶段决定。
  */
 export async function filterFilesModifiedSince(
   files: readonly string[],
   windowStartMs: number | undefined,
   concurrency = 16,
+  env: NodeJS.ProcessEnv = process.env,
 ): Promise<string[]> {
   if (windowStartMs === undefined || files.length === 0) return [...files];
-  const keep = new Array<boolean>(files.length).fill(false);
+  if (!isMtimePrefilterEnabled(env)) return [...files];
+
+  const cutoffMs = windowStartMs - MTIME_PREFILTER_MARGIN_MS;
+  // 默认保留：只有同时确认 stat 成功且 mtime 正常且确实过旧，才置为 false。
+  const keep = new Array<boolean>(files.length).fill(true);
   await runWithConcurrency([...files], concurrency, async (filePath, index) => {
+    let mtimeMs: number;
     try {
-      keep[index] = (await stat(filePath)).mtimeMs >= windowStartMs;
+      mtimeMs = (await stat(filePath)).mtimeMs;
     } catch {
-      keep[index] = true;
+      return;
     }
+    if (!Number.isFinite(mtimeMs) || mtimeMs < MIN_VALID_MS) return;
+    keep[index] = mtimeMs >= cutoffMs;
   });
   return files.filter((_, index) => keep[index]);
 }

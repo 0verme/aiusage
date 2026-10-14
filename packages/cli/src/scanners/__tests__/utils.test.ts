@@ -13,6 +13,8 @@ import {
   mapWithConcurrency,
   dateWindowStartMs,
   filterFilesModifiedSince,
+  isMtimePrefilterEnabled,
+  MTIME_PREFILTER_MARGIN_MS,
 } from '../utils.js';
 
 describe('parseTs', () => {
@@ -93,53 +95,76 @@ describe('dateWindowStartMs', () => {
 });
 
 describe('filterFilesModifiedSince', () => {
-  it('drops files last modified before the window and keeps the rest', async () => {
-    const dir = await mkdtemp(join(tmpdir(), 'aiusage-window-'));
-    try {
-      const stale = join(dir, 'stale.jsonl');
-      const recent = join(dir, 'recent.jsonl');
-      await writeFile(stale, '{}\n', 'utf-8');
-      await writeFile(recent, '{}\n', 'utf-8');
-      await utimes(stale, new Date(2026, 9, 1), new Date(2026, 9, 1));
-      await utimes(recent, new Date(2026, 9, 10), new Date(2026, 9, 10));
+  const WINDOW_START_MS = new Date(2026, 9, 9).getTime();
+  const CUTOFF_MS = WINDOW_START_MS - MTIME_PREFILTER_MARGIN_MS;
 
-      const kept = await filterFilesModifiedSince([stale, recent], new Date(2026, 9, 9).getTime());
-      expect(kept).toEqual([recent]);
-    } finally {
-      await rm(dir, { recursive: true, force: true });
-    }
+  async function makeFile(name: string, mtime: Date | number): Promise<string> {
+    const dir = await mkdtemp(join(tmpdir(), 'aiusage-window-'));
+    const file = join(dir, name);
+    await writeFile(file, '{}\n', 'utf-8');
+    const stamp = mtime instanceof Date ? mtime : new Date(mtime);
+    await utimes(file, stamp, stamp);
+    return file;
+  }
+
+  it('keeps files inside the window and files inside the safety margin', async () => {
+    const inWindow = await makeFile('in-window.jsonl', new Date(2026, 9, 9, 12));
+    const insideMargin = await makeFile('inside-margin.jsonl', new Date(CUTOFF_MS + 60 * 60 * 1000));
+    const outsideMargin = await makeFile('outside-margin.jsonl', new Date(CUTOFF_MS - 60 * 60 * 1000));
+
+    const kept = await filterFilesModifiedSince(
+      [inWindow, insideMargin, outsideMargin],
+      WINDOW_START_MS,
+    );
+
+    expect(kept).toEqual([inWindow, insideMargin]);
+  });
+
+  it('treats the safety cutoff as inclusive', async () => {
+    const file = await makeFile('cutoff.jsonl', new Date(2026, 9, 1));
+    const observedMtimeMs = (await stat(file)).mtimeMs;
+
+    // cutoff == mtime → 保留；cutoff 比 mtime 晚 1ms → 跳过。
+    expect(await filterFilesModifiedSince([file], observedMtimeMs + MTIME_PREFILTER_MARGIN_MS)).toEqual([file]);
+    expect(await filterFilesModifiedSince([file], observedMtimeMs + MTIME_PREFILTER_MARGIN_MS + 1)).toEqual([]);
   });
 
   it('keeps every file when no window bound is supplied', async () => {
-    const dir = await mkdtemp(join(tmpdir(), 'aiusage-window-'));
-    try {
-      const file = join(dir, 'a.jsonl');
-      await writeFile(file, '{}\n', 'utf-8');
-      await utimes(file, new Date(2020, 0, 1), new Date(2020, 0, 1));
-      expect(await filterFilesModifiedSince([file], undefined)).toEqual([file]);
-    } finally {
-      await rm(dir, { recursive: true, force: true });
-    }
-  });
-
-  it('treats the window bound as inclusive', async () => {
-    const dir = await mkdtemp(join(tmpdir(), 'aiusage-window-'));
-    try {
-      const file = join(dir, 'edge.jsonl');
-      await writeFile(file, '{}\n', 'utf-8');
-      await utimes(file, new Date(2026, 9, 9), new Date(2026, 9, 9));
-      const observedMtimeMs = (await stat(file)).mtimeMs;
-
-      expect(await filterFilesModifiedSince([file], observedMtimeMs)).toEqual([file]);
-      expect(await filterFilesModifiedSince([file], observedMtimeMs + 1)).toEqual([]);
-    } finally {
-      await rm(dir, { recursive: true, force: true });
-    }
+    const file = await makeFile('no-window.jsonl', new Date(2020, 0, 1));
+    expect(await filterFilesModifiedSince([file], undefined)).toEqual([file]);
   });
 
   it('keeps files whose stat fails so callers still get a chance to read them', async () => {
-    const missing = join(tmpdir(), 'aiusage-window-does-not-exist.jsonl');
+    const missing = join(tmpdir(), `aiusage-window-missing-${Date.now()}.jsonl`);
     expect(await filterFilesModifiedSince([missing], Date.now())).toEqual([missing]);
+  });
+
+  it('keeps files with implausible mtimes (epoch 0 or before 2015)', async () => {
+    const epoch = await makeFile('epoch.jsonl', new Date(0));
+    const ancient = await makeFile('ancient.jsonl', new Date('2010-05-05T00:00:00Z'));
+
+    expect(await filterFilesModifiedSince([epoch, ancient], WINDOW_START_MS)).toEqual([epoch, ancient]);
+  });
+
+  it('keeps everything when AIUSAGE_MTIME_PREFILTER disables the optimisation', async () => {
+    const stale = await makeFile('stale.jsonl', new Date(2020, 0, 1));
+    const env = { AIUSAGE_MTIME_PREFILTER: 'off' } as NodeJS.ProcessEnv;
+
+    expect(await filterFilesModifiedSince([stale], WINDOW_START_MS, 16, env)).toEqual([stale]);
+  });
+
+  it('enables the optimisation for unset or truthy AIUSAGE_MTIME_PREFILTER', async () => {
+    const stale = await makeFile('stale.jsonl', new Date(2020, 0, 1));
+
+    expect(isMtimePrefilterEnabled({} as NodeJS.ProcessEnv)).toBe(true);
+    expect(isMtimePrefilterEnabled({ AIUSAGE_MTIME_PREFILTER: 'on' } as NodeJS.ProcessEnv)).toBe(true);
+    expect(isMtimePrefilterEnabled({ AIUSAGE_MTIME_PREFILTER: 'off' } as NodeJS.ProcessEnv)).toBe(false);
+    expect(isMtimePrefilterEnabled({ AIUSAGE_MTIME_PREFILTER: 'FALSE' } as NodeJS.ProcessEnv)).toBe(false);
+    expect(await filterFilesModifiedSince([stale], WINDOW_START_MS, 16, {} as NodeJS.ProcessEnv)).toEqual([]);
+  });
+
+  it('uses a multi-day safety margin', () => {
+    expect(MTIME_PREFILTER_MARGIN_MS).toBeGreaterThanOrEqual(2 * 24 * 60 * 60 * 1000);
   });
 });
 
