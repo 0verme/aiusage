@@ -70,13 +70,20 @@ export async function runMemoryCommand(
   throw new Error("用法: aiusage memory scan|list|projects|show <project>");
 }
 
+export interface MemoryProcessOptions {
+  /** 可选取消信号；调用方用它给这个非核心阶段设墙钟上限。 */
+  signal?: AbortSignal;
+}
+
 export async function processMemoryDates(
   dates: readonly string[],
   config: AIUsageConfig,
+  options: MemoryProcessOptions = {},
 ): Promise<MemoryProcessResult> {
   const results = await scanMemorySessions({
     dates,
     projectAliases: config.projectAliases,
+    signal: options.signal,
   });
   const extractor = new RuleBasedMemoryExtractor();
   const extractions = results.map((session) => extractor.extract(session));

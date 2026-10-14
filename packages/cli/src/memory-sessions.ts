@@ -26,11 +26,23 @@ import { resolveMemoryProject, type MemoryProjectResolverOptions } from "./memor
 const MAX_LINE_BYTES = 64 * 1024 * 1024;
 const MEMORY_FILE_CONCURRENCY = 8;
 
+/** 非核心阶段的取消信号：abort 后立刻抛出，让调用方的超时能真正止损。 */
+function throwIfAborted(signal?: AbortSignal): void {
+  if (signal?.aborted) {
+    throw new Error('Memory 扫描已被取消（阶段超时）');
+  }
+}
+
 export interface ScanMemorySessionsOptions extends MemoryProjectResolverOptions {
   dates: readonly string[];
   codexDir?: string;
   claudeProjectsDirs?: string[];
   piDir?: string;
+  /**
+   * 可选取消信号。Memory 是非核心阶段，调用方可给它设超时；
+   * abort 后会在下一个文件边界尽快停下，不再继续读整段历史。
+   */
+  signal?: AbortSignal;
 }
 
 interface SessionBuilder {
@@ -50,6 +62,7 @@ export async function scanMemorySessions(
 ): Promise<NormalizedSession[]> {
   const dates = new Set(options.dates);
   if (dates.size === 0) return [];
+  const signal = options.signal;
 
   const [codexDiscovered, claudeJobs, piDiscovered] = await Promise.all([
     collectCodexFiles(options.codexDir),
@@ -69,19 +82,30 @@ export async function scanMemorySessions(
     ...(await mapWithConcurrency(
       codexFiles,
       MEMORY_FILE_CONCURRENCY,
-      (filePath) => parseCodexFile(filePath, dates),
+      (filePath) => {
+        throwIfAborted(signal);
+        return parseCodexFile(filePath, dates);
+      },
     )),
     ...(await mapWithConcurrency(
       claudeFiles,
       MEMORY_FILE_CONCURRENCY,
-      (job) => parseClaudeFile(job.filePath, job.fallbackCwd, dates),
+      (job) => {
+        throwIfAborted(signal);
+        return parseClaudeFile(job.filePath, job.fallbackCwd, dates);
+      },
     )),
     ...(await mapWithConcurrency(
       piFiles,
       MEMORY_FILE_CONCURRENCY,
-      (filePath) => parsePiFile(filePath, dates),
+      (filePath) => {
+        throwIfAborted(signal);
+        return parsePiFile(filePath, dates);
+      },
     )),
   ];
+
+  throwIfAborted(signal);
 
   const merged = mergeSessionBuilders(builders);
   const projectCache = new Map<string, Promise<ProjectIdentity>>();

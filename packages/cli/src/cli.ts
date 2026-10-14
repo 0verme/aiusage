@@ -30,6 +30,7 @@ import { syncTraeCnUsage } from './trae-sync.js';
 import { syncTraeIntlUsage } from './trae-intl-sync.js';
 import { batchIngestDays } from './sync-batches.js';
 import { processMemoryDates, runMemoryCommand } from './memory-command.js';
+import { planSyncDays, resolveMemoryStageTimeoutMs, withStageTimeout } from './sync-plan.js';
 
 const argv = process.argv.slice(2);
 const command = argv[0];
@@ -463,21 +464,41 @@ async function runSync(flags: Record<string, string | boolean>, positionals: str
     runSyncStage(zh ? 'Activity 扫描' : 'Activity scan', () =>
       buildActivityReport('all', { dates: targetDates, projectAliases: config.projectAliases }), zh),
     runSyncStage(zh ? 'Memory 处理' : 'Memory processing', () =>
-      processMemoryDates(targetDates, config).catch((error) => {
-        console.warn(`Memory pipeline skipped: ${error instanceof Error ? error.message : String(error)}`);
+      // Memory 是非核心阶段：既不能无限期拖住上传，也不允许它的失败影响 token 上传。
+      withStageTimeout('Memory', resolveMemoryStageTimeoutMs(), (signal) =>
+        processMemoryDates(targetDates, config, { signal })).catch((error) => {
+        const reason = error instanceof Error ? error.message : String(error);
+        console.warn(zh
+          ? `Memory 阶段已跳过（不影响 token 上传）: ${reason}`
+          : `Memory stage skipped (token upload unaffected): ${reason}`);
         return undefined;
       }), zh),
   ]);
   const visibility = config.privacy?.projectVisibility;
   const resultsByDate = new Map(results.map(result => [result.usageDate, result]));
   const activityByDate = buildActivityPayloadByDate(activityReport.items, visibility);
-  const allDays: IngestDay[] = targetDates
-    .map((usageDate) => {
-      const breakdowns = applyPrivacy(resultsByDate.get(usageDate)?.breakdowns ?? [], visibility);
-      const activity = activityByDate.get(usageDate);
-      return { usageDate, breakdowns, activity };
-    })
-    .filter(day => day.breakdowns.length > 0 || (day.activity?.items.length ?? 0) > 0);
+  const candidates = targetDates.map((usageDate) => {
+    const breakdowns = applyPrivacy(resultsByDate.get(usageDate)?.breakdowns ?? [], visibility);
+    const activity = activityByDate.get(usageDate);
+    return {
+      usageDate,
+      breakdowns,
+      activity,
+      breakdownCount: breakdowns.length,
+      activityItemCount: activity?.items.length ?? 0,
+    };
+  });
+  // 服务端按「整天替换」写入，空 token 快照会把该日汇总清零并删光明细，因此必须显式挡下。
+  const syncPlan = planSyncDays(candidates);
+  for (const usageDate of syncPlan.skippedEmptyTokenDates) {
+    console.warn(zh
+      ? `已跳过 ${usageDate}: 本次未扫到 token 明细；空 token 快照会清空服务端该日汇总与明细，因此拒绝上传。`
+      : `Skipped ${usageDate}: no token breakdowns were scanned; an empty token snapshot would wipe the server's daily totals and breakdown rows for that day.`);
+  }
+  const uploadableDates = new Set(syncPlan.uploadDates);
+  const allDays: IngestDay[] = candidates
+    .filter(candidate => uploadableDates.has(candidate.usageDate))
+    .map(({ usageDate, breakdowns, activity }) => ({ usageDate, breakdowns, activity }));
 
   const memoryPayload = memoryProcess?.cloudPayload;
   if (allDays.length === 0 && !memoryPayload) {
