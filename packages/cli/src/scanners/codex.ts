@@ -1,9 +1,10 @@
 import { createReadStream } from 'node:fs';
-import { readdir, readFile } from 'node:fs/promises';
+import { readdir } from 'node:fs/promises';
 import { basename, join } from 'node:path';
 import { homedir } from 'node:os';
 import { createInterface } from 'node:readline';
-import { calculateCost, type IngestBreakdown, type PricingCatalog } from '@aiusage/shared';
+import * as zlib from 'node:zlib';
+import { calculateCost, type CostEvidence, type IngestBreakdown, type PricingCatalog } from '@aiusage/shared';
 import { fileModifiedTs, normalizeModelName, runWithConcurrency, resolveProjectFields, type ProjectFields } from './utils.js';
 
 const FILE_CONCURRENCY = 16;
@@ -26,6 +27,8 @@ interface CodexPayload {
   forked_from_id?: string;
   source?: unknown;
   thread_source?: string;
+  service_tier?: string;
+  serviceTier?: string;
   turn_id?: string;
   started_at?: number;
   info?: {
@@ -33,6 +36,8 @@ interface CodexPayload {
     model_name?: string;
     last_token_usage?: TokenUsage;
     total_token_usage?: TokenUsage;
+    service_tier?: string;
+    serviceTier?: string;
   };
 }
 
@@ -44,6 +49,8 @@ interface TokenUsage {
   output_tokens?: number;
   reasoning_output_tokens?: number;
   total_tokens?: number;
+  service_tier?: string;
+  serviceTier?: string;
 }
 
 interface CodexTotals {
@@ -57,6 +64,8 @@ interface CodexTotals {
 interface CodexFileState {
   currentModel: string;
   currentRawModel: string;
+  currentServiceTier?: CodexServiceTier;
+  hasServiceTierEvidence: boolean;
   projectFields: ProjectFields;
   hasSessionWorkspace: boolean;
   previousTotals?: CodexTotals;
@@ -81,7 +90,9 @@ interface CodexUsageEvent {
   cachedInputTokens: number;
   cacheWriteTokens: number;
   outputTokens: number;
+  sourceOutputTokens: number;
   reasoningOutputTokens: number;
+  costEvidence: CostEvidence;
   costUSD?: number;
   pricingVersion?: string;
 }
@@ -112,9 +123,7 @@ export async function scanCodexDates(
   for (const targetDate of targetDateSet) groupedByDate.set(targetDate, new Map());
 
   const baseDir = getCodexBaseDir(codexDir);
-  const serviceTier = await detectCodexServiceTier(baseDir);
-
-  const sessionFiles = await collectSessionFiles(baseDir);
+  const sessionFiles = await collectCodexSessionFiles(baseDir);
   if (sessionFiles.length === 0) {
     return new Map([...targetDateSet].map((targetDate) => [targetDate, []]));
   }
@@ -123,7 +132,7 @@ export async function scanCodexDates(
   // first-wins 归属不受异步完成顺序影响。
   const eventsByFile: CodexUsageEvent[][] = Array.from({ length: sessionFiles.length }, () => []);
   await runWithConcurrency(sessionFiles, FILE_CONCURRENCY, async (filePath, index) => {
-    eventsByFile[index] = await processCodexFile(filePath, projectAliases, serviceTier, pricingCatalog);
+    eventsByFile[index] = await processCodexFile(filePath, projectAliases, pricingCatalog);
   });
 
   // 跨文件去重，但 key 必须带 session/fork scope；纯 token 数值全局去重会误杀独立会话。
@@ -142,26 +151,58 @@ export async function scanCodexDates(
   );
 }
 
+/** Read Codex JSONL and Zstandard-compressed JSONL archives without buffering whole files. */
+export async function* readCodexSessionLines(filePath: string): AsyncGenerator<string> {
+  const input = createReadStream(filePath);
+  let decompressor: ReturnType<typeof zlib.createZstdDecompress> | undefined;
+  let rl: ReturnType<typeof createInterface> | undefined;
+  try {
+    if (filePath.toLowerCase().endsWith('.jsonl.zst')) {
+      if (typeof zlib.createZstdDecompress !== 'function') {
+        throw new Error(
+          'Codex .jsonl.zst archives require Node.js zstd support (Node 22.15+ or 23.8+); refusing to omit compressed sessions.',
+        );
+      }
+      decompressor = zlib.createZstdDecompress();
+    }
+    const lineInput = decompressor ? input.pipe(decompressor) : input;
+    rl = createInterface({ input: lineInput, crlfDelay: Infinity });
+    for await (const line of rl) yield line;
+  } finally {
+    rl?.close();
+    input.destroy();
+    decompressor?.destroy();
+  }
+}
+
+export async function collectCodexSessionFiles(baseDir: string): Promise<string[]> {
+  // 与 Codex 本身的生命周期一致：活动会话优先，归档副本随后；各目录
+  // 内按路径排序，确保 fork 重放的 first-wins 归属稳定。
+  const activePaths: string[] = [];
+  await walkDir(join(baseDir, 'sessions'), activePaths);
+  activePaths.sort();
+
+  const archivedPaths: string[] = [];
+  await walkDir(join(baseDir, 'archived_sessions'), archivedPaths);
+  archivedPaths.sort();
+
+  return [...activePaths, ...archivedPaths];
+}
+
 /** 流式逐行读取单个 Codex JSONL 文件 */
 async function processCodexFile(
   filePath: string,
   projectAliases: Record<string, string> | undefined,
-  serviceTier: CodexServiceTier,
   pricingCatalog?: PricingCatalog,
 ): Promise<CodexUsageEvent[]> {
   const events: CodexUsageEvent[] = [];
-  const input = createReadStream(filePath, { encoding: 'utf-8' });
   try {
-    const rl = createInterface({
-      input,
-      crlfDelay: Infinity,
-    });
-
-    const fileSessionId = basename(filePath, '.jsonl');
+    const fileSessionId = basename(filePath).replace(/\.jsonl(?:\.zst)?$/i, '');
     const fallbackTs = await fileModifiedTs(filePath);
     const state: CodexFileState = {
       currentModel: 'unknown',
       currentRawModel: 'unknown',
+      hasServiceTierEvidence: false,
       projectFields: { project: 'unknown', projectDisplay: 'unknown' },
       hasSessionWorkspace: false,
       waitingForChildTurn: false,
@@ -169,7 +210,7 @@ async function processCodexFile(
       childIsUserFork: false,
     };
 
-    for await (const line of rl) {
+    for await (const line of readCodexSessionLines(filePath)) {
       if (!line) continue;
 
       // 大行保护
@@ -237,9 +278,13 @@ async function processCodexFile(
       }
 
       if (record.type === 'turn_context') {
+        const tier = readServiceTier(payload);
+        state.currentServiceTier = tier?.serviceTier ?? undefined;
+        state.hasServiceTierEvidence = tier !== undefined;
         if (payloadModel && payloadModel !== '<synthetic>') {
           state.currentRawModel = payloadModel;
-          state.currentModel = applyCodexServiceTier(normalizeModelName(payloadModel), serviceTier);
+          state.hasServiceTierEvidence ||= modelNameHasServiceTier(payloadModel);
+          state.currentModel = applyCodexServiceTier(normalizeModelName(payloadModel), state.currentServiceTier);
         }
         if (payload.cwd && !state.hasSessionWorkspace) {
           state.projectFields = resolveProjectFields(payload.cwd, projectAliases);
@@ -251,9 +296,17 @@ async function processCodexFile(
       const info = payload.info;
       if (!info?.total_token_usage && !info?.last_token_usage) continue;
 
+      const requestTier = readServiceTier(payload);
+      if (requestTier) {
+        state.currentServiceTier = requestTier.serviceTier ?? undefined;
+        state.hasServiceTierEvidence = true;
+        state.currentModel = applyCodexServiceTier(normalizeModelName(state.currentRawModel), state.currentServiceTier);
+      }
+
       if (payloadModel && payloadModel !== '<synthetic>') {
         state.currentRawModel = payloadModel;
-        state.currentModel = applyCodexServiceTier(normalizeModelName(payloadModel), serviceTier);
+        state.hasServiceTierEvidence ||= modelNameHasServiceTier(payloadModel);
+        state.currentModel = applyCodexServiceTier(normalizeModelName(payloadModel), state.currentServiceTier);
       }
       const ts = parseTimestamp(record.timestamp) ?? fallbackTs;
       if (!ts) continue;
@@ -275,8 +328,12 @@ async function processCodexFile(
       const cachedInput = Math.min(tokens.cached, tokens.input);
       const cacheWriteInput = Math.min(tokens.cacheWrite, Math.max(tokens.input - cachedInput, 0));
       const nonCachedInput = Math.max(tokens.input - cachedInput - cacheWriteInput, 0);
-      const output = tokens.output;
       const reasoning = tokens.reasoning;
+      // Codex's output_tokens already includes reasoning_output_tokens. Split
+      // the fields into disjoint buckets so downstream cost and token totals
+      // can safely add them once. Keep the original raw total for provenance.
+      const sourceOutput = tokens.output;
+      const output = Math.max(sourceOutput - reasoning, 0);
       if (nonCachedInput + cachedInput + cacheWriteInput + output + reasoning === 0) continue;
       state.previousTotals = nextTotals;
 
@@ -287,6 +344,10 @@ async function processCodexFile(
         ? `codex|${dedupScope}|${state.currentModel}|${total.input}|${total.cached}|${total.cacheWrite}|${total.output}|${total.reasoning}`
         : `codex|${dedupScope}|${state.currentModel}|${ts.getTime()}|${tokens.input}|${tokens.cached}|${tokens.cacheWrite}|${tokens.output}|${tokens.reasoning}`;
 
+      // Tiered Codex models can inherit a project default even when the
+      // historical event omits service_tier. Without event-level evidence,
+      // price at Standard but mark that choice as an estimate.
+      const costEvidence: CostEvidence = state.hasServiceTierEvidence ? 'per_request' : 'assumed_standard';
       const eventCost = calculateCost('openai', 'codex', state.currentModel, {
         inputTokens: nonCachedInput,
         cachedInputTokens: cachedInput,
@@ -294,9 +355,9 @@ async function processCodexFile(
         outputTokens: output,
         reasoningOutputTokens: reasoning,
       },
-      { catalog: pricingCatalog },
+      { catalog: pricingCatalog, costEvidence },
       );
-      const exactEventCost = eventCost.costStatus === 'exact' ? eventCost.estimatedCostUsd : undefined;
+      const eventCostUsd = eventCost.costStatus !== 'unavailable' ? eventCost.estimatedCostUsd : undefined;
       events.push({
         usageDate,
         signature,
@@ -307,15 +368,21 @@ async function processCodexFile(
         cachedInputTokens: cachedInput,
         cacheWriteTokens: cacheWriteInput,
         outputTokens: output,
+        sourceOutputTokens: sourceOutput,
         reasoningOutputTokens: reasoning,
-        costUSD: exactEventCost,
-        pricingVersion: exactEventCost !== undefined ? eventCost.pricingVersion : undefined,
+        costEvidence,
+        costUSD: eventCostUsd,
+        pricingVersion: eventCostUsd !== undefined ? eventCost.pricingVersion : undefined,
       });
     }
-  } catch {
+  } catch (error) {
+    if (filePath.toLowerCase().endsWith('.jsonl.zst')) {
+      throw new Error(
+        'Failed to read a Codex .jsonl.zst archive; aborting the scan to avoid uploading an incomplete snapshot.',
+        { cause: error },
+      );
+    }
     // 文件在扫描期间被移动、归档或损坏时跳过该文件。
-  } finally {
-    input.destroy();
   }
   return events;
 }
@@ -334,7 +401,9 @@ function mergeCodexEvent(
     existing.cachedInputTokens += event.cachedInputTokens;
     existing.cacheWriteTokens += event.cacheWriteTokens;
     existing.outputTokens += event.outputTokens;
+    existing.sourceOutputTokens = (existing.sourceOutputTokens ?? 0) + event.sourceOutputTokens;
     existing.reasoningOutputTokens += event.reasoningOutputTokens;
+    if (existing.costEvidence !== event.costEvidence) existing.costEvidence = 'unknown';
     if (event.costUSD !== undefined) {
       existing.costUSD = (existing.costUSD ?? 0) + event.costUSD;
       existing.pricingVersion = event.pricingVersion;
@@ -357,6 +426,11 @@ function mergeCodexEvent(
     cacheWriteTokens: event.cacheWriteTokens,
     outputTokens: event.outputTokens,
     reasoningOutputTokens: event.reasoningOutputTokens,
+    outputTokensIncludesReasoning: false,
+    sourceOutputTokens: event.sourceOutputTokens,
+    costEvidence: event.costEvidence,
+    costGranularity: 'per_request',
+    costSource: 'catalog_estimate',
   };
   if (event.costUSD !== undefined) {
     breakdown.costUSD = event.costUSD;
@@ -537,51 +611,29 @@ function uuidV7OrderKey(id: string): string | undefined {
   return parts.join('').toLowerCase();
 }
 
-async function collectSessionFiles(baseDir: string): Promise<string[]> {
-  // 与 Codex 本身的生命周期一致：活动会话优先，归档副本随后；各目录
-  // 内按路径排序，确保重复事件的 workspace 归属稳定。
-  const activePaths: string[] = [];
-  const sessionsDir = join(baseDir, 'sessions');
-  await walkDir(sessionsDir, activePaths);
-  activePaths.sort();
-
-  const archivedPaths: string[] = [];
-  await walkDir(join(baseDir, 'archived_sessions'), archivedPaths);
-  archivedPaths.sort();
-
-  return [...activePaths, ...archivedPaths];
+function readServiceTier(payload: CodexPayload): { serviceTier: CodexServiceTier } | undefined {
+  const value = payload.service_tier
+    ?? payload.serviceTier
+    ?? payload.info?.service_tier
+    ?? payload.info?.serviceTier
+    ?? payload.info?.last_token_usage?.service_tier
+    ?? payload.info?.last_token_usage?.serviceTier
+    ?? payload.info?.total_token_usage?.service_tier
+    ?? payload.info?.total_token_usage?.serviceTier;
+  if (typeof value !== 'string') return undefined;
+  const normalized = value.trim().toLowerCase();
+  if (normalized === 'fast' || normalized === 'priority') return { serviceTier: normalized };
+  if (normalized === 'default' || normalized === 'standard') return { serviceTier: null };
+  return undefined;
 }
 
-async function detectCodexServiceTier(baseDir: string): Promise<CodexServiceTier> {
-  let config = '';
-  try {
-    config = await readFile(join(baseDir, 'config.toml'), 'utf-8');
-  } catch {
-    return null;
-  }
-
-  const serviceTier = config.match(/^\s*service_tier\s*=\s*["']([^"']+)["']/m)?.[1]?.trim().toLowerCase();
-  if (serviceTier === 'priority') return 'priority';
-  if (serviceTier === 'fast') return 'fast';
-
-  const fastMode = config.match(/^\s*fast_mode\s*=\s*(true|false)\s*$/m)?.[1];
-  return fastMode === 'true' ? 'fast' : null;
+function applyCodexServiceTier(model: string, serviceTier: CodexServiceTier | undefined): string {
+  if (!serviceTier || model.endsWith('-fast') || model.endsWith('-priority')) return model;
+  return `${model}-${serviceTier}`;
 }
 
-function applyCodexServiceTier(model: string, serviceTier: CodexServiceTier): string {
-  if (!serviceTier) return model;
-  if (model.endsWith('-fast') || model.endsWith('-priority')) return model;
-  const supportsFast = model === 'gpt-6-astra' || model === 'gpt-5.5' || model === 'gpt-5.4';
-  const supportsPriority =
-    model === 'gpt-5.6' ||
-    model === 'gpt-5.6-sol' ||
-    model === 'gpt-5.6-terra' ||
-    model === 'gpt-5.6-luna' ||
-    supportsFast;
-  if ((serviceTier === 'fast' && supportsFast) || (serviceTier === 'priority' && supportsPriority)) {
-    return `${model}-${serviceTier}`;
-  }
-  return model;
+function modelNameHasServiceTier(model: string): boolean {
+  return /-(?:fast|priority)$/i.test(model.trim());
 }
 
 async function walkDir(dir: string, result: string[]): Promise<void> {
@@ -595,7 +647,7 @@ async function walkDir(dir: string, result: string[]): Promise<void> {
     const fullPath = join(dir, entry.name);
     if (entry.isDirectory()) {
       await walkDir(fullPath, result);
-    } else if (entry.name.endsWith('.jsonl')) {
+    } else if (/\.jsonl(?:\.zst)?$/i.test(entry.name)) {
       result.push(fullPath);
     }
   }

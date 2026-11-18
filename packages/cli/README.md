@@ -19,7 +19,7 @@ differ, rather than treating every local record as billable token usage.
 | Tool | Sources and compatibility behavior |
 | ------ | ------------------------------------ |
 | Claude Code | `~/.config/claude/projects/` and `~/.claude/projects/` JSONL; deduplicates parent/sidechain replays, merges streaming snapshots per token field, and honors wrapper providers. Aggregate `stats-cache.json` is intentionally not converted into guessed per-message usage. |
-| Codex CLI | Active and archived `~/.codex` sessions; fork-aware replay boundaries, inherited baselines, `last_token_usage`, and total-delta fallback. |
+| Codex CLI | Active and archived `~/.codex` sessions (`.jsonl` and streamed `.jsonl.zst`); fork-aware replay boundaries, inherited baselines, `last_token_usage`, and total-delta fallback. Zstandard logs require Node 22.15+ or 23.8+. |
 | Cursor | Reads the local `state.vscdb` credential and requests Cursor's token-strategy usage CSV; the database is snapshotted when locked. |
 | Copilot CLI | OpenTelemetry JSONL under `~/.copilot/otel/` plus `session-state` shutdown totals; granular inference spans supersede same-trace aggregates. |
 | Copilot for VS Code | Chat logs, legacy session JSON, and modern CRDT `workspaceStorage/**/chatSessions/*.jsonl`; modern sessions contribute real token fields, while legacy records remain interaction-only. |

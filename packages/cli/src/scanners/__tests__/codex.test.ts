@@ -2,6 +2,7 @@ import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import { mkdir, writeFile, rm } from 'node:fs/promises';
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
+import * as zlib from 'node:zlib';
 import { PRICING_VERSION } from '@aiusage/shared';
 import { scanCodex } from '../codex.js';
 
@@ -12,12 +13,19 @@ async function writeSession(dir: string, filename: string, lines: object[]): Pro
   await writeFile(join(dir, filename), content);
 }
 
+async function writeZstdSession(dir: string, filename: string, lines: object[]): Promise<void> {
+  await mkdir(dir, { recursive: true });
+  const content = lines.map((line) => JSON.stringify(line)).join('\n');
+  await writeFile(join(dir, filename), zlib.zstdCompressSync(Buffer.from(content)));
+}
+
 function tokenCountEvent(
   timestamp: string,
   last: { input: number; cached: number; cacheWrite?: number; output: number; reasoning?: number },
   total: { input: number; cached: number; cacheWrite?: number; output: number; reasoning?: number },
   model = 'gpt-5-codex',
   cwd = '/Users/test/project',
+  serviceTier?: string,
 ): object[] {
   // turn_context sets model/project
   const ctx = {
@@ -30,6 +38,7 @@ function tokenCountEvent(
     timestamp,
     payload: {
       type: 'token_count',
+      ...(serviceTier ? { service_tier: serviceTier } : {}),
       info: {
         last_token_usage: {
           input_tokens: last.input,
@@ -194,7 +203,7 @@ describe('Fix 1: non-cached input cost formula', () => {
 });
 
 describe('Codex service tier', () => {
-  it('adds fast suffix and doubles cost for GPT-6 Astra', async () => {
+  it('does not infer a historical fast tier from current config.toml', async () => {
     const day = '2026-09-21';
     await writeFile(join(tmpDir, 'config.toml'), 'service_tier = "fast"\n');
     const sessionDir = join(tmpDir, 'sessions', '2026', '09', '21');
@@ -207,12 +216,12 @@ describe('Codex service tier', () => {
     await writeSession(sessionDir, 'rollout-test.jsonl', events);
 
     const results = await scanCodex(day, tmpDir);
-    expect(results[0].model).toBe('gpt-6-astra-fast');
-    // 标准价：0.002M*$10 + 0.008M*$1 + 0.0005M*$50 = $0.053 → fast ×2 = $0.106
-    expect(results[0].costUSD).toBeCloseTo(0.106, 4);
+    expect(results[0].model).toBe('gpt-6-astra');
+    expect(results[0].costEvidence).toBe('assumed_standard');
+    expect(results[0].costUSD).toBeCloseTo(0.053, 4);
   });
 
-  it('adds priority suffix and doubles cost for GPT-6 Astra', async () => {
+  it('does not infer a historical priority tier from current config.toml', async () => {
     const day = '2026-09-21';
     await writeFile(join(tmpDir, 'config.toml'), 'service_tier = "priority"\n');
     const sessionDir = join(tmpDir, 'sessions', '2026', '09', '21');
@@ -225,11 +234,12 @@ describe('Codex service tier', () => {
     await writeSession(sessionDir, 'rollout-test.jsonl', events);
 
     const results = await scanCodex(day, tmpDir);
-    expect(results[0].model).toBe('gpt-6-astra-priority');
-    expect(results[0].costUSD).toBeCloseTo(0.106, 4);
+    expect(results[0].model).toBe('gpt-6-astra');
+    expect(results[0].costEvidence).toBe('assumed_standard');
+    expect(results[0].costUSD).toBeCloseTo(0.053, 4);
   });
 
-  it('adds priority suffix for supported GPT-5.5 Codex usage', async () => {
+  it('does not infer GPT-5.5 priority from current config.toml', async () => {
     const day = '2026-06-22';
     await writeFile(join(tmpDir, 'config.toml'), 'service_tier = "priority"\n');
     const sessionDir = join(tmpDir, 'sessions', '2026', '06', '22');
@@ -243,7 +253,7 @@ describe('Codex service tier', () => {
 
     const results = await scanCodex(day, tmpDir);
     expect(results).toHaveLength(1);
-    expect(results[0].model).toBe('gpt-5.5-priority');
+    expect(results[0].model).toBe('gpt-5.5');
   });
 
   it('does not add service tier suffix to unsupported Codex models', async () => {
@@ -263,7 +273,7 @@ describe('Codex service tier', () => {
     expect(results[0].model).toBe('codex-auto-review');
   });
 
-  it('adds priority suffix for GPT-5.6 terra', async () => {
+  it('does not infer GPT-5.6 Terra priority from current config.toml', async () => {
     const day = '2026-07-10';
     await writeFile(join(tmpDir, 'config.toml'), 'service_tier = "priority"\n');
     const sessionDir = join(tmpDir, 'sessions', '2026', '07', '10');
@@ -276,7 +286,39 @@ describe('Codex service tier', () => {
     await writeSession(sessionDir, 'rollout-test.jsonl', events);
 
     const results = await scanCodex(day, tmpDir);
-    expect(results[0].model).toBe('gpt-5.6-terra-priority');
+    expect(results[0].model).toBe('gpt-5.6-terra');
+  });
+
+  it('uses request-level fast evidence and prices it at 2x', async () => {
+    const day = '2026-09-21';
+    const sessionDir = join(tmpDir, 'sessions', '2026', '09', '21');
+    await writeSession(sessionDir, 'rollout-test.jsonl', tokenCountEvent(
+      `${day}T10:00:00.000Z`,
+      { input: 10_000, cached: 8_000, output: 500 },
+      { input: 10_000, cached: 8_000, output: 500 },
+      'gpt-6-astra', '/p', 'fast',
+    ));
+    const results = await scanCodex(day, tmpDir);
+    expect(results[0].model).toBe('gpt-6-astra-fast');
+    expect(results[0].costEvidence).toBe('per_request');
+    expect(results[0].costUSD).toBeCloseTo(0.106, 4);
+  });
+});
+
+describe('Codex reasoning output is a disjoint token bucket', () => {
+  it('splits source output and counts/bills reasoning only once', async () => {
+    const day = '2026-10-05';
+    const sessionDir = join(tmpDir, 'sessions', '2026', '10', '05');
+    await writeSession(sessionDir, 'rollout-reasoning.jsonl', tokenCountEvent(
+      `${day}T12:00:00.000Z`,
+      { input: 100_000, cached: 0, output: 100_000, reasoning: 30_000 },
+      { input: 100_000, cached: 0, output: 100_000, reasoning: 30_000 },
+      'gpt-6.1-sol',
+    ));
+    const [row] = await scanCodex(day, tmpDir);
+    expect(row).toMatchObject({ outputTokens: 70_000, sourceOutputTokens: 100_000, reasoningOutputTokens: 30_000, outputTokensIncludesReasoning: false, costGranularity: 'per_request' });
+    expect(row.inputTokens + row.cachedInputTokens + row.cacheWriteTokens + row.outputTokens + row.reasoningOutputTokens).toBe(200_000);
+    expect(row.costUSD).toBeCloseTo(1.2, 4);
   });
 });
 
@@ -306,6 +348,22 @@ describe('Codex per-event costUSD (long-context tiers)', () => {
     expect(results[0].pricingVersion).toBeTruthy();
     // each event: 10k * $2/M + 1k * $12/M = 0.02 + 0.012 = 0.032 → total 0.064
     expect(results[0].costUSD).toBeCloseTo(0.064, 4);
+  });
+
+  it('prices short and long context requests separately before aggregation', async () => {
+    const day = '2026-07-10';
+    const sessionDir = join(tmpDir, 'sessions', '2026', '07', '10');
+    const short = tokenCountEvent(`${day}T10:00:00.000Z`,
+      { input: 10_000, cached: 0, output: 1_000 },
+      { input: 10_000, cached: 0, output: 1_000 }, 'gpt-6.1-terra');
+    const long = tokenCountEvent(`${day}T10:01:00.000Z`,
+      { input: 300_000, cached: 0, output: 1_000 },
+      { input: 310_000, cached: 0, output: 2_000 }, 'gpt-6.1-terra');
+    await writeSession(sessionDir, 'rollout-mixed-context.jsonl', [...short, ...long]);
+    const [row] = await scanCodex(day, tmpDir);
+    expect(row.eventCount).toBe(2);
+    // Short $0.015; long $0.6075 at the published 272K+ tier.
+    expect(row.costUSD).toBeCloseTo(0.6225, 4);
   });
 });
 
@@ -672,6 +730,53 @@ describe('Fix 4: file glob includes all .jsonl files', () => {
     expect(total.inputTokens).toBe(2000);       // (2000-1000) + (4000-3000)
     expect(total.cachedInputTokens).toBe(4000); // 1000 + 3000
   });
+});
+
+describe('Codex Zstandard session archives', () => {
+  it.skipIf(typeof zlib.zstdCompressSync !== 'function')(
+    'streams .jsonl.zst sessions and deduplicates their archived JSONL copies',
+    async () => {
+      const day = '2026-08-10';
+      const sessionMeta = {
+        type: 'session_meta',
+        timestamp: `${day}T09:00:00.000Z`,
+        payload: { id: 'session-zstd-fixture' },
+      };
+      const usage = tokenCountEvent(
+        `${day}T09:01:00.000Z`,
+        { input: 12_000, cached: 8_000, output: 900, reasoning: 300 },
+        { input: 12_000, cached: 8_000, output: 900, reasoning: 300 },
+        'gpt-6.1-sol',
+      );
+      const sessionDir = join(tmpDir, 'sessions', '2026', '08', '10');
+      const archiveDir = join(tmpDir, 'archived_sessions');
+      await writeZstdSession(sessionDir, 'rollout-zstd.jsonl.zst', [sessionMeta, ...usage]);
+      await writeSession(archiveDir, 'rollout-zstd-copy.jsonl', [sessionMeta, ...usage]);
+
+      const result = await scanCodex(day, tmpDir);
+
+      expect(result).toHaveLength(1);
+      expect(result[0]).toMatchObject({
+        eventCount: 1,
+        inputTokens: 4_000,
+        cachedInputTokens: 8_000,
+        outputTokens: 600,
+        reasoningOutputTokens: 300,
+      });
+    },
+  );
+
+  it.skipIf(typeof zlib.zstdCompressSync !== 'function')(
+    'fails the whole scan on a corrupt compressed session instead of returning a partial day',
+    async () => {
+      const day = '2026-08-10';
+      const sessionDir = join(tmpDir, 'sessions', '2026', '08', '10');
+      await mkdir(sessionDir, { recursive: true });
+      await writeFile(join(sessionDir, 'broken.jsonl.zst'), Buffer.from('not-zstandard'));
+
+      await expect(scanCodex(day, tmpDir)).rejects.toThrow();
+    },
+  );
 });
 
 // ─── Integration: multiple fixes together ───

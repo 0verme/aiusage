@@ -22,6 +22,15 @@ export const google: Record<string, ProductPricing> = {
         output_per_million: 9,
         cached_input_per_million: 0.15,
       },
+      'gemini-3.8-flash': {
+        currency: 'USD',
+        source_url: 'https://ai.google.dev/gemini-api/docs/pricing#gemini-3.8-flash',
+        checked_at: '2026-11-18',
+        notes: 'Standard paid tier through 2026-12-31; introductory price ends then. Thinking tokens are included in output price. Context-cache storage charges are not available in token counters.',
+        input_per_million: 0.75,
+        cached_input_per_million: 0.075,
+        output_per_million: 3.75,
+      },
       'gemini-3.1-pro-preview': {
         currency: 'USD',
         notes: 'tiered by prompt length, 200K threshold',

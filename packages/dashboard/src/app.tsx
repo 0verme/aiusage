@@ -522,7 +522,9 @@ export function App() {
               <CostKpiCard
                 label={t.estimatedCost}
                 value={unavailable ? t.unavailable : formatUsd(overview?.totalCostUsd ?? 0)}
-                sub={rangeSub}
+                sub={overview?.costCoverage
+                  ? `${rangeSub ?? ''} · ${formatPercent(overview.costCoverage.coveragePercent)} ${t.costCoverage} · ${formatPercent(overview.costCoverage.snapshotCompletenessPercent)} ${t.fullDaySnapshots}`
+                  : rangeSub}
                 delta={unavailable ? undefined : kpiDeltas.totalCostUsd}
                 help
               />
@@ -570,6 +572,43 @@ export function App() {
               <KpiCard label={t.cacheHitRate} value={unavailable ? t.unavailable : formatPercent(kpis?.cacheHitRate ?? 0)} sub={locale === 'zh' ? '高效复用' : 'Reuse'} delta={unavailable ? undefined : kpiDeltas.cacheHitRate} />
             </div>
           </div>
+
+          {overview?.costCoverage && (
+            <section className="card fade-up p-5" aria-label={t.costCoverage}>
+              <div className="mb-4 flex flex-wrap items-center justify-between gap-2">
+                <h2 className="text-sm font-semibold text-slate-800 dark:text-slate-100">{t.costCoverage}</h2>
+                <div className="flex flex-wrap items-center gap-2">
+                  <span className="rounded-full bg-slate-100 px-3 py-1 text-xs font-semibold text-slate-700 dark:bg-slate-800 dark:text-slate-200">
+                    {formatPercent(overview.costCoverage.coveragePercent)} {t.costCoverage}
+                  </span>
+                  <span className={`rounded-full px-3 py-1 text-xs font-semibold ${overview.costCoverage.unverifiedSnapshotDays > 0 ? 'bg-amber-100 text-amber-800 dark:bg-amber-950/60 dark:text-amber-200' : 'bg-emerald-100 text-emerald-800 dark:bg-emerald-950/50 dark:text-emerald-200'}`}>
+                    {formatPercent(overview.costCoverage.snapshotCompletenessPercent)} {t.fullDaySnapshots}
+                    {overview.costCoverage.unverifiedSnapshotDays > 0 && ` · ${formatCompact(overview.costCoverage.unverifiedSnapshotDays, locale)} ${t.unverifiedDays}`}
+                  </span>
+                </div>
+              </div>
+              <div className="grid gap-3 text-xs sm:grid-cols-2 lg:grid-cols-5">
+                <div><div className="text-slate-500 dark:text-slate-400">{t.coveredTokens}</div><div className="mt-1 font-medium">{formatCompact(overview.costCoverage.coveredTokens, locale)}</div></div>
+                <div><div className="text-amber-700 dark:text-amber-300">{t.unpricedTokens}</div><div className="mt-1 font-medium">{formatCompact(overview.costCoverage.unpricedTokens, locale)}</div></div>
+                <div><div className="text-slate-500 dark:text-slate-400">{t.freeTokens}</div><div className="mt-1 font-medium">{formatCompact(overview.costCoverage.explicitFreeTokens, locale)}</div></div>
+                <div><div className="text-slate-500 dark:text-slate-400">{t.legacyUnknownTokens}</div><div className="mt-1 font-medium">{formatCompact(overview.costCoverage.legacyUnknownTokens, locale)}</div></div>
+                <div><div className="text-slate-500 dark:text-slate-400">{t.clientEstimates}</div><div className="mt-1 font-medium">{formatUsd(overview.costCoverage.clientReportedEstimateUsd)}</div></div>
+              </div>
+              {overview.costCoverage.unpricedModels.length > 0 && (
+                <div className="mt-5 border-t border-slate-200 pt-4 dark:border-slate-800">
+                  <h3 className="mb-2 text-xs font-semibold text-amber-800 dark:text-amber-300">{t.topUnpricedModels}</h3>
+                  <ul className="grid max-h-56 gap-x-6 gap-y-1 overflow-y-auto text-xs sm:grid-cols-2">
+                    {overview.costCoverage.unpricedModels.map((item) => (
+                      <li key={`${item.provider}/${item.product}/${item.model}`} className="flex min-w-0 items-center justify-between gap-3 text-slate-600 dark:text-slate-300">
+                        <span className="truncate">{item.provider}/{item.product} · {item.model}</span>
+                        <span className="shrink-0 tabular-nums">{formatCompact(item.totalTokens, locale)}</span>
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              )}
+            </section>
+          )}
 
           {unavailable && (
             <div className="fade-up rounded-xl border border-amber-200/80 bg-amber-50/70 px-4 py-3 text-[13px] text-amber-900 dark:border-amber-950/60 dark:bg-amber-950/20 dark:text-amber-200">

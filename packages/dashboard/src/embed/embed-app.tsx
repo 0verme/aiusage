@@ -79,7 +79,7 @@ function StatsRow({
   cards,
   items,
 }: {
-  cards: Array<{ label: string; value: string; highlight?: boolean; suffix?: string }>;
+  cards: Array<{ label: string; value: string; highlight?: boolean; suffix?: string; sub?: string }>;
   items: number[] | null;
 }) {
   const visible = items ? cards.filter((_, i) => items.includes(i)) : cards;
@@ -91,7 +91,7 @@ function StatsRow({
     >
       {visible.map((c) => (
         <div key={c.label} className="kpi">
-          <KpiCard label={c.label} value={c.value} highlight={c.highlight} suffix={c.suffix} />
+          <KpiCard label={c.label} value={c.value} highlight={c.highlight} suffix={c.suffix} sub={c.sub} />
         </div>
       ))}
     </div>
@@ -148,7 +148,14 @@ function WidgetRenderer({
     /* ── KPI Row 1 ── */
     case 'stats-row1': {
       const cards = [
-        { label: t.estimatedCost, value: unavailable ? t.unavailable : formatUsd(overview?.totalCostUsd ?? 0, currency), highlight: true },
+        {
+          label: t.estimatedCost,
+          value: unavailable ? t.unavailable : formatUsd(overview?.totalCostUsd ?? 0, currency),
+          highlight: true,
+          sub: overview?.costCoverage
+            ? `${formatPercent(overview.costCoverage.coveragePercent)} ${t.costCoverage} · ${formatCompact(overview.costCoverage.unpricedTokens, locale)} ${t.unpricedTokens} · ${formatPercent(overview.costCoverage.snapshotCompletenessPercent)} ${t.fullDaySnapshots}`
+            : undefined,
+        },
         { label: t.totalTokens, value: unavailable ? t.unavailable : formatCompact(kpis?.totalTokens ?? 0, locale) },
         { label: t.inputTokens, value: unavailable ? t.unavailable : formatCompact(kpis?.inputTokens ?? 0, locale) },
         { label: t.outputTokens, value: unavailable ? t.unavailable : formatCompact(kpis?.outputTokens ?? 0, locale) },

@@ -11,7 +11,7 @@ import { sourcegraph } from './data/sourcegraph.js';
 import { inflection, cursor, droid, opencode } from './data/placeholders.js';
 import { xai } from './data/xai.js';
 
-export const PRICING_VERSION = '2026-09-23-gpt-6-sol-luna-pricing-v1';
+export const PRICING_VERSION = '2026-11-18-current-catalog-v2';
 
 /**
  * 模型别名（精确匹配优先于前缀回退）。
@@ -37,6 +37,10 @@ const aliases: Record<string, string> = {
   'grok-build': 'grok-build-0.1',
   'k3': 'kimi-k3',
   'kimi-code/k3': 'kimi-k3',
+  // DeepSeek documents these exact legacy ids as routes to the current V4.1 Flash SKU.
+  'deepseek-flash': 'deepseek-v4.1-flash',
+  'deepseek-v4-flash': 'deepseek-v4.1-flash',
+  'deepseek-v4-flash-vision-exp': 'deepseek-v4.1-flash',
 };
 
 export const catalog: PricingCatalog = {

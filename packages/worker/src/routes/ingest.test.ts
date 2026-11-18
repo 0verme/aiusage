@@ -18,6 +18,7 @@ function baseBreakdown(provider: string) {
     cacheWriteTokens: 0,
     outputTokens: 20,
     reasoningOutputTokens: 0,
+    costGranularity: 'per_request' as const,
   };
 }
 
@@ -31,12 +32,15 @@ describe('ingest provider canonicalization', () => {
 
   it('does not write openai-codex when an old client uploads that alias', async () => {
     const breakdownBinds: unknown[][] = [];
+    const batchSql: string[][] = [];
     const DB = {
       prepare(sql: string) {
         return {
           bind(...params: unknown[]) {
             if (sql.includes('INSERT INTO daily_usage_breakdown')) breakdownBinds.push(params);
             return {
+              sql,
+              params,
               first: async <T>() => {
                 if (sql.includes('SELECT status, token_version')) {
                   return { status: 'active', token_version: 1 } as T;
@@ -48,6 +52,10 @@ describe('ingest provider canonicalization', () => {
             };
           },
         };
+      },
+      async batch(statements: Array<{ sql: string }>) {
+        batchSql.push(statements.map(statement => statement.sql));
+        return [];
       },
     };
     const token = await signDeviceToken({
@@ -76,7 +84,7 @@ describe('ingest provider canonicalization', () => {
       }),
     });
 
-    const response = await handleIngest(request, {
+    const response = await handleIngest(request.clone() as unknown as Request, {
       DB,
       DEVICE_TOKEN_SECRET: secret,
     } as unknown as Env);
@@ -85,7 +93,86 @@ describe('ingest provider canonicalization', () => {
     expect(breakdownBinds).toHaveLength(1);
     expect(breakdownBinds[0]?.[2]).toBe('openai');
     expect(breakdownBinds[0]?.[3]).toBe('codex');
-    expect(JSON.parse(String(breakdownBinds[0]?.[19])).raw_providers).toEqual(['openai-codex']);
+    expect(JSON.parse(String(breakdownBinds[0]?.[23])).raw_providers).toEqual(['openai-codex']);
+    expect(JSON.parse(String(breakdownBinds[0]?.[23])).cost_granularity).toBe('per_request');
+    expect(batchSql[0]).toEqual(expect.arrayContaining([
+      expect.stringContaining('DELETE FROM daily_usage_breakdown'),
+      expect.stringContaining('INSERT INTO daily_usage_breakdown'),
+    ]));
+    expect(batchSql[0]?.some(sql => sql.includes('snapshot_complete = 1'))).toBe(true);
+
+    const repeated = await handleIngest(request, {
+      DB,
+      DEVICE_TOKEN_SECRET: secret,
+    } as unknown as Env);
+    expect(repeated.status).toBe(200);
+    expect(batchSql).toHaveLength(2);
+    expect(batchSql[1]).toEqual(batchSql[0]);
+    expect(batchSql[1].some(sql => sql.includes('ON CONFLICT (device_id, usage_date)'))).toBe(true);
+  });
+
+  it('limits a partial import to its declared product without replacing other tools or activity', async () => {
+    const batchSql: string[][] = [];
+    const activitySql: string[] = [];
+    let snapshotCheckCount = 0;
+    let baseSnapshotComplete = true;
+    const DB = {
+      prepare(sql: string) {
+        return {
+          bind(...params: unknown[]) {
+            return {
+              sql, params,
+              first: async <T>() => {
+                if (sql.includes('SELECT status, token_version')) return { status: 'active', token_version: 1 } as T;
+                if (sql.includes('SELECT snapshot_complete FROM daily_usage')) {
+                  snapshotCheckCount += 1;
+                  return (baseSnapshotComplete ? { snapshot_complete: 1 } : { snapshot_complete: 0 }) as T;
+                }
+                return null as T | null;
+              },
+              all: async <T>() => ({ results: [] as T[] }),
+              run: async () => { activitySql.push(sql); return { success: true }; },
+            };
+          },
+        };
+      },
+      async batch(statements: Array<{ sql: string }>) {
+        batchSql.push(statements.map(statement => statement.sql));
+        return [];
+      },
+    };
+    const token = await signDeviceToken({
+      siteId: 'site-test', deviceId: 'device-test', tokenVersion: 1,
+      issuedAt: '2026-08-20T12:00:00.000Z',
+    }, secret);
+    const request = new Request('https://example.test/api/v1/ingest', {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        siteId: 'site-test', schemaVersion: '1', generatedAt: '2026-08-20T12:00:00.000Z',
+        device: { deviceId: 'device-test', hostname: 'test-host', timezone: 'UTC', appVersion: 'partial-import' },
+        days: [{
+          usageDate: '2026-08-20', snapshotComplete: false, productScope: ['claude-code'],
+          breakdowns: [{
+            provider: 'anthropic', product: 'claude-code', channel: 'cli', model: 'claude-sonnet-4-6',
+            project: 'demo', eventCount: 1, inputTokens: 10, cachedInputTokens: 0, cacheWriteTokens: 0,
+            outputTokens: 3, reasoningOutputTokens: 0,
+          }],
+        }],
+      }),
+    });
+    const response = await handleIngest(request.clone() as unknown as Request, { DB, DEVICE_TOKEN_SECRET: secret } as unknown as Env);
+    expect(response.status).toBe(200);
+    expect(batchSql[0]?.some(sql => sql.includes('product IN (?)'))).toBe(true);
+    expect(batchSql[0]?.some(sql => sql.includes('DELETE FROM daily_usage_breakdown') && !sql.includes('product IN'))).toBe(false);
+    expect(activitySql.some(sql => sql.includes('daily_activity_breakdown'))).toBe(false);
+    expect(batchSql[0]?.some(sql => sql.includes('SUM(event_count)'))).toBe(true);
+    expect(snapshotCheckCount).toBe(1);
+
+    baseSnapshotComplete = false;
+    const rejected = await handleIngest(request, { DB, DEVICE_TOKEN_SECRET: secret } as unknown as Env);
+    expect(rejected.status).toBe(409);
+    expect(batchSql).toHaveLength(1);
   });
 });
 

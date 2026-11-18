@@ -8,7 +8,7 @@ import type { ProductPricing } from '../types.js';
  * - https://developers.openai.com/api/docs/models/gpt-6-luna
  * - https://developers.openai.com/api/docs/models/gpt-5.6-sol
  * - https://developers.openai.com/api/docs/pricing
- * 最近核对：2026-09-23（GPT-6 Sol / Luna 登记）
+ * 最近核对：2026-11-18。新型号及当前价以官方定价页为准。
  *
  * 注意：deep-research 与 computer-use 此前在 worker/cli 表里写高了 2 倍，本次已校正。
  * GPT-6 / GPT-5.6：单次 prompt input > 272K 时整单按长上下文档（2x input、1.5x output）计费；
@@ -20,6 +20,8 @@ export const openai: Record<string, ProductPricing> = {
       // ── GPT-6 系列 ──
       'gpt-6-astra': {
         currency: 'USD',
+        source_url: 'https://developers.openai.com/api/docs/pricing',
+        checked_at: '2026-11-18',
         notes: 'prompts over 272K input tokens bill the full request at long-context rates',
         input_per_million: 10,
         cached_input_per_million: 1,
@@ -44,6 +46,8 @@ export const openai: Record<string, ProductPricing> = {
 
       'gpt-6-sol': {
         currency: 'USD',
+        source_url: 'https://developers.openai.com/api/docs/pricing',
+        checked_at: '2026-11-18',
         notes: 'prompts over 272K input tokens bill the full request at long-context rates',
         input_per_million: 2,
         cached_input_per_million: 0.2,
@@ -67,6 +71,8 @@ export const openai: Record<string, ProductPricing> = {
       },
       'gpt-6-luna': {
         currency: 'USD',
+        source_url: 'https://developers.openai.com/api/docs/pricing',
+        checked_at: '2026-11-18',
         notes: 'prompts over 272K input tokens bill the full request at long-context rates',
         input_per_million: 0.1,
         cached_input_per_million: 0.01,
@@ -86,6 +92,35 @@ export const openai: Record<string, ProductPricing> = {
             cache_write_per_million: 0.25,
             output_per_million: 0.75,
           },
+        ],
+      },
+
+      'gpt-6.1-sol': {
+        currency: 'USD',
+        source_url: 'https://developers.openai.com/api/docs/pricing',
+        checked_at: '2026-11-18',
+        notes: 'Fast mode is 2x Standard. Prompts over 272K input tokens use long-context rates for the full request; 30m cache-write rate is used because local Codex logs do not retain cache TTL.',
+        input_per_million: 2,
+        cached_input_per_million: 0.1,
+        cache_write_per_million: 2.5,
+        output_per_million: 10,
+        tiers: [
+          { threshold: 272_000, input_per_million: 2, cached_input_per_million: 0.1, cache_write_per_million: 2.5, output_per_million: 10 },
+          { input_per_million: 4, cached_input_per_million: 0.2, cache_write_per_million: 5, output_per_million: 15 },
+        ],
+      },
+      'gpt-6.1-terra': {
+        currency: 'USD',
+        source_url: 'https://developers.openai.com/api/docs/pricing',
+        checked_at: '2026-11-18',
+        notes: 'Fast mode is 2x Standard. Prompts over 272K input tokens use long-context rates for the full request; 30m cache-write rate is used because local Codex logs do not retain cache TTL.',
+        input_per_million: 1,
+        cached_input_per_million: 0.05,
+        cache_write_per_million: 1.25,
+        output_per_million: 5,
+        tiers: [
+          { threshold: 272_000, input_per_million: 1, cached_input_per_million: 0.05, cache_write_per_million: 1.25, output_per_million: 5 },
+          { input_per_million: 2, cached_input_per_million: 0.1, cache_write_per_million: 2.5, output_per_million: 7.5 },
         ],
       },
 

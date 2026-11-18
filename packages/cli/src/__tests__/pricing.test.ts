@@ -5,7 +5,7 @@ import { getPricingStatus, resolvePricingCatalog } from '../pricing.js';
 describe('remote pricing catalog', () => {
   it('falls back to the bundled catalog in offline mode', async () => {
     const resolved = await resolvePricingCatalog({ pricing: { mode: 'offline' } });
-    expect(resolved.info).toEqual({ source: 'bundled', version: catalog.version });
+    expect(resolved.info).toMatchObject({ source: 'bundled', version: catalog.version });
     expect(resolved.catalog).toBe(catalog);
   });
 

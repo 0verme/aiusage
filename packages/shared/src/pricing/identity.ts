@@ -2,7 +2,6 @@ import {
   canonicalizeModel,
   displayModelName,
   modelProviderHint,
-  normalizeModelKey,
 } from '../model.js';
 import type { PricingCatalog } from './types.js';
 import { catalog as defaultCatalog } from './catalog.js';
@@ -71,7 +70,10 @@ export function normalizePricingModel(
   // Pricing gets only safe syntax normalization here. In particular, the
   // canonical MODEL_ALIASES map is intentionally not applied: a date/snapshot
   // alias may be visually mergeable while still requiring a distinct price.
-  const rawModel = normalizeModelKey(model).model;
+  // Keep gateway/provider namespaces intact. Pricing must not inherit display
+  // normalization that removes known prefixes; only an explicit catalog alias
+  // may decide that a namespaced value is equivalent to a billable SKU.
+  const rawModel = normalizePricingModelKey(model);
   const { baseModel, serviceTier } = splitPricingServiceTier(rawModel);
   const withoutContextWindow = baseModel.replace(/\[\d+[a-zA-Z]*\]$/, '');
   const alias = catalog.aliases[withoutContextWindow];
@@ -94,6 +96,10 @@ export function normalizePricingModel(
     serviceTier,
     normalization: rules.length > 0 ? rules.join(',') : null,
   };
+}
+
+function normalizePricingModelKey(value: string): string {
+  return value.trim().toLowerCase().replaceAll('_', '-').replace(/-+/g, '-');
 }
 
 /** 返回供 catalog lookup 使用的 pricing model key（不含 service tier）。 */
@@ -179,6 +185,18 @@ export function normalizePricingIdentity(
   if (provider === 'opencode-go' && isDeepSeekModel(model.model) && product !== 'deepseek-chat') {
     product = 'deepseek-chat';
     rules.push(`product:${rawProduct}->${product}`);
+  }
+
+  // OpenCode scanner provider values describe the model backend, while the
+  // product identifies OpenCode's own free route. Only these exact IDs are
+  // documented as free; do not generalize this to other OpenCode models.
+  if (rawProduct === 'opencode' && [
+    'deepseek-v4.1-flash-free',
+    'glm-5.3-flash-free',
+  ].includes(model.model)) {
+    provider = 'opencode';
+    product = 'opencode';
+    rules.push(`opencode-free-model:${rawProvider}/${model.model}->opencode/opencode`);
   }
 
   return {

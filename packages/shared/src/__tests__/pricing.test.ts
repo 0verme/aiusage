@@ -46,12 +46,16 @@ describe('pricing identity normalization', () => {
     ['openai', 'codex', 'gpt-6-astra', 'openai', 'codex', 'gpt-6-astra'],
     ['openai', 'codex', 'gpt-6-sol', 'openai', 'codex', 'gpt-6-sol'],
     ['openai-codex', 'pi', 'gpt-6-luna', 'openai', 'codex', 'gpt-6-luna'],
+    ['openai-codex', 'pi', 'gpt-6.1-sol', 'openai', 'codex', 'gpt-6.1-sol'],
+    ['openai-codex', 'pi', 'gpt-6.1-terra', 'openai', 'codex', 'gpt-6.1-terra'],
+    ['google', 'antigravity', 'gemini-3.8-flash', 'google', 'antigravity', 'gemini-3.8-flash'],
+    ['deepseek', 'pi', 'deepseek-v4.1-flash', 'deepseek', 'pi', 'deepseek-v4.1-flash'],
     ['openai-codex', 'pi', 'gpt-6-astra', 'openai', 'codex', 'gpt-6-astra'],
     ['openai_codex', 'pi', 'gpt-6-astra', 'openai', 'codex', 'gpt-6-astra'],
     ['xai', 'pi', 'grok-4.5', 'xai', 'grok-build', 'grok-4.5'],
     ['xai', 'grok-build', 'grok-4.5', 'xai', 'grok-build', 'grok-4.5'],
-    ['opencode-go', 'pi', 'deepseek-v4-flash', 'opencode-go', 'deepseek-chat', 'deepseek-v4-flash'],
-    ['custom', 'claude-code', 'deepseek-v4-flash[1M]', 'custom', 'deepseek-chat', 'deepseek-v4-flash'],
+    ['opencode-go', 'pi', 'deepseek-v4-flash', 'opencode-go', 'deepseek-chat', 'deepseek-v4.1-flash'],
+    ['custom', 'claude-code', 'deepseek-v4-flash[1M]', 'custom', 'deepseek-chat', 'deepseek-v4.1-flash'],
     ['openai', 'codex', 'gpt-5.5-priority', 'openai', 'codex', 'gpt-5.5'],
     ['anthropic', 'claude-code', 'claude-sonnet-4.6', 'anthropic', 'claude-code', 'claude-sonnet-4-6'],
   ])('%s/%s/%s -> %s/%s/%s', (provider, product, model, canonicalProvider, canonicalProduct, canonicalModel) => {
@@ -72,6 +76,15 @@ describe('pricing identity normalization', () => {
       cachedInputTokens: 0,
       cacheWriteTokens: 0,
       outputTokens: 1_000_000,
+    }).costStatus).toBe('unavailable');
+  });
+
+  it('does not strip OpenAI/Pi/Codex gateway namespaces from a model id', () => {
+    const model = 'openai/pi/codex/gpt-6-luna';
+    const identity = normalizePricingIdentity({ provider: 'openai', product: 'pi', model });
+    expect(identity.canonical.model).toBe(model);
+    expect(calculateCost('openai', 'pi', model, {
+      inputTokens: 10, cachedInputTokens: 0, cacheWriteTokens: 0, outputTokens: 5,
     }).costStatus).toBe('unavailable');
   });
 });
@@ -222,16 +235,44 @@ describe('production-realistic pricing coverage', () => {
     ['openai', 'codex', 'gpt-5.4', 'exact', 27.5],
     ['xai', 'pi', 'grok-4.5', 'estimated', 16],
     ['xai', 'grok-build', 'grok-4.6', 'estimated', 16],
-    ['deepseek', 'claude-code', 'deepseek-v4-flash', 'exact', 0.42],
-    ['deepseek', 'claude-code', 'deepseek-v4-pro', 'exact', 1.305],
-    ['custom', 'claude-code', 'deepseek-v4-flash', 'exact', 0.42],
+    ['deepseek', 'claude-code', 'deepseek-v4-flash', 'estimated', 1.5],
+    ['deepseek', 'claude-code', 'deepseek-v4-pro', 'estimated', 5.28],
+    ['custom', 'claude-code', 'deepseek-v4-flash', 'estimated', 1.5],
     ['anthropic', 'claude-code', 'claude-opus-4-8', 'exact', 30],
     ['anthropic', 'claude-code', 'claude-sonnet-4-6', 'exact', 18],
     ['zhipu', 'glm-chat', 'glm-4.7-flash', 'exact', 0],
+    ['openai-codex', 'pi', 'gpt-6.1-sol', 'exact', 19],
+    ['openai-codex', 'pi', 'gpt-6.1-terra', 'exact', 9.5],
+    ['deepseek', 'pi', 'deepseek-v4.1-flash', 'estimated', 1.5],
+    ['google', 'antigravity', 'gemini-3.8-flash', 'exact', 4.5],
   ])('%s/%s/%s has an intentional pricing result', (provider, product, model, status, expected) => {
     const result = calculateCost(provider, product, model, tokens);
     expect(result.costStatus).toBe(status);
     expect(result.estimatedCostUsd).toBeCloseTo(expected, 4);
+  });
+
+  it('marks explicitly free OpenCode models separately from unpriced models', () => {
+    const free = calculateCost('opencode', 'opencode', 'deepseek-v4.1-flash-free', tokens);
+    const unknown = calculateCost('opencode', 'opencode', 'hy3-free', tokens);
+    expect(free).toMatchObject({ estimatedCostUsd: 0, costStatus: 'exact', isFree: true });
+    expect(free.sourceUrl).toContain('opencode.ai/docs/console/models');
+    expect(unknown).toMatchObject({ estimatedCostUsd: 0, costStatus: 'unavailable', isFree: false });
+  });
+
+  it.each([
+    ['deepseek', 'deepseek-v4.1-flash-free'],
+    ['zhipu', 'glm-5.3-flash-free'],
+  ])('recognizes the exact OpenCode free SKU when backend provider is %s', (provider, model) => {
+    const result = calculateCost(provider, 'opencode', model, tokens);
+    expect(result).toMatchObject({ estimatedCostUsd: 0, costStatus: 'exact', isFree: true });
+    expect(result.pricingIdentity?.canonical).toMatchObject({ provider: 'opencode', product: 'opencode' });
+  });
+
+  it('preserves vendor aliases only when explicitly catalogued', () => {
+    const alias = calculateCost('deepseek', 'deepseek-chat', 'deepseek-v4-flash', tokens);
+    const gateway = calculateCost('custom', 'deepseek-chat', 'workbuddy-ai/deepseek-v4.1-flash-sg', tokens);
+    expect(alias).toMatchObject({ estimatedCostUsd: 1.5, costStatus: 'estimated', resolvedModel: 'deepseek-v4.1-flash' });
+    expect(gateway.costStatus).toBe('unavailable');
   });
 });
 
@@ -327,10 +368,11 @@ describe('Fast 模式白名单', () => {
     expect(fast.estimatedCostUsd).toBe(normal.estimatedCostUsd);
   });
 
-  it('Codex GPT-5.5 priority 应 ×2.5', () => {
+  it('Codex GPT-5.5 priority 未核验倍率时不放大并标 estimated', () => {
     const priority = calculateCost('openai', 'codex', 'gpt-5.5-priority', tokens);
     const normal = calculateCost('openai', 'codex', 'gpt-5.5', tokens);
-    expect(priority.estimatedCostUsd).toBeCloseTo(normal.estimatedCostUsd * 2.5, 3);
+    expect(priority.estimatedCostUsd).toBe(normal.estimatedCostUsd);
+    expect(priority.costStatus).toBe('estimated');
   });
 
   it('Codex GPT-6 Astra fast 应 ×2', () => {
@@ -345,16 +387,46 @@ describe('Fast 模式白名单', () => {
     expect(priority.estimatedCostUsd).toBeCloseTo(normal.estimatedCostUsd * 2, 3);
   });
 
-  it('Codex GPT-5.6 Sol fast 仍不放大（官方仅 priority 生效）', () => {
-    const fast = calculateCost('openai', 'codex', 'gpt-5.6-sol-fast', tokens);
-    const normal = calculateCost('openai', 'codex', 'gpt-5.6-sol', tokens);
-    expect(fast.estimatedCostUsd).toBe(normal.estimatedCostUsd);
+  it.each(['gpt-6.1-sol', 'gpt-6.1-terra', 'gpt-6-luna'])('%s Fast should cost 2x Standard', (model) => {
+    const fast = calculateCost('openai', 'codex', `${model}-fast`, tokens);
+    const normal = calculateCost('openai', 'codex', model, tokens);
+    expect(fast.estimatedCostUsd).toBeCloseTo(normal.estimatedCostUsd * 2, 3);
   });
 
-  it('Codex GPT-5.4 fast 应 ×2', () => {
+  it('Codex GPT-6 Luna priority should cost 2x Standard', () => {
+    const priority = calculateCost('openai', 'codex', 'gpt-6-luna-priority', tokens);
+    const normal = calculateCost('openai', 'codex', 'gpt-6-luna', tokens);
+    expect(priority.estimatedCostUsd).toBeCloseTo(normal.estimatedCostUsd * 2, 3);
+  });
+
+  it('Gemini 3.8 Flash Priority uses the documented 1.8x multiplier', () => {
+    const priority = calculateCost('google', 'gemini-cli', 'gemini-3.8-flash-priority', {
+      inputTokens: 100_000, cachedInputTokens: 0, cacheWriteTokens: 0, outputTokens: 100_000,
+    });
+    const standard = calculateCost('google', 'gemini-cli', 'gemini-3.8-flash', {
+      inputTokens: 100_000, cachedInputTokens: 0, cacheWriteTokens: 0, outputTokens: 100_000,
+    });
+    expect(priority.estimatedCostUsd).toBeCloseTo(standard.estimatedCostUsd * 1.8, 4);
+  });
+
+  it('OpenAI GPT-5.6 Sol Fast costs 2x Standard', () => {
+    const fast = calculateCost('openai', 'codex', 'gpt-5.6-sol-fast', tokens);
+    const normal = calculateCost('openai', 'codex', 'gpt-5.6-sol', tokens);
+    expect(fast.estimatedCostUsd).toBeCloseTo(normal.estimatedCostUsd * 2, 3);
+  });
+
+  it('Codex GPT-5.4 Fast 未核验倍率时不放大并标 estimated', () => {
     const fast = calculateCost('openai', 'codex', 'gpt-5.4-fast', tokens);
     const normal = calculateCost('openai', 'codex', 'gpt-5.4', tokens);
-    expect(fast.estimatedCostUsd).toBeCloseTo(normal.estimatedCostUsd * 2, 3);
+    expect(fast.estimatedCostUsd).toBe(normal.estimatedCostUsd);
+    expect(fast.costStatus).toBe('estimated');
+  });
+
+  it.each(['gpt-5.6-terra', 'gpt-5.6-luna'])('%s priority without a verified price stays estimated at Standard', (model) => {
+    const priority = calculateCost('openai', 'codex', `${model}-priority`, tokens);
+    const normal = calculateCost('openai', 'codex', model, tokens);
+    expect(priority.estimatedCostUsd).toBe(normal.estimatedCostUsd);
+    expect(priority.costStatus).toBe('estimated');
   });
 
   it('Codex GPT-5-Codex fast 暂无官方倍率时不放大', () => {
@@ -399,8 +471,9 @@ describe('多币种折算', () => {
       cacheWriteTokens: 0,
       outputTokens: 1_000_000,
     });
-    // 0.14 + 0.28 = 0.42
-    expect(r.estimatedCostUsd).toBeCloseTo(0.42, 4);
+    // 0.3 + 1.2 = 1.5 at current V4.1 Flash peak list rates.
+    expect(r.estimatedCostUsd).toBeCloseTo(1.5, 4);
+    expect(r.costStatus).toBe('estimated');
   });
 
   it('调用入口与计费产品不同时按 provider 内的唯一模型定价', () => {
@@ -410,8 +483,8 @@ describe('多币种折算', () => {
       cacheWriteTokens: 0,
       outputTokens: 1_000_000,
     });
-    expect(r.estimatedCostUsd).toBeCloseTo(0.42, 4);
-    expect(r.costStatus).toBe('exact');
+    expect(r.estimatedCostUsd).toBeCloseTo(1.5, 4);
+    expect(r.costStatus).toBe('estimated');
   });
 
   it('带上下文窗口后缀的模型名（deepseek-v4-flash[1M]）应命中定价而非 unavailable', () => {
@@ -421,9 +494,9 @@ describe('多币种折算', () => {
       cacheWriteTokens: 0,
       outputTokens: 1_000_000,
     });
-    expect(r.resolvedModel).toBe('deepseek-v4-flash');
-    expect(r.estimatedCostUsd).toBeCloseTo(0.42, 4);
-    expect(r.costStatus).toBe('exact');
+    expect(r.resolvedModel).toBe('deepseek-v4.1-flash');
+    expect(r.estimatedCostUsd).toBeCloseTo(1.5, 4);
+    expect(r.costStatus).toBe('estimated');
   });
 
   it('按定价目录中的唯一模型归属识别 provider', () => {

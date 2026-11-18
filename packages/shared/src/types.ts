@@ -6,6 +6,18 @@ export type Provider = 'anthropic' | 'openai' | 'google' | 'github' | 'alibaba' 
 export type Product = 'claude-code' | 'codex' | 'copilot-cli' | 'copilot-vscode' | 'gemini-cli' | 'antigravity' | 'qwen-code' | 'kimi-code' | 'amp' | 'droid' | 'opencode' | 'pi' | 'cursor' | 'trae' | 'trae-cn' | 'trae-intl' | (string & {});
 export type Channel = 'cli' | 'ide' | 'web' | 'api';
 export type CostStatus = 'exact' | 'estimated' | 'unavailable';
+/** Provenance of the primary amount stored in estimated_cost_usd. */
+export type CostSource =
+  | 'provider_actual'
+  | 'catalog_estimate'
+  | 'client_estimate'
+  | 'explicit_free'
+  | 'unavailable'
+  | 'legacy_unknown'
+  | 'mixed';
+export type ReportedCostSource = 'provider_actual' | 'client_estimate' | 'mixed';
+export type CostEvidence = 'per_request' | 'aggregate' | 'assumed_standard' | 'unknown';
+export type CostGranularity = 'per_request' | 'aggregate' | 'unknown';
 export type DeviceStatus = 'active' | 'disabled';
 export type ProjectVisibility = 'hidden' | 'masked' | 'plain';
 
@@ -29,6 +41,10 @@ export interface DeviceInfo {
 
 export interface IngestDay {
   usageDate: string;
+  /** New clients set true only after every enabled scanner completed successfully. */
+  snapshotComplete?: boolean;
+  /** For intentional partial imports, replace only these products and merge the whole-day summary. */
+  productScope?: Product[];
   breakdowns: IngestBreakdown[];
   activity?: IngestActivityDay;
 }
@@ -58,8 +74,21 @@ export interface IngestBreakdown {
   cacheWrite1hTokens?: number;
   outputTokens: number;
   reasoningOutputTokens: number;
-  /** 扫描端按单次请求精确算出的费用（如 GPT-5.6 长上下文分档）；Worker 优先采用 */
+  /**
+   * Scanner-reported amount. New clients must set costSource. `client_estimate`
+   * is retained for audit but never promoted to provider actual cost.
+   */
   costUSD?: number;
+  /** Source of costUSD. Missing means a legacy client payload. */
+  costSource?: ReportedCostSource | 'catalog_estimate';
+  /** Evidence level for a scanner-calculated amount, e.g. per-request tier data. */
+  costEvidence?: CostEvidence;
+  /** Granularity used to calculate costUSD; separate from evidence about price/tier. */
+  costGranularity?: CostGranularity;
+  /** True if the source's outputTokens field already includes reasoning tokens. */
+  outputTokensIncludesReasoning?: boolean;
+  /** Source output token count before scanner-level disjoint bucket normalization. */
+  sourceOutputTokens?: number;
   /** 与 costUSD 配套的定价版本；版本不一致时 Worker 会回退重算 */
   pricingVersion?: string;
 }
@@ -123,6 +152,7 @@ export interface OverviewResponse {
   totalSessions: number;
   costBearingEvents: number;
   totalCostUsd: number;
+  costCoverage?: CostCoveragePayload;
   averageDailyCostUsd: number;
   dailyTrend: DailyTrendItem[];
   providerDailyTrend: ProviderDailyTrendItem[];
@@ -134,6 +164,28 @@ export interface OverviewResponse {
   interactionMetrics?: InteractionMetricsPayload;
   comparison?: OverviewComparisonPayload | null;
   filters: DashboardFiltersPayload;
+}
+
+export interface CostCoveragePayload {
+  totalTokens: number;
+  coveredTokens: number;
+  unpricedTokens: number;
+  explicitFreeTokens: number;
+  legacyUnknownTokens: number;
+  clientReportedEstimateUsd: number;
+  coveragePercent: number;
+  /** Device/date rows written by a complete all-scanner sync. */
+  snapshotDays: number;
+  completeSnapshotDays: number;
+  unverifiedSnapshotDays: number;
+  snapshotCompletenessPercent: number;
+  unpricedModels: Array<{
+    provider: string;
+    product: string;
+    model: string;
+    totalTokens: number;
+    rows: number;
+  }>;
 }
 
 export interface OverviewComparisonPayload {

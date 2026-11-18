@@ -81,4 +81,32 @@ describe('scanPiDates', () => {
     expect(rows.every(row => row.provider === 'openai')).toBe(true);
     expect(rows.reduce((sum, row) => sum + row.eventCount, 0)).toBe(2);
   });
+
+  it('保留 Pi usage.cost 为客户端估算来源，按去重后的请求累加', async () => {
+    await writeJsonl(join(tmpDir, 'project', 'session.jsonl'), [
+      { type: 'session', id: 's-cost', cwd: '/tmp/project' },
+      {
+        type: 'message', id: 'm1', timestamp: '2026-07-18T12:00:00Z',
+        message: {
+          role: 'assistant', model: 'gpt-6.1-sol', provider: 'openai-codex',
+          usage: { input: 1000, output: 100, cost: 12.73 },
+        },
+      },
+      {
+        type: 'message', id: 'm2', timestamp: '2026-07-18T12:01:00Z',
+        message: {
+          role: 'assistant', model: 'gpt-6.1-sol', provider: 'openai-codex',
+          usage: { input: 2000, output: 200, cost: { input: 3, output: 11, cacheRead: 1, total: 15 } },
+        },
+      },
+    ]);
+    const rows = (await scanPiDates(['2026-07-18'], tmpDir)).get('2026-07-18')!;
+    expect(rows).toHaveLength(1);
+    expect(rows[0]).toMatchObject({
+      eventCount: 2,
+      costUSD: 27.73,
+      costSource: 'client_estimate',
+      costEvidence: 'aggregate',
+    });
+  });
 });

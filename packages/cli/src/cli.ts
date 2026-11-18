@@ -498,7 +498,12 @@ async function runSync(flags: Record<string, string | boolean>, positionals: str
   const uploadableDates = new Set(syncPlan.uploadDates);
   const allDays: IngestDay[] = candidates
     .filter(candidate => uploadableDates.has(candidate.usageDate))
-    .map(({ usageDate, breakdowns, activity }) => ({ usageDate, breakdowns, activity }));
+		.map(({ usageDate, breakdowns, activity }) => ({
+			usageDate,
+			breakdowns,
+			activity,
+			snapshotComplete: true,
+		}));
 
   const memoryPayload = memoryProcess?.cloudPayload;
   if (allDays.length === 0 && !memoryPayload) {
@@ -694,7 +699,7 @@ async function runImport(flags: Record<string, string | boolean>, positionals: s
   // Detect mode: CSV files passed as positional args vs Admin API
   const csvFiles = positionals.filter(p => p.endsWith('.csv'));
 
-  let allDays: Array<{ usageDate: string; breakdowns: import('@aiusage/shared').IngestBreakdown[] }>;
+	let allDays: Array<{ usageDate: string; breakdowns: import('@aiusage/shared').IngestBreakdown[] }>;
 
   if (csvFiles.length > 0) {
     // CSV mode: scan all provided files and determine date range from flags or auto-detect
@@ -769,7 +774,12 @@ async function runImport(flags: Record<string, string | boolean>, positionals: s
 
   // 上传前按隐私策略脱敏（默认 masked：basename + 8 字符短哈希）
   const visibility = config.privacy?.projectVisibility;
-  allDays = allDays.map(d => ({ usageDate: d.usageDate, breakdowns: applyPrivacy(d.breakdowns, visibility) }));
+	const importDays: IngestDay[] = allDays.map(d => ({
+		usageDate: d.usageDate,
+		breakdowns: applyPrivacy(d.breakdowns, visibility),
+		snapshotComplete: false,
+		productScope: ['claude-code'],
+	}));
 
   for (const target of targets) {
     if (!target.deviceToken) {
@@ -777,7 +787,7 @@ async function runImport(flags: Record<string, string | boolean>, positionals: s
       continue;
     }
 
-    const batches = batchIngestDays(allDays);
+		const batches = batchIngestDays(importDays);
     let totalProcessed = 0;
 
     for (const batch of batches) {

@@ -33,6 +33,12 @@ export interface PricingTier {
  */
 export interface ModelPricing {
   currency: Currency;
+  /** Official or gateway price source used to build this catalog entry. */
+  source_url?: string;
+  /** Date on which this price and its billing rules were checked. */
+  checked_at?: string;
+  /** Explicit zero-price listing; a zero-valued estimate is otherwise ambiguous. */
+  is_free?: boolean;
   /** 该价格生效起始日（ISO date，YYYY-MM-DD）；用于审计 */
   effective_from?: string;
   /** 该价格失效日；填了表示已废弃 */
@@ -93,4 +99,8 @@ export interface CostCalcResult {
   resolvedModel?: string;
   /** 阶梯模型命中的档位索引 */
   matchedTierIndex?: number;
+  /** True only when the selected catalog entry explicitly represents free usage. */
+  isFree?: boolean;
+  sourceUrl?: string;
+  checkedAt?: string;
 }

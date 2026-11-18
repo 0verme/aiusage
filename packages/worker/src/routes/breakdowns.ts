@@ -21,6 +21,13 @@ const RAW_MODEL_SQL = `COALESCE(
   END,
   b.model
 )`;
+const EFFECTIVE_OUTPUT_TOKENS_SQL = `CASE
+  WHEN b.product = 'codex'
+    AND b.provider IN ('openai', 'openai-codex', 'openai_codex')
+    AND COALESCE(b.output_tokens_includes_reasoning, 1) != 0
+  THEN MAX(COALESCE(b.output_tokens, 0) - COALESCE(b.reasoning_output_tokens, 0), 0)
+  ELSE COALESCE(b.output_tokens, 0)
+END`;
 
 const SORT_FIELDS: Record<string, string> = {
 	usage_date: "b.usage_date",
@@ -41,7 +48,7 @@ const SORT_FIELDS: Record<string, string> = {
     COALESCE(b.input_tokens, 0) +
     COALESCE(b.cached_input_tokens, 0) +
     COALESCE(b.cache_write_tokens, 0) +
-    COALESCE(b.output_tokens, 0) +
+    ${EFFECTIVE_OUTPUT_TOKENS_SQL} +
     COALESCE(b.reasoning_output_tokens, 0)
   `,
 };
@@ -70,7 +77,7 @@ export function buildBreakdownQuery(
       b.input_tokens,
       b.cached_input_tokens,
       b.cache_write_tokens,
-      b.output_tokens,
+      (${EFFECTIVE_OUTPUT_TOKENS_SQL}) AS output_tokens,
       b.reasoning_output_tokens,
       (${SORT_FIELDS.total_tokens}) AS total_tokens,
       b.estimated_cost_usd,

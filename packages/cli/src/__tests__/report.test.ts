@@ -2,6 +2,7 @@ import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { mkdir, rm, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
+import * as zlib from 'node:zlib';
 
 const mockHomedir = vi.fn();
 
@@ -31,6 +32,42 @@ afterEach(async () => {
 });
 
 describe('buildLocalReport', () => {
+  it.skipIf(typeof zlib.zstdCompressSync !== 'function')(
+    'discovers and reports Codex dates from streamed Zstandard archives',
+    async () => {
+      const day = '2026-03-18';
+      const sessionDir = join(homeDir, '.codex', 'sessions', '2026', '03', '18');
+      await mkdir(sessionDir, { recursive: true });
+      const timestamp = `${day}T12:00:00.000Z`;
+      const records = [
+        { type: 'turn_context', timestamp, payload: { model: 'gpt-6.1-sol', cwd: '/work/project' } },
+        {
+          type: 'event_msg',
+          timestamp,
+          payload: {
+            type: 'token_count',
+            info: {
+              last_token_usage: { input_tokens: 100, cached_input_tokens: 20, output_tokens: 30, reasoning_output_tokens: 10 },
+              total_token_usage: { input_tokens: 100, cached_input_tokens: 20, output_tokens: 30, reasoning_output_tokens: 10 },
+            },
+          },
+        },
+      ];
+      const contents = records.map(record => JSON.stringify(record)).join('\n');
+      await writeFile(
+        join(sessionDir, 'rollout-archived.jsonl.zst'),
+        zlib.zstdCompressSync(Buffer.from(contents)),
+      );
+
+      const { buildLocalReport } = await import('../report.js');
+      const report = await buildLocalReport('all', { tools: ['codex'] });
+
+      expect(report.daily.map(daySummary => daySummary.usageDate)).toEqual([day]);
+      expect(report.totals.eventCount).toBe(1);
+      expect(report.totals.totalTokens).toBe(130);
+    },
+  );
+
   it('discovers all-history dates from CLAUDE_CONFIG_DIR and the default directory together', async () => {
     const customRoot = join(homeDir, 'custom-claude');
     vi.stubEnv('CLAUDE_CONFIG_DIR', customRoot);
@@ -274,8 +311,8 @@ describe('calculateBreakdownCost', () => {
       reasoningOutputTokens: 0,
     }, warnings);
 
-    expect(cost).toBe(0.42);
-    expect([...warnings]).toEqual([]);
+    expect(cost).toBe(1.5);
+    expect([...warnings]).toEqual(['deepseek-v4-flash-0731 已按 deepseek-v4.1-flash 的公开单价估算。']);
   });
 
   it('prices local Codex GPT-5.5 usage', async () => {
@@ -297,10 +334,10 @@ describe('calculateBreakdownCost', () => {
     }, warnings);
 
     expect(cost).toBe(33.5);
-    expect([...warnings]).toEqual([]);
+    expect([...warnings]).toEqual(['gpt-5.5 缺少请求级服务等级证据，按 standard 价格估算。']);
   });
 
-  it('trusts OpenCode provider-reported cost', async () => {
+  it('does not treat an unversioned OpenCode cost as supplier spend', async () => {
     const { calculateBreakdownCost } = await import('../report.js');
     const warnings = new Set<string>();
 
@@ -317,10 +354,11 @@ describe('calculateBreakdownCost', () => {
       outputTokens: 10,
       reasoningOutputTokens: 0,
       costUSD: 0.42,
+      costSource: 'client_estimate',
       pricingVersion: 'opencode-provider',
     }, warnings);
 
-    expect(cost).toBe(0.42);
+    expect(cost).toBe(0.0006);
     expect([...warnings]).toEqual([]);
   });
 
@@ -342,6 +380,7 @@ describe('calculateBreakdownCost', () => {
       outputTokens: 20,
       reasoningOutputTokens: 0,
       costUSD: 0.25,
+      costSource: 'provider_actual',
       pricingVersion: 'older-cli',
     }, warnings, { ...catalog, version: 'future-catalog' });
 
@@ -368,7 +407,7 @@ describe('calculateBreakdownCost', () => {
     }, warnings);
 
     expect(cost).toBe(28);
-    // codex-auto-review 是 catalog 里的显式 alias → gpt-5.4，按 exact 处理，不应有 warning
-    expect([...warnings]).toEqual([]);
+    // 显式 alias 可以定价，但旧 Codex 数据仍缺少逐请求服务等级证据。
+    expect([...warnings]).toEqual(['codex-auto-review 缺少请求级服务等级证据，按 standard 价格估算。']);
   });
 });

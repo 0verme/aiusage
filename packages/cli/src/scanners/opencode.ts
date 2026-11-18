@@ -525,7 +525,10 @@ function addOpenCodeRecord(
   );
 
   const breakdown = dayMap.get(breakdownKey)!;
-  if (record.costUSD > 0) breakdown.costUSD = (breakdown.costUSD ?? 0) + record.costUSD;
+  if (record.costUSD > 0) {
+    breakdown.costUSD = (breakdown.costUSD ?? 0) + record.costUSD;
+    breakdown.costSource = 'client_estimate';
+  }
   if (record.sessionId) {
     const sessionKey = `${usageDate}\0${breakdownKey}`;
     const sessions = sessionsByBreakdown.get(sessionKey) ?? new Set<string>();

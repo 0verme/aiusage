@@ -23,7 +23,30 @@ export const droid: Record<string, ProductPricing> = {
 };
 
 export const opencode: Record<string, ProductPricing> = {
-  opencode: { models: {} },
+  opencode: {
+    models: {
+      'glm-5.3-flash-free': {
+        currency: 'USD',
+        source_url: 'https://opencode.ai/docs/console/models',
+        checked_at: '2026-11-18',
+        is_free: true,
+        notes: 'OpenCode model list labels this provider model Free. Free-tier access may be time-limited.',
+        input_per_million: 0,
+        cached_input_per_million: 0,
+        output_per_million: 0,
+      },
+      'deepseek-v4.1-flash-free': {
+        currency: 'USD',
+        source_url: 'https://opencode.ai/docs/console/models',
+        checked_at: '2026-11-18',
+        is_free: true,
+        notes: 'OpenCode model list labels this provider model Free. Free-tier access may be time-limited.',
+        input_per_million: 0,
+        cached_input_per_million: 0,
+        output_per_million: 0,
+      },
+    },
+  },
 };
 
 // google.antigravity 是 google 下的另一个 product；扩展 google 表

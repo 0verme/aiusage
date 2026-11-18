@@ -295,6 +295,7 @@ async function processJsonlFile(
           outputTokens: snapshot.output,
           reasoningOutputTokens: 0,
           costUSD: snapshot.costUSD,
+        costSource: 'client_estimate',
         };
         grouped.set(key, breakdown);
         if (hash) processedHashes.set(hash, { breakdown, snapshot });

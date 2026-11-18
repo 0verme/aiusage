@@ -20,11 +20,21 @@ import {
 	selectCanonicalModelValues,
 } from "../utils/model-aggregation.js";
 
+const LEGACY_CODEX_REASONING_INCLUDED_SQL = `
+  b.product = 'codex'
+  AND b.provider IN ('openai', 'openai-codex', 'openai_codex')
+  AND COALESCE(b.output_tokens_includes_reasoning, 1) != 0
+`;
+export const EFFECTIVE_OUTPUT_TOKENS_SQL = `CASE
+  WHEN ${LEGACY_CODEX_REASONING_INCLUDED_SQL}
+    THEN MAX(COALESCE(b.output_tokens, 0) - COALESCE(b.reasoning_output_tokens, 0), 0)
+  ELSE COALESCE(b.output_tokens, 0)
+END`;
 export const TOTAL_TOKENS_SQL = `
   COALESCE(b.input_tokens, 0) +
   COALESCE(b.cached_input_tokens, 0) +
   COALESCE(b.cache_write_tokens, 0) +
-  COALESCE(b.output_tokens, 0) +
+  ${EFFECTIVE_OUTPUT_TOKENS_SQL} +
   COALESCE(b.reasoning_output_tokens, 0)
 `;
 
@@ -162,6 +172,7 @@ export async function handleOverview(url: URL, env: Env): Promise<Response> {
 	const filters = { ...baseFilters, modelDatabaseValues };
 	const mergeModelAliases = filters.mergeModelAliases !== false;
 	const where = buildWhere(filters);
+	const snapshotWhere = buildSnapshotWhere(filters);
 	const previousFilters = buildPreviousFilters(filters);
 
 	// 热力图固定查最近 365 天（不受 range 过滤器影响，但保留 device/provider 等维度过滤）
@@ -183,6 +194,9 @@ export async function handleOverview(url: URL, env: Env): Promise<Response> {
 		trendRows,
 		providerTrendRows,
 		tokenRows,
+		costCoverageRows,
+		snapshotCoverageRows,
+		unpricedModelRows,
 		modelRows,
 		channelRows,
 		flowRows,
@@ -254,8 +268,9 @@ export async function handleOverview(url: URL, env: Env): Promise<Response> {
         COALESCE(SUM(b.input_tokens), 0) AS input_tokens,
         COALESCE(SUM(b.cached_input_tokens), 0) AS cached_input_tokens,
         COALESCE(SUM(b.cache_write_tokens), 0) AS cache_write_tokens,
-        COALESCE(SUM(b.output_tokens), 0) AS output_tokens,
-        COALESCE(SUM(b.reasoning_output_tokens), 0) AS reasoning_output_tokens
+        COALESCE(SUM(${EFFECTIVE_OUTPUT_TOKENS_SQL}), 0) AS output_tokens,
+        COALESCE(SUM(b.reasoning_output_tokens), 0) AS reasoning_output_tokens,
+        COALESCE(SUM(${TOTAL_TOKENS_SQL}), 0) AS total_tokens
       FROM daily_usage_breakdown b
       ${where.whereClause}
       GROUP BY b.usage_date
@@ -269,7 +284,49 @@ export async function handleOverview(url: URL, env: Env): Promise<Response> {
 				cache_write_tokens: number;
 				output_tokens: number;
 				reasoning_output_tokens: number;
+				total_tokens: number;
 			}>(),
+		prepareQuery(env, `
+      SELECT
+        COALESCE(SUM(${TOTAL_TOKENS_SQL}), 0) AS total_tokens,
+        COALESCE(SUM(CASE WHEN b.cost_status != 'unavailable' AND b.cost_source != 'legacy_unknown' THEN ${TOTAL_TOKENS_SQL} ELSE 0 END), 0) AS covered_tokens,
+        COALESCE(SUM(CASE WHEN b.cost_status = 'unavailable' OR b.cost_source = 'legacy_unknown' THEN ${TOTAL_TOKENS_SQL} ELSE 0 END), 0) AS unpriced_tokens,
+        COALESCE(SUM(CASE WHEN b.cost_source = 'explicit_free' THEN ${TOTAL_TOKENS_SQL} ELSE 0 END), 0) AS explicit_free_tokens,
+        COALESCE(SUM(CASE WHEN b.cost_source = 'legacy_unknown' THEN ${TOTAL_TOKENS_SQL} ELSE 0 END), 0) AS legacy_unknown_tokens,
+        COALESCE(SUM(b.reported_cost_usd), 0) AS client_reported_estimate_usd
+      FROM daily_usage_breakdown b
+      ${where.whereClause}
+    `)
+			.bind(...where.params)
+			.first<{
+				total_tokens: number;
+				covered_tokens: number;
+				unpriced_tokens: number;
+				explicit_free_tokens: number;
+				legacy_unknown_tokens: number;
+				client_reported_estimate_usd: number;
+			}>(),
+		prepareQuery(env, `
+      SELECT
+        COUNT(*) AS snapshot_days,
+        COALESCE(SUM(CASE WHEN d.snapshot_complete = 1 THEN 1 ELSE 0 END), 0) AS complete_snapshot_days
+      FROM daily_usage d
+      ${snapshotWhere.whereClause}
+    `)
+			.bind(...snapshotWhere.params)
+			.first<{ snapshot_days: number; complete_snapshot_days: number }>(),
+		prepareQuery(env, `
+      SELECT b.provider, b.product, b.model,
+        COUNT(*) AS rows,
+        COALESCE(SUM(${TOTAL_TOKENS_SQL}), 0) AS total_tokens
+      FROM daily_usage_breakdown b
+      ${where.whereClause}${where.whereClause ? ' AND' : ' WHERE'} (b.cost_status = 'unavailable' OR b.cost_source = 'legacy_unknown')
+      GROUP BY b.provider, b.product, b.model
+      ORDER BY total_tokens DESC, b.provider, b.product, b.model
+      LIMIT 50
+    `)
+			.bind(...where.params)
+			.all<{ provider: string; product: string; model: string; rows: number; total_tokens: number }>(),
 		prepareQuery(env, buildModelAggregationQuery(where.whereClause, mergeModelAliases))
 			.bind(...where.params)
 			.all<{
@@ -337,6 +394,34 @@ export async function handleOverview(url: URL, env: Env): Promise<Response> {
 	const totalSessions = Number(summary?.total_sessions ?? 0);
 	const costBearingEvents = Number(summary?.cost_bearing_events ?? 0);
 	const totalCostUsd = roundUsd(summary?.total_cost_usd ?? 0);
+	const coverage = costCoverageRows;
+	const totalCoverageTokens = Number(coverage?.total_tokens ?? 0);
+	const snapshotDays = Number(snapshotCoverageRows?.snapshot_days ?? 0);
+	const completeSnapshotDays = Number(snapshotCoverageRows?.complete_snapshot_days ?? 0);
+	const costCoverage = {
+		totalTokens: totalCoverageTokens,
+		coveredTokens: Number(coverage?.covered_tokens ?? 0),
+		unpricedTokens: Number(coverage?.unpriced_tokens ?? 0),
+		explicitFreeTokens: Number(coverage?.explicit_free_tokens ?? 0),
+		legacyUnknownTokens: Number(coverage?.legacy_unknown_tokens ?? 0),
+		clientReportedEstimateUsd: roundUsd(coverage?.client_reported_estimate_usd ?? 0),
+		coveragePercent: totalCoverageTokens > 0
+			? roundUsd((Number(coverage?.covered_tokens ?? 0) / totalCoverageTokens) * 100)
+			: 100,
+		snapshotDays,
+		completeSnapshotDays,
+		unverifiedSnapshotDays: Math.max(snapshotDays - completeSnapshotDays, 0),
+		snapshotCompletenessPercent: snapshotDays > 0
+			? roundUsd((completeSnapshotDays / snapshotDays) * 100)
+			: 100,
+		unpricedModels: (unpricedModelRows.results ?? []).map((row) => ({
+			provider: row.provider,
+			product: row.product,
+			model: row.model,
+			totalTokens: Number(row.total_tokens ?? 0),
+			rows: Number(row.rows ?? 0),
+		})),
+	};
 	const modelAggregates = mergeCanonicalModelRows(
 		(modelRows.results ?? []).map((row) => ({
 			model: row.value,
@@ -356,6 +441,7 @@ export async function handleOverview(url: URL, env: Env): Promise<Response> {
 			totalSessions,
 			costBearingEvents,
 			totalCostUsd,
+			costCoverage,
 			averageDailyCostUsd:
 				activeDays > 0 ? roundUsd(totalCostUsd / activeDays) : 0,
 			dailyTrend: (trendRows.results ?? []).map((row) => ({
@@ -373,12 +459,7 @@ export async function handleOverview(url: URL, env: Env): Promise<Response> {
 				cacheWriteTokens: Number(row.cache_write_tokens ?? 0),
 				outputTokens: Number(row.output_tokens ?? 0),
 				reasoningOutputTokens: Number(row.reasoning_output_tokens ?? 0),
-				totalTokens:
-					Number(row.input_tokens ?? 0) +
-					Number(row.cached_input_tokens ?? 0) +
-					Number(row.cache_write_tokens ?? 0) +
-					Number(row.output_tokens ?? 0) +
-					Number(row.reasoning_output_tokens ?? 0),
+				totalTokens: Number(row.total_tokens ?? 0),
 			})),
 			modelCostShare: modelAggregates.map((row) => ({
 				value: row.value,
@@ -562,6 +643,25 @@ export function buildWhere(
 
 	return {
 		whereClause: clauses.length > 0 ? `WHERE ${clauses.join(" AND ")}` : "",
+		params,
+	};
+}
+
+/** Completeness applies at device/date level, so provider/model filters are omitted. */
+export function buildSnapshotWhere(filters: DashboardFilters): WhereParts {
+	const clauses: string[] = [];
+	const params: (string | number)[] = [];
+	if (filters.minDate) {
+		clauses.push('d.usage_date >= ?');
+		params.push(filters.minDate);
+	}
+	if (filters.maxDate) {
+		clauses.push('d.usage_date <= ?');
+		params.push(filters.maxDate);
+	}
+	addValueFilter(clauses, params, 'd.device_id', filters.deviceId);
+	return {
+		whereClause: clauses.length > 0 ? `WHERE ${clauses.join(' AND ')}` : '',
 		params,
 	};
 }
@@ -879,7 +979,7 @@ async function loadComparison(
         COALESCE(SUM(b.input_tokens), 0) AS input_tokens,
         COALESCE(SUM(b.cached_input_tokens), 0) AS cached_input_tokens,
         COALESCE(SUM(b.cache_write_tokens), 0) AS cache_write_tokens,
-        COALESCE(SUM(b.output_tokens), 0) AS output_tokens,
+        COALESCE(SUM(${EFFECTIVE_OUTPUT_TOKENS_SQL}), 0) AS output_tokens,
         COALESCE(SUM(b.reasoning_output_tokens), 0) AS reasoning_output_tokens
       FROM daily_usage_breakdown b
       ${where.whereClause}

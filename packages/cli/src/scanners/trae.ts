@@ -177,7 +177,8 @@ export async function scanTraeDates(
       const breakdown = day.get(breakdownKey);
       if (breakdown) {
         breakdown.costUSD = (breakdown.costUSD ?? 0) + event.costUSD;
-        // International Trae returns the vendor's account-level charge.
+        // This amount comes from the Trae International account usage API.
+        breakdown.costSource = 'provider_actual';
         breakdown.pricingVersion = PRICING_VERSION;
       }
     }

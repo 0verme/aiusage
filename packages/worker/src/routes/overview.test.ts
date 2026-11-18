@@ -2,6 +2,9 @@ import { describe, expect, it } from 'vitest';
 import {
   buildActivityWhere,
   buildDateWindow,
+  buildSnapshotWhere,
+  EFFECTIVE_OUTPUT_TOKENS_SQL,
+  TOTAL_TOKENS_SQL,
   buildWhere,
   handleOverview,
   mergeProviderFacetItems,
@@ -86,6 +89,18 @@ describe('overview date windows', () => {
     ]);
   });
 
+  it('checks snapshot completeness by date and device while omitting model filters', () => {
+    const filters = parseFilters(new URL(
+      'https://example.com/api/v1/public/overview?range=7d&deviceId=mac&model=gpt-6.1-sol',
+    ))!;
+    const where = buildSnapshotWhere(filters);
+    expect(where.whereClause).toContain('d.usage_date >= ?');
+    expect(where.whereClause).toContain('d.usage_date <= ?');
+    expect(where.whereClause).toContain('d.device_id = ?');
+    expect(where.whereClause).not.toContain('model');
+    expect(where.params).toEqual([expect.any(String), expect.any(String), 'mac']);
+  });
+
   it('parses repeated and comma-separated facets as multi-select values', () => {
     const filters = parseFilters(new URL(
       'https://example.com/api/v1/public/overview?range=30d&product=codex&product=claude-code&model=gpt-5,claude-opus',
@@ -133,6 +148,13 @@ describe('activity interaction metric aggregation', () => {
 });
 
 describe('overview response contract', () => {
+  it('subtracts only legacy Codex reasoning overlap from public output and total tokens', () => {
+    expect(EFFECTIVE_OUTPUT_TOKENS_SQL).toContain("b.product = 'codex'");
+    expect(EFFECTIVE_OUTPUT_TOKENS_SQL).toContain('COALESCE(b.output_tokens_includes_reasoning, 1)');
+    expect(TOTAL_TOKENS_SQL).toContain('MAX(COALESCE(b.output_tokens, 0) - COALESCE(b.reasoning_output_tokens, 0), 0)');
+    expect(TOTAL_TOKENS_SQL).toContain('COALESCE(b.reasoning_output_tokens, 0)');
+  });
+
   it('returns every dashboard section while keeping generated SQL bounded', async () => {
     const queries: string[] = [];
     const DB = {
@@ -166,6 +188,7 @@ describe('overview response contract', () => {
       'totalSessions',
       'costBearingEvents',
       'totalCostUsd',
+      'costCoverage',
       'averageDailyCostUsd',
       'dailyTrend',
       'providerDailyTrend',
@@ -188,5 +211,15 @@ describe('overview response contract', () => {
       'projects',
     ]));
     expect(queries.every((sql) => sqlUtf8Bytes(sql) < MAX_DASHBOARD_QUERY_BYTES)).toBe(true);
+    expect(queries.some((sql) => sql.includes('snapshot_complete'))).toBe(true);
+    expect(body.costCoverage).toMatchObject({
+      totalTokens: 0,
+      coveragePercent: 100,
+      snapshotDays: 0,
+      completeSnapshotDays: 0,
+      unverifiedSnapshotDays: 0,
+      snapshotCompletenessPercent: 100,
+      unpricedModels: [],
+    });
   });
 });

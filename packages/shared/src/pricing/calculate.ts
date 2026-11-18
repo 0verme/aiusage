@@ -25,13 +25,24 @@ const ANTHROPIC_FAST_MULTIPLIERS: Record<string, number> = {
   'claude-opus-4-7': 6,
 };
 
-const OPENAI_CODEX_TIER_MULTIPLIERS: Record<string, number> = {
+const GOOGLE_PRIORITY_MULTIPLIERS: Record<string, number> = {
+  'gemini-3.8-flash': 1.8,
+};
+
+const OPENAI_FAST_MULTIPLIERS: Record<string, number> = {
   'gpt-6-astra': 2,
+  'gpt-6.1-sol': 2,
+  'gpt-6.1-terra': 2,
+  'gpt-6-luna': 2,
   'gpt-5.6-sol': 2,
-  'gpt-5.6-terra': 2,
-  'gpt-5.6-luna': 2,
-  'gpt-5.5': 2.5,
-  'gpt-5.4': 2,
+};
+
+const OPENAI_PRIORITY_MULTIPLIERS: Record<string, number> = {
+  'gpt-6-astra': 2,
+  'gpt-6.1-sol': 2,
+  'gpt-6.1-terra': 2,
+  'gpt-6-luna': 2,
+  'gpt-5.6-sol': 2,
 };
 
 function getServiceTierMultiplier(
@@ -42,10 +53,15 @@ function getServiceTierMultiplier(
 ): number {
   if (!tier) return 1;
 
-  if (provider === 'openai' && product === 'codex') {
-    // GPT-5.6 暂无官方 fast 倍率；priority 按 ×2
-    if (tier === 'fast' && resolvedModel.startsWith('gpt-5.6')) return 1;
-    return OPENAI_CODEX_TIER_MULTIPLIERS[resolvedModel] ?? 1;
+  if (provider === 'openai') {
+    // Only explicit request/model-tier evidence reaches this function. Codex
+    // config defaults are intentionally not translated into historical tiers.
+    const multipliers = tier === 'fast' ? OPENAI_FAST_MULTIPLIERS : OPENAI_PRIORITY_MULTIPLIERS;
+    return multipliers[resolvedModel] ?? 1;
+  }
+
+  if (provider === 'google' && tier === 'priority') {
+    return GOOGLE_PRIORITY_MULTIPLIERS[resolvedModel] ?? 1;
   }
 
   if (tier === 'fast') {
@@ -172,6 +188,8 @@ export interface CalculateCostOptions {
    * 精确路径请在 scanner 侧按单次 event 计算并把 costUSD 上传。
    */
   requestCount?: number;
+  /** Evidence about per-request service tier and aggregation. */
+  costEvidence?: import('../types.js').CostEvidence;
 }
 
 export function calculateCost(
@@ -204,6 +222,9 @@ export function calculateCost(
       pricingVersion: cat.version,
       pricingIdentity,
       resolvedModel: resolved?.resolvedModel,
+      isFree: resolved?.pricing.is_free,
+      sourceUrl: resolved?.pricing.source_url,
+      checkedAt: resolved?.pricing.checked_at,
     };
   }
 
@@ -214,11 +235,19 @@ export function calculateCost(
       costStatus: 'unavailable',
       pricingVersion: cat.version,
       pricingIdentity,
+      isFree: false,
     };
   }
 
   const { resolvedModel, pricing, normalized } = resolved;
   let costStatus: CostStatus = normalized || pricing.force_estimated ? 'estimated' : 'exact';
+  if (options.costEvidence === 'assumed_standard' || options.costEvidence === 'unknown') {
+    costStatus = 'estimated';
+  }
+  if (pricingProvider === 'openai' && serviceTier
+    && !(serviceTier === 'fast' ? OPENAI_FAST_MULTIPLIERS : OPENAI_PRIORITY_MULTIPLIERS)[resolvedModel]) {
+    costStatus = 'estimated';
+  }
 
   // 阶梯：按总 input（含 cached/cw）命中档位
   let unit: PricingTier;
@@ -231,7 +260,7 @@ export function calculateCost(
     const selected = selectTier(pricing.tiers, tierInput);
     unit = selected.tier;
     matchedTierIndex = selected.index;
-    if (requestCount > 1) costStatus = 'estimated';
+    if (requestCount > 1 && options.costEvidence !== 'per_request') costStatus = 'estimated';
   } else {
     unit = {
       input_per_million: pricing.input_per_million ?? 0,
@@ -276,7 +305,17 @@ export function calculateCost(
     pricingIdentity,
     resolvedModel,
     matchedTierIndex,
+    isFree: pricing.is_free,
+    sourceUrl: pricing.source_url,
+    checkedAt: pricing.checked_at,
   };
+}
+
+/** Whether OpenAI publishes a separate Fast/Priority rate for this SKU. */
+export function hasOpenAIFastMultiplier(model: string): boolean {
+  const { baseModel } = splitPricingServiceTier(model);
+  return OPENAI_FAST_MULTIPLIERS[baseModel] !== undefined
+    || OPENAI_PRIORITY_MULTIPLIERS[baseModel] !== undefined;
 }
 
 export function getWorstCostStatus(statuses: CostStatus[]): CostStatus {

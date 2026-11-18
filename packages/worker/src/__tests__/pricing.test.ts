@@ -34,6 +34,8 @@ describe('calculateCost: 基本计费', () => {
       reasoningOutputTokens: 0,
       costUSD: 4.1,
       pricingVersion: getPricingCatalog().version,
+      costEvidence: 'per_request',
+      outputTokensIncludesReasoning: false,
     });
 
     expect(result.estimatedCostUsd).toBe(4.1);
@@ -57,8 +59,8 @@ describe('calculateCost: 基本计费', () => {
       reasoningOutputTokens: 0,
     });
 
-    expect(result.estimatedCostUsd).toBe(0.42);
-    expect(result.costStatus).toBe('exact');
+    expect(result.estimatedCostUsd).toBe(1.5);
+    expect(result.costStatus).toBe('estimated');
   });
 
   it('定价版本不一致时拒绝客户端预计算成本', () => {
@@ -82,7 +84,7 @@ describe('calculateCost: 基本计费', () => {
     expect(result.costStatus).toBe('estimated');
   });
 
-  it('始终采用 Trae 国际版官方 API 返回的账号费用', () => {
+  it('明确标记 Trae 国际版账号 API 费用时保留供应商实际费用', () => {
     const result = calculateIngestBreakdownCost({
       provider: 'openai',
       product: 'trae-intl',
@@ -96,6 +98,7 @@ describe('calculateCost: 基本计费', () => {
       outputTokens: 20,
       reasoningOutputTokens: 0,
       costUSD: 0.25,
+      costSource: 'provider_actual',
       pricingVersion: 'stale-catalog',
     });
 
@@ -142,6 +145,68 @@ describe('calculateCost: 基本计费', () => {
     expect(result.estimatedCostUsd).toBeCloseTo(1.035, 4);
     expect(result.costStatus).toBe('exact');
     expect(result.pricingIdentity?.canonical).toMatchObject({ provider: 'openai', product: 'codex', model: 'gpt-6-astra' });
+  });
+
+  it('保存 Pi 客户端估算供审计，但主要费用改用当前服务端目录', () => {
+    const result = calculateIngestBreakdownCost({
+      provider: 'openai-codex', product: 'pi', channel: 'cli', model: 'gpt-6.1-sol',
+      project: 'demo', eventCount: 1, inputTokens: 1_000_000, cachedInputTokens: 0,
+      cacheWriteTokens: 0, outputTokens: 1_000_000, reasoningOutputTokens: 0,
+      costUSD: 27.73, costSource: 'client_estimate', costEvidence: 'aggregate',
+      pricingVersion: getPricingCatalog().version,
+    });
+    expect(result.estimatedCostUsd).toBe(19);
+    expect(result.costSource).toBe('catalog_estimate');
+    expect(result.costStatus).toBe('exact');
+    expect(result.reportedCostUsd).toBe(27.73);
+    expect(result.reportedCostSource).toBe('client_estimate');
+  });
+
+  it('旧 Codex 模型后缀不作为逐请求 tier 证据，并按 standard 估算', () => {
+    const result = calculateIngestBreakdownCost({
+      provider: 'openai', product: 'codex', channel: 'cli', model: 'gpt-6-astra-fast',
+      project: 'demo', eventCount: 1, inputTokens: 100_000, cachedInputTokens: 0,
+      cacheWriteTokens: 0, outputTokens: 10_000, reasoningOutputTokens: 0,
+    });
+    expect(result.estimatedCostUsd).toBe(1.5);
+    expect(result.costStatus).toBe('estimated');
+    expect(result.pricingIdentity?.canonical).toMatchObject({ model: 'gpt-6-astra', serviceTier: null });
+  });
+
+  it('有逐请求证据的 Codex Fast 使用目录倍率', () => {
+    const result = calculateIngestBreakdownCost({
+      provider: 'openai', product: 'codex', channel: 'cli', model: 'gpt-6-astra-fast',
+      project: 'demo', eventCount: 1, inputTokens: 100_000, cachedInputTokens: 0,
+      cacheWriteTokens: 0, outputTokens: 10_000, reasoningOutputTokens: 0,
+      costEvidence: 'per_request',
+    });
+    expect(result.estimatedCostUsd).toBe(3);
+    expect(result.costStatus).toBe('exact');
+  });
+
+  it('legacy Codex output 含 reasoning 时在服务端只计一次', () => {
+    const result = calculateIngestBreakdownCost({
+      provider: 'openai', product: 'codex', channel: 'cli', model: 'gpt-6.1-sol',
+      project: 'demo', eventCount: 1, inputTokens: 100_000, cachedInputTokens: 0,
+      cacheWriteTokens: 0, outputTokens: 100_000, reasoningOutputTokens: 30_000,
+      outputTokensIncludesReasoning: true,
+    });
+    expect(result.estimatedCostUsd).toBe(1.2);
+  });
+
+  it('明确标记 OpenCode 免费模型且不把未知路由当作免费', () => {
+    const free = calculateIngestBreakdownCost({
+      provider: 'deepseek', product: 'opencode', channel: 'api', model: 'deepseek-v4.1-flash-free',
+      project: 'demo', eventCount: 1, inputTokens: 100_000, cachedInputTokens: 0,
+      cacheWriteTokens: 0, outputTokens: 10_000, reasoningOutputTokens: 0,
+    });
+    const unknown = calculateIngestBreakdownCost({
+      provider: 'openai', product: 'pi', channel: 'cli', model: 'openai/pi/codex/gpt-6-luna',
+      project: 'demo', eventCount: 1, inputTokens: 100_000, cachedInputTokens: 0,
+      cacheWriteTokens: 0, outputTokens: 10_000, reasoningOutputTokens: 0,
+    });
+    expect(free).toMatchObject({ estimatedCostUsd: 0, costStatus: 'exact', costSource: 'explicit_free' });
+    expect(unknown).toMatchObject({ estimatedCostUsd: 0, costStatus: 'unavailable', costSource: 'unavailable' });
   });
 
   it.each([
@@ -305,7 +370,7 @@ describe('calculateCost: 基本计费', () => {
     expect(result.costStatus).toBe('exact');
   });
 
-  it('始终采用 OpenCode 消息中持久化的供应商费用', () => {
+  it('把旧 OpenCode 消息费用保留为客户端估算，不冒充供应商实扣', () => {
     const result = calculateIngestBreakdownCost({
       provider: 'openai',
       product: 'opencode',
@@ -319,11 +384,15 @@ describe('calculateCost: 基本计费', () => {
       outputTokens: 50,
       reasoningOutputTokens: 0,
       costUSD: 0.42,
+      costSource: 'client_estimate',
       pricingVersion: 'opencode-provider',
     });
 
-    expect(result.estimatedCostUsd).toBe(0.42);
-    expect(result.costStatus).toBe('exact');
+    expect(result.estimatedCostUsd).toBe(0.003);
+    expect(result.costStatus).toBe('estimated');
+    expect(result.costSource).toBe('catalog_estimate');
+    expect(result.reportedCostUsd).toBe(0.42);
+    expect(result.reportedCostSource).toBe('client_estimate');
   });
 });
 

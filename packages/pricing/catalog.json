@@ -1,5 +1,5 @@
 {
-  "version": "2026-09-21-gpt-6-astra-pricing-v1",
+  "version": "2026-11-18-current-catalog-v2",
   "fx": {
     "CNY": 7.2
   },
@@ -20,7 +20,10 @@
     "grok-code-fast-1": "grok-build-0.1",
     "grok-build": "grok-build-0.1",
     "k3": "kimi-k3",
-    "kimi-code/k3": "kimi-k3"
+    "kimi-code/k3": "kimi-k3",
+    "deepseek-flash": "deepseek-v4.1-flash",
+    "deepseek-v4-flash": "deepseek-v4.1-flash",
+    "deepseek-v4-flash-vision-exp": "deepseek-v4.1-flash"
   },
   "providers": {
     "anthropic": {
@@ -160,6 +163,8 @@
         "models": {
           "gpt-6-astra": {
             "currency": "USD",
+            "source_url": "https://developers.openai.com/api/docs/pricing",
+            "checked_at": "2026-11-18",
             "notes": "prompts over 272K input tokens bill the full request at long-context rates",
             "input_per_million": 10,
             "cached_input_per_million": 1,
@@ -178,6 +183,106 @@
                 "cached_input_per_million": 2,
                 "cache_write_per_million": 25,
                 "output_per_million": 75
+              }
+            ]
+          },
+          "gpt-6-sol": {
+            "currency": "USD",
+            "source_url": "https://developers.openai.com/api/docs/pricing",
+            "checked_at": "2026-11-18",
+            "notes": "prompts over 272K input tokens bill the full request at long-context rates",
+            "input_per_million": 2,
+            "cached_input_per_million": 0.2,
+            "cache_write_per_million": 2.5,
+            "output_per_million": 10,
+            "tiers": [
+              {
+                "threshold": 272000,
+                "input_per_million": 2,
+                "cached_input_per_million": 0.2,
+                "cache_write_per_million": 2.5,
+                "output_per_million": 10
+              },
+              {
+                "input_per_million": 4,
+                "cached_input_per_million": 0.4,
+                "cache_write_per_million": 5,
+                "output_per_million": 15
+              }
+            ]
+          },
+          "gpt-6-luna": {
+            "currency": "USD",
+            "source_url": "https://developers.openai.com/api/docs/pricing",
+            "checked_at": "2026-11-18",
+            "notes": "prompts over 272K input tokens bill the full request at long-context rates",
+            "input_per_million": 0.1,
+            "cached_input_per_million": 0.01,
+            "cache_write_per_million": 0.125,
+            "output_per_million": 0.5,
+            "tiers": [
+              {
+                "threshold": 272000,
+                "input_per_million": 0.1,
+                "cached_input_per_million": 0.01,
+                "cache_write_per_million": 0.125,
+                "output_per_million": 0.5
+              },
+              {
+                "input_per_million": 0.2,
+                "cached_input_per_million": 0.02,
+                "cache_write_per_million": 0.25,
+                "output_per_million": 0.75
+              }
+            ]
+          },
+          "gpt-6.1-sol": {
+            "currency": "USD",
+            "source_url": "https://developers.openai.com/api/docs/pricing",
+            "checked_at": "2026-11-18",
+            "notes": "Fast mode is 2x Standard. Prompts over 272K input tokens use long-context rates for the full request; 30m cache-write rate is used because local Codex logs do not retain cache TTL.",
+            "input_per_million": 2,
+            "cached_input_per_million": 0.1,
+            "cache_write_per_million": 2.5,
+            "output_per_million": 10,
+            "tiers": [
+              {
+                "threshold": 272000,
+                "input_per_million": 2,
+                "cached_input_per_million": 0.1,
+                "cache_write_per_million": 2.5,
+                "output_per_million": 10
+              },
+              {
+                "input_per_million": 4,
+                "cached_input_per_million": 0.2,
+                "cache_write_per_million": 5,
+                "output_per_million": 15
+              }
+            ]
+          },
+          "gpt-6.1-terra": {
+            "currency": "USD",
+            "source_url": "https://developers.openai.com/api/docs/pricing",
+            "checked_at": "2026-11-18",
+            "notes": "Fast mode is 2x Standard. Prompts over 272K input tokens use long-context rates for the full request; 30m cache-write rate is used because local Codex logs do not retain cache TTL.",
+            "input_per_million": 1,
+            "cached_input_per_million": 0.05,
+            "cache_write_per_million": 1.25,
+            "output_per_million": 5,
+            "tiers": [
+              {
+                "threshold": 272000,
+                "input_per_million": 1,
+                "cached_input_per_million": 0.05,
+                "cache_write_per_million": 1.25,
+                "output_per_million": 5
+              },
+              {
+                "input_per_million": 2,
+                "cached_input_per_million": 0.1,
+                "cache_write_per_million": 2.5,
+                "output_per_million": 7.5
               }
             ]
           },
@@ -654,6 +759,15 @@
             "output_per_million": 9,
             "cached_input_per_million": 0.15
           },
+          "gemini-3.8-flash": {
+            "currency": "USD",
+            "source_url": "https://ai.google.dev/gemini-api/docs/pricing#gemini-3.8-flash",
+            "checked_at": "2026-11-18",
+            "notes": "Standard paid tier through 2026-12-31; introductory price ends then. Thinking tokens are included in output price. Context-cache storage charges are not available in token counters.",
+            "input_per_million": 0.75,
+            "cached_input_per_million": 0.075,
+            "output_per_million": 3.75
+          },
           "gemini-3.1-pro-preview": {
             "currency": "USD",
             "notes": "tiered by prompt length, 200K threshold",
@@ -1071,31 +1185,45 @@
     "deepseek": {
       "deepseek-chat": {
         "models": {
-          "deepseek-v4-flash": {
+          "deepseek-v4.1-flash": {
             "currency": "USD",
-            "input_per_million": 0.14,
-            "cached_input_per_million": 0.0028,
-            "output_per_million": 0.28
+            "source_url": "https://api-docs.deepseek.com/quick_start/pricing/",
+            "checked_at": "2026-11-18",
+            "force_estimated": true,
+            "notes": "Peak rate. Off-peak is 50% and the local usage record does not retain DeepSeek billing time or peak/off-peak evidence.",
+            "input_per_million": 0.3,
+            "cached_input_per_million": 0.006,
+            "output_per_million": 1.2
           },
           "deepseek-v4-pro": {
             "currency": "USD",
-            "input_per_million": 0.435,
-            "cached_input_per_million": 0.003625,
-            "output_per_million": 0.87
+            "source_url": "https://api-docs.deepseek.com/quick_start/pricing/",
+            "checked_at": "2026-11-18",
+            "force_estimated": true,
+            "notes": "Peak rate. Off-peak is 50% and the local usage record does not retain DeepSeek billing time or peak/off-peak evidence.",
+            "input_per_million": 1.32,
+            "cached_input_per_million": 0.044,
+            "output_per_million": 3.96
           },
           "deepseek-chat": {
             "currency": "USD",
-            "notes": "alias for v4-flash non-thinking",
-            "input_per_million": 0.14,
-            "cached_input_per_million": 0.0028,
-            "output_per_million": 0.28
+            "notes": "legacy API alias for DeepSeek V4.1 Flash; peak rate, off-peak is 50%",
+            "source_url": "https://api-docs.deepseek.com/quick_start/pricing/",
+            "checked_at": "2026-11-18",
+            "force_estimated": true,
+            "input_per_million": 0.3,
+            "cached_input_per_million": 0.006,
+            "output_per_million": 1.2
           },
           "deepseek-reasoner": {
             "currency": "USD",
-            "notes": "alias for v4-flash thinking",
-            "input_per_million": 0.14,
-            "cached_input_per_million": 0.0028,
-            "output_per_million": 0.28
+            "notes": "legacy API alias for DeepSeek V4.1 Flash; peak rate, off-peak is 50%",
+            "source_url": "https://api-docs.deepseek.com/quick_start/pricing/",
+            "checked_at": "2026-11-18",
+            "force_estimated": true,
+            "input_per_million": 0.3,
+            "cached_input_per_million": 0.006,
+            "output_per_million": 1.2
           }
         }
       }
@@ -1103,31 +1231,45 @@
     "custom": {
       "deepseek-chat": {
         "models": {
-          "deepseek-v4-flash": {
+          "deepseek-v4.1-flash": {
             "currency": "USD",
-            "input_per_million": 0.14,
-            "cached_input_per_million": 0.0028,
-            "output_per_million": 0.28
+            "source_url": "https://api-docs.deepseek.com/quick_start/pricing/",
+            "checked_at": "2026-11-18",
+            "force_estimated": true,
+            "notes": "Peak rate. Off-peak is 50% and the local usage record does not retain DeepSeek billing time or peak/off-peak evidence.",
+            "input_per_million": 0.3,
+            "cached_input_per_million": 0.006,
+            "output_per_million": 1.2
           },
           "deepseek-v4-pro": {
             "currency": "USD",
-            "input_per_million": 0.435,
-            "cached_input_per_million": 0.003625,
-            "output_per_million": 0.87
+            "source_url": "https://api-docs.deepseek.com/quick_start/pricing/",
+            "checked_at": "2026-11-18",
+            "force_estimated": true,
+            "notes": "Peak rate. Off-peak is 50% and the local usage record does not retain DeepSeek billing time or peak/off-peak evidence.",
+            "input_per_million": 1.32,
+            "cached_input_per_million": 0.044,
+            "output_per_million": 3.96
           },
           "deepseek-chat": {
             "currency": "USD",
-            "notes": "alias for v4-flash non-thinking",
-            "input_per_million": 0.14,
-            "cached_input_per_million": 0.0028,
-            "output_per_million": 0.28
+            "notes": "legacy API alias for DeepSeek V4.1 Flash; peak rate, off-peak is 50%",
+            "source_url": "https://api-docs.deepseek.com/quick_start/pricing/",
+            "checked_at": "2026-11-18",
+            "force_estimated": true,
+            "input_per_million": 0.3,
+            "cached_input_per_million": 0.006,
+            "output_per_million": 1.2
           },
           "deepseek-reasoner": {
             "currency": "USD",
-            "notes": "alias for v4-flash thinking",
-            "input_per_million": 0.14,
-            "cached_input_per_million": 0.0028,
-            "output_per_million": 0.28
+            "notes": "legacy API alias for DeepSeek V4.1 Flash; peak rate, off-peak is 50%",
+            "source_url": "https://api-docs.deepseek.com/quick_start/pricing/",
+            "checked_at": "2026-11-18",
+            "force_estimated": true,
+            "input_per_million": 0.3,
+            "cached_input_per_million": 0.006,
+            "output_per_million": 1.2
           }
         }
       }
@@ -1135,31 +1277,45 @@
     "opencode-go": {
       "deepseek-chat": {
         "models": {
-          "deepseek-v4-flash": {
+          "deepseek-v4.1-flash": {
             "currency": "USD",
-            "input_per_million": 0.14,
-            "cached_input_per_million": 0.0028,
-            "output_per_million": 0.28
+            "source_url": "https://api-docs.deepseek.com/quick_start/pricing/",
+            "checked_at": "2026-11-18",
+            "force_estimated": true,
+            "notes": "Peak rate. Off-peak is 50% and the local usage record does not retain DeepSeek billing time or peak/off-peak evidence.",
+            "input_per_million": 0.3,
+            "cached_input_per_million": 0.006,
+            "output_per_million": 1.2
           },
           "deepseek-v4-pro": {
             "currency": "USD",
-            "input_per_million": 0.435,
-            "cached_input_per_million": 0.003625,
-            "output_per_million": 0.87
+            "source_url": "https://api-docs.deepseek.com/quick_start/pricing/",
+            "checked_at": "2026-11-18",
+            "force_estimated": true,
+            "notes": "Peak rate. Off-peak is 50% and the local usage record does not retain DeepSeek billing time or peak/off-peak evidence.",
+            "input_per_million": 1.32,
+            "cached_input_per_million": 0.044,
+            "output_per_million": 3.96
           },
           "deepseek-chat": {
             "currency": "USD",
-            "notes": "alias for v4-flash non-thinking",
-            "input_per_million": 0.14,
-            "cached_input_per_million": 0.0028,
-            "output_per_million": 0.28
+            "notes": "legacy API alias for DeepSeek V4.1 Flash; peak rate, off-peak is 50%",
+            "source_url": "https://api-docs.deepseek.com/quick_start/pricing/",
+            "checked_at": "2026-11-18",
+            "force_estimated": true,
+            "input_per_million": 0.3,
+            "cached_input_per_million": 0.006,
+            "output_per_million": 1.2
           },
           "deepseek-reasoner": {
             "currency": "USD",
-            "notes": "alias for v4-flash thinking",
-            "input_per_million": 0.14,
-            "cached_input_per_million": 0.0028,
-            "output_per_million": 0.28
+            "notes": "legacy API alias for DeepSeek V4.1 Flash; peak rate, off-peak is 50%",
+            "source_url": "https://api-docs.deepseek.com/quick_start/pricing/",
+            "checked_at": "2026-11-18",
+            "force_estimated": true,
+            "input_per_million": 0.3,
+            "cached_input_per_million": 0.006,
+            "output_per_million": 1.2
           }
         }
       }
@@ -1421,7 +1577,28 @@
     },
     "opencode": {
       "opencode": {
-        "models": {}
+        "models": {
+          "glm-5.3-flash-free": {
+            "currency": "USD",
+            "source_url": "https://opencode.ai/docs/console/models",
+            "checked_at": "2026-11-18",
+            "is_free": true,
+            "notes": "OpenCode model list labels this provider model Free. Free-tier access may be time-limited.",
+            "input_per_million": 0,
+            "cached_input_per_million": 0,
+            "output_per_million": 0
+          },
+          "deepseek-v4.1-flash-free": {
+            "currency": "USD",
+            "source_url": "https://opencode.ai/docs/console/models",
+            "checked_at": "2026-11-18",
+            "is_free": true,
+            "notes": "OpenCode model list labels this provider model Free. Free-tier access may be time-limited.",
+            "input_per_million": 0,
+            "cached_input_per_million": 0,
+            "output_per_million": 0
+          }
+        }
       }
     },
     "xai": {

@@ -5,7 +5,7 @@ import { calculateCost, canonicalizeModel, PRICING_VERSION, type IngestBreakdown
 import { scanDates } from './scan.js';
 import { discoverAntigravityDbDates } from './scanners/antigravity.js';
 import { parseTs, dateKey, fileModifiedTs } from './scanners/utils.js';
-import { getCodexBaseDir } from './scanners/codex.js';
+import { collectCodexSessionFiles, getCodexBaseDir, readCodexSessionLines } from './scanners/codex.js';
 import { resolveKimiCodeHome } from './scanners/kimi.js';
 import {
   resolveTokscaleTraeCacheDir,
@@ -547,10 +547,7 @@ async function discoverCodexDates(dates: Set<string>): Promise<void> {
   const files = await collectCodexSessionFiles(baseDir);
 
   for (const filePath of files) {
-    const content = await safeReadUtf8(filePath);
-    if (!content) continue;
-
-    for (const line of content.split('\n')) {
+    for await (const line of readCodexSessionLines(filePath)) {
       if (!line.trim()) continue;
       let record: { type?: string; timestamp?: string; payload?: { type?: string } };
       try {
@@ -565,22 +562,6 @@ async function discoverCodexDates(dates: Set<string>): Promise<void> {
   }
 }
 
-async function collectCodexSessionFiles(baseDir: string): Promise<string[]> {
-  const paths: string[] = [];
-
-  try {
-    const archivedFiles = await readdir(join(baseDir, 'archived_sessions'));
-    for (const file of archivedFiles) {
-      if (file.endsWith('.jsonl')) paths.push(join(baseDir, 'archived_sessions', file));
-    }
-  } catch {
-    // ignore
-  }
-
-  await walkForCodexJsonl(join(baseDir, 'sessions'), paths);
-  return paths;
-}
-
 async function walkForClaudeJsonl(dir: string, result: string[]): Promise<void> {
   const entries = await readdir(dir, { withFileTypes: true });
   for (const entry of entries) {
@@ -588,24 +569,6 @@ async function walkForClaudeJsonl(dir: string, result: string[]): Promise<void> 
     if (entry.isDirectory()) {
       await walkForClaudeJsonl(fullPath, result);
     } else if (entry.name.endsWith('.jsonl')) {
-      result.push(fullPath);
-    }
-  }
-}
-
-async function walkForCodexJsonl(dir: string, result: string[]): Promise<void> {
-  let entries;
-  try {
-    entries = await readdir(dir, { withFileTypes: true });
-  } catch {
-    return;
-  }
-
-  for (const entry of entries) {
-    const fullPath = join(dir, entry.name);
-    if (entry.isDirectory()) {
-      await walkForCodexJsonl(fullPath, result);
-    } else if (entry.name.startsWith('rollout-') && entry.name.endsWith('.jsonl')) {
       result.push(fullPath);
     }
   }
@@ -708,8 +671,8 @@ function toBreakdownTotals(
 
 /**
  * 计算单个 breakdown 的成本：
- * 1. Trae 国际版官方 API 返回的费用始终采用
- * 2. 其他 scanner 的 costUSD 仅在定价版本匹配时采用
+ * 1. Explicit supplier actuals are retained; client estimates remain sidecar evidence.
+ * 2. Catalog estimates are reused only when their version and per-request semantics match.
  * 3. 否则委托给 @aiusage/shared 的 calculateCost
  *
  * 失败/估算情况注入 warning 给上层报告展示。
@@ -722,19 +685,29 @@ export function calculateBreakdownCost(
   const effectivePricingVersion = pricingCatalog?.version ?? PRICING_VERSION;
   const pricingModelKey = breakdown.pricingModelKey?.trim() || breakdown.model;
   const rawModel = breakdown.rawModel ?? breakdown.model;
+  const isCodex = breakdown.product === 'codex';
+  const hasPerRequestEvidence = breakdown.costEvidence === 'per_request';
+  const effectiveModelKey = isCodex && !hasPerRequestEvidence
+    ? pricingModelKey.replace(/-(fast|priority)$/i, '')
+    : pricingModelKey;
+  const outputIncludesReasoning = breakdown.outputTokensIncludesReasoning
+    ?? (isCodex && ['openai', 'openai-codex', 'openai_codex'].includes(String(breakdown.provider)));
   const sourceCostMatchesCatalog =
-    breakdown.product === 'trae-intl' ||
-    breakdown.product === 'opencode' ||
-    breakdown.pricingVersion == null ||
     breakdown.pricingVersion === effectivePricingVersion;
-  if (breakdown.costUSD != null && breakdown.costUSD > 0 && sourceCostMatchesCatalog) {
+  const providerReportedCost = breakdown.costSource === 'provider_actual';
+  const sameVersionRequestEstimate = breakdown.costSource === 'catalog_estimate'
+    && breakdown.costEvidence === 'per_request'
+    && !outputIncludesReasoning;
+  if (breakdown.costUSD != null && breakdown.costUSD >= 0
+    && (providerReportedCost
+      || (sameVersionRequestEstimate && sourceCostMatchesCatalog))) {
     return breakdown.costUSD;
   }
 
   const result = calculateCost(
     breakdown.provider,
     breakdown.product,
-    pricingModelKey,
+    effectiveModelKey,
     {
       inputTokens: breakdown.inputTokens,
       cachedInputTokens: breakdown.cachedInputTokens,
@@ -742,16 +715,22 @@ export function calculateBreakdownCost(
       cacheWrite5mTokens: breakdown.cacheWrite5mTokens,
       cacheWrite1hTokens: breakdown.cacheWrite1hTokens,
       outputTokens: breakdown.outputTokens,
-      reasoningOutputTokens: breakdown.reasoningOutputTokens,
+      reasoningOutputTokens: outputIncludesReasoning ? 0 : breakdown.reasoningOutputTokens,
     },
-    { requestCount: breakdown.eventCount, catalog: pricingCatalog },
+    {
+      requestCount: breakdown.eventCount,
+      catalog: pricingCatalog,
+      costEvidence: isCodex && !hasPerRequestEvidence ? 'assumed_standard' : breakdown.costEvidence,
+    },
   );
 
   if (result.costStatus === 'unavailable') {
     warnings.add(`${breakdown.provider}/${breakdown.product}/${rawModel} 暂无定价配置，已跳过成本估算。`);
+  } else if (result.costStatus === 'estimated' && isCodex && !hasPerRequestEvidence) {
+    warnings.add(`${rawModel} 缺少请求级服务等级证据，按 standard 价格估算。`);
   } else if (result.costStatus === 'estimated' && result.resolvedModel && result.resolvedModel !== pricingModelKey) {
     warnings.add(`${rawModel} 已按 ${result.resolvedModel} 的公开单价估算。`);
-  } else if (result.costStatus === 'estimated' && result.matchedTierIndex !== undefined) {
+  } else if (result.costStatus === 'estimated' && result.matchedTierIndex !== undefined && breakdown.eventCount > 1) {
     warnings.add(`${rawModel} 的阶梯价格已按每事件平均输入量估算。`);
   }
 

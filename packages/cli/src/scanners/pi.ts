@@ -50,9 +50,18 @@ interface PiLine {
       output?: number;
       cacheRead?: number;
       cacheWrite?: number;
+      cost?: number | {
+        input?: number;
+        output?: number;
+        cacheRead?: number;
+        cacheWrite?: number;
+        total?: number;
+      };
     };
   };
 }
+
+type PiReportedCost = NonNullable<NonNullable<PiLine['message']>['usage']>['cost'];
 
 export async function scanPiDates(
   targetDates: string[],
@@ -154,10 +163,30 @@ export async function scanPiDates(
         },
         { input, cached, cacheWrite, output, reasoning: 0 },
       );
+      const clientCost = piUsageCost(usage.cost);
+      if (clientCost !== undefined) {
+        const row = dayMap.get(`${rawModel}|${modelFields.model}|${sessionProjectFields.project}`);
+        if (row) {
+          row.costUSD = (row.costUSD ?? 0) + clientCost;
+          row.costSource = 'client_estimate';
+          row.costEvidence = 'aggregate';
+        }
+      }
     }
   }
 
   return finalize(grouped);
+}
+
+function piUsageCost(value: PiReportedCost): number | undefined {
+  if (typeof value === 'number') return Number.isFinite(value) && value >= 0 ? value : undefined;
+  if (!value || typeof value !== 'object') return undefined;
+  const amounts = [value.input, value.output, value.cacheRead, value.cacheWrite]
+    .filter((amount): amount is number => typeof amount === 'number' && Number.isFinite(amount) && amount >= 0);
+  if (typeof value.total === 'number' && Number.isFinite(value.total) && value.total >= 0) {
+    return value.total;
+  }
+  return amounts.length > 0 ? amounts.reduce((sum, amount) => sum + amount, 0) : undefined;
 }
 
 export function resolvePiSessionDirs(baseDir?: string): string[] {
