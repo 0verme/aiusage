@@ -24,6 +24,16 @@ export const droid: Record<string, ProductPricing> = {
 
 export const opencode: Record<string, ProductPricing> = {
   opencode: {
+    historical_models: {
+      'hy3-free': {
+        currency: 'USD', is_free: true,
+        source_url: 'https://github.com/anomalyco/opencode/blob/a0f8dccbfe139ffc7137d1eaf6fee6e4195af599/packages/web/src/content/docs/zen.mdx',
+        checked_at: '2026-11-22',
+        // Full days strictly between the vendor's Aug 12 listing and Aug 30 removal.
+        effective_from: '2026-08-13', effective_to: '2026-08-29',
+        input_per_million: 0, output_per_million: 0, cached_input_per_million: 0,
+      },
+    },
     models: {
       'glm-5.3-flash-free': {
         currency: 'USD',

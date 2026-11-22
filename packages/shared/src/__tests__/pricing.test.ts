@@ -69,9 +69,9 @@ describe('pricing identity normalization', () => {
   });
 
   it('does not map unknown OpenCode Go subscription models to vendor API pricing', () => {
-    const result = normalizePricingIdentity({ provider: 'opencode-go', product: 'pi', model: 'gpt-5.6-luna' });
-    expect(result.canonical).toMatchObject({ provider: 'opencode-go', product: 'pi', model: 'gpt-5.6-luna' });
-    expect(calculateCost('opencode-go', 'pi', 'gpt-5.6-luna', {
+    const result = normalizePricingIdentity({ provider: 'opencode-go', product: 'pi', model: 'gpt-6.2-sol' });
+    expect(result.canonical).toMatchObject({ provider: 'opencode-go', product: 'pi', model: 'gpt-6.2-sol' });
+    expect(calculateCost('opencode-go', 'pi', 'gpt-6.2-sol', {
       inputTokens: 1_000_000,
       cachedInputTokens: 0,
       cacheWriteTokens: 0,
@@ -702,5 +702,39 @@ describe('阶梯定价', () => {
       outputTokens: 1_000,
     });
     expect(r.matchedTierIndex).toBe(1);
+  });
+});
+
+describe('November route pricing', () => {
+  it.each([
+    ['openai', 'codex', 'gpt-6.2-astra', 4.84],
+    ['openai', 'codex', 'gpt-6.2-sol', 1.21],
+    ['openai', 'codex', 'gpt-6.2-sol-fast', 2.42],
+    ['opencode-go', 'pi', 'gpt-5.6-luna', 0.142],
+    ['opencode-go', 'pi', 'claude-haiku-5-5', 0.305],
+    ['opencode-go', 'pi', 'glm-5.3', 0.606],
+    ['zai', 'pi', 'glm-5.2', 0.606],
+  ] as const)('%s/%s/%s uses its route price', (provider, product, model, expected) => {
+    const result = calculateCost(provider, product, model, {
+      inputTokens: 100_000, cachedInputTokens: 100_000, cacheWriteTokens: 0, outputTokens: 100_000,
+    });
+    expect(result.estimatedCostUsd).toBeCloseTo(expected, 5);
+    expect(result.sourceUrl).toMatch(/^https:/);
+  });
+
+  it.each([
+    ['2026-08-18', true], ['2026-08-12', false], ['2026-08-30', false], [undefined, false],
+  ] as const)('limits the Hy3 Free promotion to documented usage days (%s)', (usageDate, free) => {
+    const result = calculateCost('opencode', 'opencode', 'hy3-free', {
+      inputTokens: 10, cachedInputTokens: 0, cacheWriteTokens: 0, outputTokens: 1,
+    }, { usageDate });
+    expect(result.isFree).toBe(free);
+    expect(result.costStatus).toBe(free ? 'exact' : 'unavailable');
+  });
+
+  it.each(['gemini-3.8-flash-tiered', 'gemini-3.8-flash-n'])('keeps unverified %s unavailable', model => {
+    expect(calculateCost('google', 'antigravity', model, {
+      inputTokens: 10, cachedInputTokens: 0, cacheWriteTokens: 0, outputTokens: 1,
+    }).costStatus).toBe('unavailable');
   });
 });

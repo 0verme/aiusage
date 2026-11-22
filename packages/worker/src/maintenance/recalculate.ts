@@ -337,13 +337,12 @@ function preserveDailyCost(row: DatabaseDailyRow, currentPricingVersion: string)
 
 function calculateBreakdownUpdate(row: DatabaseBreakdownRow, catalog: PricingCatalog): BreakdownUpdate {
   const hasExplicitProviderActual = row.cost_source === 'provider_actual' && Number(row.estimated_cost_usd) >= 0;
-  const existingVendorCost = hasExplicitProviderActual;
-  const preserveCurrentPerRequestEstimate = row.cost_source === 'catalog_estimate'
-    && row.pricing_version === catalog.version
-    && costGranularityForRow(row) === 'per_request'
-    && row.cost_status !== 'unavailable'
-    && Number.isFinite(Number(row.estimated_cost_usd))
-    && Number(row.estimated_cost_usd) >= 0;
+  // A daily aggregate cannot reconstruct which requests crossed the context threshold.
+  if (row.cost_source === 'catalog_estimate' && row.pricing_version
+    && Number.isFinite(row.estimated_cost_usd) && row.estimated_cost_usd >= 0
+    && costGranularityForRow(row) === 'per_request' && row.cost_status !== 'unavailable') {
+    return preserveBreakdownCost(row, row.pricing_version);
+  }
   const outputIncludesReasoning = row.output_tokens_includes_reasoning == null
     ? isLegacyCodexIdentity(row)
     : Number(row.output_tokens_includes_reasoning) !== 0;
@@ -353,18 +352,12 @@ function calculateBreakdownUpdate(row: DatabaseBreakdownRow, catalog: PricingCat
   const catalogModel = isCodexCatalogIdentity && evidence !== 'per_request'
     ? stripRecordedServiceTier(pricingModel)
     : pricingModel;
-  const result = existingVendorCost
+  const result = hasExplicitProviderActual
     ? {
       estimatedCostUsd: Number(row.estimated_cost_usd),
       costStatus: 'exact' as const,
       costSource: 'provider_actual' as const,
     }
-    : preserveCurrentPerRequestEstimate
-      ? {
-        estimatedCostUsd: Number(row.estimated_cost_usd),
-        costStatus: row.cost_status,
-        costSource: 'catalog_estimate' as const,
-      }
     : (() => {
       const pricingProvider = pricingProviderForRow(row);
       if (!pricingProvider) {
@@ -388,6 +381,7 @@ function calculateBreakdownUpdate(row: DatabaseBreakdownRow, catalog: PricingCat
         reasoningOutputTokens: outputIncludesReasoning ? 0 : number(row.reasoning_output_tokens),
       },
       {
+        usageDate: row.usage_date,
         requestCount: number(row.event_count),
         catalog,
         costEvidence: isCodexCatalogIdentity && evidence !== 'per_request' ? 'assumed_standard' : evidence,
@@ -545,10 +539,12 @@ function summarizeBreakdowns(rows: BreakdownCostSummaryRow[]): CostTotals {
     totalEvents += eventCount;
     const tokens = effectiveTokens(row);
     totalTokens += tokens;
-    if (row.cost_status === 'unavailable' || row.cost_source === 'legacy_unknown') unpricedTokens += tokens;
-    else coveredTokens += tokens;
-    if (row.cost_source === 'legacy_unknown') legacyUnknownTokens += tokens;
-    if (row.cost_source === 'explicit_free') explicitFreeTokens += tokens;
+    if (row.cost_status === 'unavailable') unpricedTokens += tokens;
+    else if (row.cost_source === 'legacy_unknown') legacyUnknownTokens += tokens;
+    else {
+      coveredTokens += tokens;
+      if (row.cost_source === 'explicit_free') explicitFreeTokens += tokens;
+    }
     clientReportedEstimateUsd += number(row.reported_cost_usd);
     const cost = number(row.estimated_cost_usd);
     totalCostUsd += cost;
@@ -703,7 +699,8 @@ function parseExtraMetrics(row: DatabaseBreakdownRow): Record<string, unknown> |
 function cacheWriteTokens(row: DatabaseBreakdownRow, key: string): number {
   const extra = parseExtraMetrics(row);
   const value = extra?.[key];
-  return value == null ? number(row.cache_write_tokens) : number(value as number);
+  if (value != null) return number(value as number);
+  return key === 'cache_write_1h_tokens' ? 0 : number(row.cache_write_tokens);
 }
 
 function pricingModelForRow(row: DatabaseBreakdownRow): string {

@@ -23,6 +23,7 @@ export const google: Record<string, ProductPricing> = {
         cached_input_per_million: 0.15,
       },
       'gemini-3.8-flash': {
+        exact_model_only: true,
         currency: 'USD',
         source_url: 'https://ai.google.dev/gemini-api/docs/pricing#gemini-3.8-flash',
         checked_at: '2026-11-18',

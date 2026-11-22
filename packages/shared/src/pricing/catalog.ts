@@ -4,14 +4,15 @@ import { openai } from './data/openai.js';
 import { google } from './data/google.js';
 import { moonshot } from './data/moonshot.js';
 import { alibaba } from './data/alibaba.js';
+import { opencodeGo } from './data/opencode-go.js';
 import { deepseek } from './data/deepseek.js';
-import { zhipu } from './data/zhipu.js';
+import { zai, zhipu } from './data/zhipu.js';
 import { github } from './data/github.js';
 import { sourcegraph } from './data/sourcegraph.js';
 import { inflection, cursor, droid, opencode } from './data/placeholders.js';
 import { xai } from './data/xai.js';
 
-export const PRICING_VERSION = '2026-11-18-current-catalog-v2';
+export const PRICING_VERSION = '2026-11-22-route-pricing-v1';
 
 /**
  * 模型别名（精确匹配优先于前缀回退）。
@@ -60,7 +61,8 @@ export const catalog: PricingCatalog = {
     // CCSwitch exposes DeepSeek through Claude Code's Anthropic-compatible endpoint.
     custom: deepseek,
     // OpenCode's provider id is recorded as `opencode-go` in local logs.
-    'opencode-go': deepseek,
+    'opencode-go': { ...deepseek, ...opencodeGo },
+    zai,
     zhipu,
     github,
     sourcegraph,

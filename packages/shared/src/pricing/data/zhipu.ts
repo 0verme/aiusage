@@ -100,3 +100,18 @@ export const zhipu: Record<string, ProductPricing> = {
     },
   },
 };
+
+// Z.AI international endpoint reports its own USD rates.
+export const zai: Record<string, ProductPricing> = {
+  pi: {
+    models: {
+      'glm-5.2': {
+        currency: 'USD',
+        source_url: 'https://docs.z.ai/guides/overview/pricing',
+        checked_at: '2026-11-22',
+        exact_model_only: true,
+        input_per_million: 1.4, cached_input_per_million: 0.26, output_per_million: 4.4,
+      },
+    },
+  },
+};

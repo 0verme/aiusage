@@ -95,6 +95,36 @@ export const openai: Record<string, ProductPricing> = {
         ],
       },
 
+      'gpt-6.2-astra': {
+        exact_model_only: true,
+        currency: 'USD',
+        source_url: 'https://developers.openai.com/api/docs/models/gpt-6.2-astra',
+        checked_at: '2026-11-22',
+        notes: 'Fast mode is 2x Standard. Prompts over 272K input tokens use long-context rates for the full request; 30m cache-write rate is used because local Codex logs do not retain cache TTL.',
+        input_per_million: 8,
+        cached_input_per_million: 0.4,
+        cache_write_per_million: 10,
+        output_per_million: 40,
+        tiers: [
+          { threshold: 272_000, input_per_million: 8, cached_input_per_million: 0.4, cache_write_per_million: 10, output_per_million: 40 },
+          { input_per_million: 16, cached_input_per_million: 0.8, cache_write_per_million: 20, output_per_million: 60 },
+        ],
+      },
+      'gpt-6.2-sol': {
+        exact_model_only: true,
+        currency: 'USD',
+        source_url: 'https://developers.openai.com/api/docs/models/gpt-6.2-sol',
+        checked_at: '2026-11-22',
+        notes: 'Fast mode is 2x Standard. Prompts over 272K input tokens use long-context rates for the full request; 30m cache-write rate is used because local Codex logs do not retain cache TTL.',
+        input_per_million: 2,
+        cached_input_per_million: 0.1,
+        cache_write_per_million: 2.5,
+        output_per_million: 10,
+        tiers: [
+          { threshold: 272_000, input_per_million: 2, cached_input_per_million: 0.1, cache_write_per_million: 2.5, output_per_million: 10 },
+          { input_per_million: 4, cached_input_per_million: 0.2, cache_write_per_million: 5, output_per_million: 15 },
+        ],
+      },
       'gpt-6.1-sol': {
         currency: 'USD',
         source_url: 'https://developers.openai.com/api/docs/pricing',

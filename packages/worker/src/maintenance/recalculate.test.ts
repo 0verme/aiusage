@@ -188,7 +188,7 @@ describe('historical cost recalculation plan', () => {
       costBearingEvents: 0,
       coveredTokens: 0,
       unpricedTokens: 2_000_150,
-      legacyUnknownTokens: 2_000_150,
+      legacyUnknownTokens: 0,
       explicitFreeTokens: 0,
       clientReportedEstimateUsd: 0,
       coveragePercent: 0,
@@ -222,9 +222,9 @@ describe('historical cost recalculation plan', () => {
     const plan = buildRecalculationPlan([row], [daily()]);
 
     expect(plan.breakdowns[0]).toMatchObject({
-      estimatedCostUsd: 0,
-      costStatus: 'unavailable',
-      costSource: 'unavailable',
+      estimatedCostUsd: 2.2,
+      costStatus: 'estimated',
+      costSource: 'catalog_estimate',
     });
   });
 
@@ -306,12 +306,12 @@ describe('historical cost recalculation plan', () => {
     expect(second.summary.dailyRowsChanged).toBe(0);
   });
 
-  it('preserves same-version Codex per-request costs instead of averaging long and short prompts', () => {
+  it.each([getPricingCatalog().version, 'previous-version'])('preserves per-request Codex costs and original version %s', version => {
     const row = breakdown({
       provider: 'openai', product: 'codex', model: 'gpt-6.1-terra', event_count: 2,
       input_tokens: 320_000, output_tokens: 3_000, reasoning_output_tokens: 0,
       estimated_cost_usd: 0.6225, cost_status: 'estimated', cost_source: 'catalog_estimate',
-      pricing_version: getPricingCatalog().version, output_tokens_includes_reasoning: 0,
+      pricing_version: version, output_tokens_includes_reasoning: 0,
       extra_metrics_json: JSON.stringify({ cost_evidence: 'unknown', cost_granularity: 'per_request' }),
     });
     const plan = buildRecalculationPlan([row], [daily({
@@ -321,6 +321,7 @@ describe('historical cost recalculation plan', () => {
     })]);
 
     expect(plan.breakdowns[0]).toMatchObject({
+      pricingVersion: version,
       estimatedCostUsd: 0.6225,
       costStatus: 'estimated',
       costSource: 'catalog_estimate',
@@ -341,7 +342,7 @@ describe('historical cost recalculation plan', () => {
     });
     const plan = buildRecalculationPlan([row], [day]);
     expect(plan.breakdowns[0]).toMatchObject({ estimatedCostUsd: 1.2, costStatus: 'estimated' });
-    expect(plan.summary.before.totalTokens).toBe(200_000);
+    expect(plan.summary.before).toMatchObject({ totalTokens: 200_000, legacyUnknownTokens: 200_000, unpricedTokens: 0 });
     expect(plan.summary.after.totalTokens).toBe(200_000);
     expect(plan.summary.after.unpricedTokens).toBe(0);
   });

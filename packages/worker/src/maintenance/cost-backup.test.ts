@@ -23,8 +23,8 @@ const daily: DatabaseDailyRow = {
   device_id: 'device-a', usage_date: '2026-10-02', event_count: 2, input_tokens: 100,
   cached_input_tokens: 20, cache_write_tokens: 0, output_tokens: 60, reasoning_output_tokens: 15,
   estimated_cost_usd: 0.0123, cost_status: 'estimated', pricing_version: 'old-catalog',
-  cost_source: 'legacy_unknown', top_project_by_cost: 'project', top_project_cost_usd: 0.0123,
-  top_model_by_cost: 'gpt-6.1-sol', top_model_cost_usd: 0.0123,
+  cost_source: 'legacy_unknown', top_project_by_cost: 'project', top_project_cost_usd: 0.012300000000000003,
+  top_model_by_cost: 'gpt-6.1-sol', top_model_cost_usd: null,
   prior_estimated_cost_usd: null, prior_cost_status: null, prior_cost_source: null, prior_pricing_version: null,
 };
 
@@ -53,6 +53,8 @@ describe('cost recalculation backups', () => {
     const first = buildRollbackSqlBatch(backup, '2026-10-02');
     expect(buildRollbackSqlBatch(backup, '2026-10-02')).toBe(first);
     expect(first).toContain("cost_source = 'legacy_unknown'");
+    expect(first).toContain(`top_project_cost_usd = ${daily.top_project_cost_usd},`);
+    expect(first).toContain('top_model_cost_usd = NULL');
     expect(first).not.toMatch(/input_tokens|cached_input_tokens|output_tokens|reasoning_output_tokens/);
     expect(verifyRestoredBackup(backup, [breakdown], [daily])).toBe(true);
     expect(verifyRestoredBackup(backup, [{ ...breakdown, estimated_cost_usd: 0.9 }], [daily])).toBe(false);

@@ -211,7 +211,7 @@ export async function handleIngest(
 				...b,
 				model: pricingModelKey,
 				pricingModelKey,
-			});
+			}, day.usageDate);
 			const canonicalBreakdown = canonicalizeIngestBreakdown({
 				...b,
 				// Keep the legacy model field pricing-compatible. If a newer client
