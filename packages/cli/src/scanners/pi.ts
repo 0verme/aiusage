@@ -144,9 +144,10 @@ export async function scanPiDates(
       const output = Math.max(usage.output ?? 0, 0);
       if (input + cached + cacheWrite + output === 0) continue;
 
+      const key = JSON.stringify([provider, modelFields.model, sessionProjectFields.project]);
       accumulate(
         dayMap,
-        `${rawModel}|${modelFields.model}|${sessionProjectFields.project}`,
+        key,
         {
           provider,
           product: 'pi',
@@ -165,7 +166,7 @@ export async function scanPiDates(
       );
       const clientCost = piUsageCost(usage.cost);
       if (clientCost !== undefined) {
-        const row = dayMap.get(`${rawModel}|${modelFields.model}|${sessionProjectFields.project}`);
+        const row = dayMap.get(key);
         if (row) {
           row.costUSD = (row.costUSD ?? 0) + clientCost;
           row.costSource = 'client_estimate';

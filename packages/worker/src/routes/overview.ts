@@ -290,9 +290,9 @@ export async function handleOverview(url: URL, env: Env): Promise<Response> {
       SELECT
         COALESCE(SUM(${TOTAL_TOKENS_SQL}), 0) AS total_tokens,
         COALESCE(SUM(CASE WHEN b.cost_status != 'unavailable' AND b.cost_source != 'legacy_unknown' THEN ${TOTAL_TOKENS_SQL} ELSE 0 END), 0) AS covered_tokens,
-        COALESCE(SUM(CASE WHEN b.cost_status = 'unavailable' OR b.cost_source = 'legacy_unknown' THEN ${TOTAL_TOKENS_SQL} ELSE 0 END), 0) AS unpriced_tokens,
-        COALESCE(SUM(CASE WHEN b.cost_source = 'explicit_free' THEN ${TOTAL_TOKENS_SQL} ELSE 0 END), 0) AS explicit_free_tokens,
-        COALESCE(SUM(CASE WHEN b.cost_source = 'legacy_unknown' THEN ${TOTAL_TOKENS_SQL} ELSE 0 END), 0) AS legacy_unknown_tokens,
+        COALESCE(SUM(CASE WHEN b.cost_status = 'unavailable' THEN ${TOTAL_TOKENS_SQL} ELSE 0 END), 0) AS unpriced_tokens,
+        COALESCE(SUM(CASE WHEN b.cost_status != 'unavailable' AND b.cost_source = 'explicit_free' THEN ${TOTAL_TOKENS_SQL} ELSE 0 END), 0) AS explicit_free_tokens,
+        COALESCE(SUM(CASE WHEN b.cost_status != 'unavailable' AND b.cost_source = 'legacy_unknown' THEN ${TOTAL_TOKENS_SQL} ELSE 0 END), 0) AS legacy_unknown_tokens,
         COALESCE(SUM(b.reported_cost_usd), 0) AS client_reported_estimate_usd
       FROM daily_usage_breakdown b
       ${where.whereClause}
@@ -320,7 +320,7 @@ export async function handleOverview(url: URL, env: Env): Promise<Response> {
         COUNT(*) AS rows,
         COALESCE(SUM(${TOTAL_TOKENS_SQL}), 0) AS total_tokens
       FROM daily_usage_breakdown b
-      ${where.whereClause}${where.whereClause ? ' AND' : ' WHERE'} (b.cost_status = 'unavailable' OR b.cost_source = 'legacy_unknown')
+      ${where.whereClause}${where.whereClause ? ' AND' : ' WHERE'} (b.cost_status = 'unavailable')
       GROUP BY b.provider, b.product, b.model
       ORDER BY total_tokens DESC, b.provider, b.product, b.model
       LIMIT 50

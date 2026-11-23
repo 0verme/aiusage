@@ -63,7 +63,7 @@ export function buildRollbackSqlBatch(backup: CostRecalculationBackup, usageDate
 SET estimated_cost_usd = ${sqlNumber(row.estimated_cost_usd)}, cost_status = ${sqlString(row.cost_status)}, cost_source = ${sqlString(row.cost_source)}, pricing_version = ${sqlString(row.pricing_version)}, prior_estimated_cost_usd = ${sqlNullableNumber(row.prior_estimated_cost_usd)}, prior_cost_status = ${sqlString(row.prior_cost_status)}, prior_cost_source = ${sqlString(row.prior_cost_source)}, prior_pricing_version = ${sqlString(row.prior_pricing_version)}
 WHERE device_id = ${sqlString(row.device_id)} AND usage_date = ${sqlString(row.usage_date)} AND provider = ${sqlString(row.provider)} AND product = ${sqlString(row.product)} AND channel = ${sqlString(row.channel)} AND model = ${sqlString(row.model)} AND project = ${sqlString(row.project)};`),
     ...backup.daily.filter(row => row.usage_date === usageDate).map(row => `UPDATE daily_usage
-SET estimated_cost_usd = ${sqlNumber(row.estimated_cost_usd)}, cost_status = ${sqlString(row.cost_status)}, cost_source = ${sqlString(row.cost_source)}, pricing_version = ${sqlString(row.pricing_version)}, prior_estimated_cost_usd = ${sqlNullableNumber(row.prior_estimated_cost_usd)}, prior_cost_status = ${sqlString(row.prior_cost_status)}, prior_cost_source = ${sqlString(row.prior_cost_source)}, prior_pricing_version = ${sqlString(row.prior_pricing_version)}, top_project_by_cost = ${sqlString(row.top_project_by_cost)}, top_project_cost_usd = ${sqlNumber(row.top_project_cost_usd ?? 0)}, top_model_by_cost = ${sqlString(row.top_model_by_cost)}, top_model_cost_usd = ${sqlNumber(row.top_model_cost_usd ?? 0)}
+SET estimated_cost_usd = ${sqlNumber(row.estimated_cost_usd)}, cost_status = ${sqlString(row.cost_status)}, cost_source = ${sqlString(row.cost_source)}, pricing_version = ${sqlString(row.pricing_version)}, prior_estimated_cost_usd = ${sqlNullableNumber(row.prior_estimated_cost_usd)}, prior_cost_status = ${sqlString(row.prior_cost_status)}, prior_cost_source = ${sqlString(row.prior_cost_source)}, prior_pricing_version = ${sqlString(row.prior_pricing_version)}, top_project_by_cost = ${sqlString(row.top_project_by_cost)}, top_project_cost_usd = ${sqlNullableNumber(row.top_project_cost_usd)}, top_model_by_cost = ${sqlString(row.top_model_by_cost)}, top_model_cost_usd = ${sqlNullableNumber(row.top_model_cost_usd)}
 WHERE device_id = ${sqlString(row.device_id)} AND usage_date = ${sqlString(row.usage_date)};`),
   ];
   return statements.join('\n');
@@ -79,26 +79,26 @@ export function verifyRestoredBackup(
   const currentBreakdowns = new Map(breakdowns.map(row => [breakdownKey(row), row]));
   for (const expected of backup.breakdowns) {
     const actual = currentBreakdowns.get(breakdownKey(expected));
-    if (!actual || roundUsd(actual.estimated_cost_usd) !== roundUsd(expected.estimated_cost_usd)
+    if (!actual || actual.estimated_cost_usd !== expected.estimated_cost_usd
       || actual.cost_status !== expected.cost_status || actual.cost_source !== expected.cost_source
       || actual.pricing_version !== expected.pricing_version
-      || roundNullableUsd(actual.prior_estimated_cost_usd) !== roundNullableUsd(expected.prior_estimated_cost_usd)
+      || actual.prior_estimated_cost_usd !== expected.prior_estimated_cost_usd
       || actual.prior_cost_status !== expected.prior_cost_status || actual.prior_cost_source !== expected.prior_cost_source
       || actual.prior_pricing_version !== expected.prior_pricing_version) return false;
   }
   const currentDaily = new Map(daily.map(row => [`${row.device_id}\0${row.usage_date}`, row]));
   for (const expected of backup.daily) {
     const actual = currentDaily.get(`${expected.device_id}\0${expected.usage_date}`);
-    if (!actual || roundUsd(actual.estimated_cost_usd) !== roundUsd(expected.estimated_cost_usd)
+    if (!actual || actual.estimated_cost_usd !== expected.estimated_cost_usd
       || actual.cost_status !== expected.cost_status || actual.cost_source !== expected.cost_source
       || actual.pricing_version !== expected.pricing_version
-      || roundNullableUsd(actual.prior_estimated_cost_usd) !== roundNullableUsd(expected.prior_estimated_cost_usd)
+      || actual.prior_estimated_cost_usd !== expected.prior_estimated_cost_usd
       || actual.prior_cost_status !== expected.prior_cost_status || actual.prior_cost_source !== expected.prior_cost_source
       || actual.prior_pricing_version !== expected.prior_pricing_version
       || actual.top_project_by_cost !== expected.top_project_by_cost
-      || roundUsd(actual.top_project_cost_usd) !== roundUsd(expected.top_project_cost_usd)
+      || actual.top_project_cost_usd !== expected.top_project_cost_usd
       || actual.top_model_by_cost !== expected.top_model_by_cost
-      || roundUsd(actual.top_model_cost_usd) !== roundUsd(expected.top_model_cost_usd)) return false;
+      || actual.top_model_cost_usd !== expected.top_model_cost_usd) return false;
   }
   return true;
 }
@@ -115,18 +115,11 @@ function sqlString(value: string | null): string {
   return value == null ? 'NULL' : `'${value.replaceAll("'", "''")}'`;
 }
 
-function sqlNumber(value: number | null): string {
-  return String(roundUsd(value));
+function sqlNumber(value: number): string {
+  if (!Number.isFinite(value)) throw new Error('备份金额无效');
+  return String(value);
 }
 
 function sqlNullableNumber(value: number | null): string {
   return value == null ? 'NULL' : sqlNumber(value);
-}
-
-function roundNullableUsd(value: number | null): number | null {
-  return value == null ? null : roundUsd(value);
-}
-
-function roundUsd(value: number | null): number {
-  return Math.round((Number(value) || 0) * 10000) / 10000;
 }

@@ -8,10 +8,6 @@ export function getStoredLocale(): Locale {
 export const I18N = {
   en: {
     estimatedCost: 'Estimated Cost', totalTokens: 'Total Tokens',
-    costCoverage: 'Cost coverage', coveredTokens: 'Priced usage', unpricedTokens: 'Unpriced usage',
-    freeTokens: 'Explicitly free', legacyUnknownTokens: 'Legacy source unknown',
-    clientEstimates: 'Client reported estimates', topUnpricedModels: 'Models needing prices',
-    fullDaySnapshots: 'Full-day snapshots', unverifiedDays: 'unverified days',
     inputTokens: 'Input Tokens', outputTokens: 'Output Tokens',
     cachedTokens: 'Cached Tokens', activeDays: 'Active Days',
     sessions: 'Sessions', userMessages: 'User Messages',
@@ -71,10 +67,6 @@ export const I18N = {
   },
   zh: {
     estimatedCost: '预估费用', totalTokens: '总 Token',
-    costCoverage: '费用覆盖率', coveredTokens: '已计价用量', unpricedTokens: '未定价用量',
-    freeTokens: '明确免费', legacyUnknownTokens: '旧记录来源未知',
-    clientEstimates: '客户端估算参考', topUnpricedModels: '待补价模型',
-    fullDaySnapshots: '完整日快照', unverifiedDays: '未验证日',
     inputTokens: '输入 Token', outputTokens: '输出 Token',
     cachedTokens: '缓存 Token', activeDays: '活跃天数',
     sessions: '会话数', userMessages: '用户对话数',

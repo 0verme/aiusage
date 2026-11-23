@@ -133,6 +133,12 @@ total input
 
 官方参考：[OpenAI API pricing](https://developers.openai.com/api/docs/pricing)、[OpenAI Fast mode](https://developers.openai.com/api/docs/guides/fast-mode)、[DeepSeek Models & Pricing](https://api-docs.deepseek.com/quick_start/pricing/)、[Gemini API pricing](https://ai.google.dev/gemini-api/docs/pricing)、[OpenCode Console models](https://opencode.ai/docs/console/models)。
 
+## 2026-11-22 路由定价
+
+`2026-11-22-route-pricing-v1` 收录 GPT-6.2 Sol/Astra 标准、长上下文和 Fast 费率，缓存写入估算采用 30 分钟费率。OpenCode Go 的 GPT-5.6 Luna、Claude Haiku 5.5 与 GLM-5.3 使用其订阅额度折算价，Z.AI 的 GLM-5.2 使用国际 API USD 价。Hy3 Free 仅在官方历史目录可核实的整日区间内匹配 OpenCode Zen 的确切 SKU。Gemini 3.8 Flash 的 Antigravity 内部变体保留各自身份。
+
+[OpenAI Sol](https://developers.openai.com/api/docs/models/gpt-6.2-sol) · [OpenAI Astra](https://developers.openai.com/api/docs/models/gpt-6.2-astra) · [OpenCode Go](https://opencode.ai/console/go) · [Z.AI](https://docs.z.ai/guides/overview/pricing) · [OpenCode Zen 历史文档](https://github.com/anomalyco/opencode/blob/a0f8dccbfe139ffc7137d1eaf6fee6e4195af599/packages/web/src/content/docs/zen.mdx)
+
 ## 金额来源与兼容
 
 | `cost_source` | 含义 |
@@ -145,9 +151,9 @@ total input
 | `legacy_unknown` | 旧行来源无法追溯，尚未安全重估 |
 | `mixed` | 日汇总含多种来源 |
 
-客户端可继续发送旧版 payload。只有显式标记 `provider_actual` 的金额会作为供应商实际费用；旧 `costUSD` 和未分类金额会保留为客户端估算证据，不会冒充供应商账单。旧 Codex 没有 output/reasoning 语义字段时按“output 已含 reasoning”处理。新客户端会发送互斥 token 桶、`costSource`、`costEvidence`、`costGranularity` 和 `outputTokensIncludesReasoning`。`costEvidence` 描述服务等级等证据，`costGranularity` 描述金额是按请求还是聚合 token 算出；同版本逐请求 Codex 费用会在历史重估时保留，旧版目录或无粒度证据的行仍按汇总值受限估算。部署新 Worker 前依序执行 `0006_cost_provenance.sql`、`0007_cost_recalculation_baseline.sql`、`0008_snapshot_completeness.sql`。
+客户端可继续发送旧版 payload。只有显式标记 `provider_actual` 的金额会作为供应商实际费用；旧 `costUSD` 和未分类金额会保留为客户端估算证据，不会冒充供应商账单。旧 Codex 没有 output/reasoning 语义字段时按“output 已含 reasoning”处理。新客户端会发送互斥 token 桶、`costSource`、`costEvidence`、`costGranularity` 和 `outputTokensIncludesReasoning`。`costEvidence` 描述服务等级等证据，`costGranularity` 描述金额是按请求还是聚合 token 算出；有明确价格版本和逐请求粒度的目录费用在历史重估时保留原值及版本，缺乏粒度证据时只能按汇总值受限估算。部署新 Worker 前依序执行 `0006_cost_provenance.sql`、`0007_cost_recalculation_baseline.sql`、`0008_snapshot_completeness.sql`。
 
-Overview 的覆盖率把 `provider_actual`、`catalog_estimate` 和 `explicit_free` 视为已解释用量；`unavailable` 与 `legacy_unknown` 都列入未覆盖用量。已免费 tokens 会单独展示，不能与待补价模型混淆。客户端估算侧车金额也会单独展示，不能叠加到主费用。Dashboard 还会显示设备/日期维度的完整快照覆盖率；旧 migration 行默认未验证，在完整多工具 sync 成功后才会标记为完整。
+Overview API 和历史重估报告将 `cost_status=unavailable` 计入缺价，其余 `legacy_unknown` 计入来源未验证。已覆盖量含明确免费，可减去免费量获得已计价量。该诊断留在 API 和维护报告中，费用 KPI 显示主金额，客户端报告金额单列。快照完整度仍按设备和日期计算。
 
 ## 贡献新模型 / 修订单价
 

@@ -47,6 +47,8 @@ export interface ModelPricing {
   notes?: string;
   /** Usage is derived rather than a provider-issued billable total. */
   force_estimated?: boolean;
+  /** This rate is verified only for the listed SKU and its explicit aliases. */
+  exact_model_only?: boolean;
 
   // 非阶梯字段（无 tiers 时使用；有 tiers 时作为缓存/cache_write 兜底）
   input_per_million?: number;
@@ -64,6 +66,8 @@ export interface ModelPricing {
 /** 一个 provider/product 下的模型集合。 */
 export interface ProductPricing {
   models: Record<string, ModelPricing>;
+  /** Dated, exact SKU rates for discontinued offers. */
+  historical_models?: Record<string, ModelPricing & { effective_from: string; effective_to: string }>;
 }
 
 export interface PricingCatalog {

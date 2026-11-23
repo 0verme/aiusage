@@ -31,6 +31,8 @@ const GOOGLE_PRIORITY_MULTIPLIERS: Record<string, number> = {
 
 const OPENAI_FAST_MULTIPLIERS: Record<string, number> = {
   'gpt-6-astra': 2,
+  'gpt-6.2-astra': 2,
+  'gpt-6.2-sol': 2,
   'gpt-6.1-sol': 2,
   'gpt-6.1-terra': 2,
   'gpt-6-luna': 2,
@@ -39,6 +41,8 @@ const OPENAI_FAST_MULTIPLIERS: Record<string, number> = {
 
 const OPENAI_PRIORITY_MULTIPLIERS: Record<string, number> = {
   'gpt-6-astra': 2,
+  'gpt-6.2-astra': 2,
+  'gpt-6.2-sol': 2,
   'gpt-6.1-sol': 2,
   'gpt-6.1-terra': 2,
   'gpt-6-luna': 2,
@@ -98,7 +102,7 @@ function resolveModelInProduct(
 
   // longest-prefix fallback（同 family / 同档位前缀）
   for (const knownModel of Object.keys(models).sort((a, b) => b.length - a.length)) {
-    if (!normalizedModel.startsWith(`${knownModel}-`)) continue;
+    if (models[knownModel].exact_model_only || !normalizedModel.startsWith(`${knownModel}-`)) continue;
 
     // 跨档防护：剥掉 known 前缀后，若 suffix 仅是版本号数字段（如 `-7`、`-7-20260201`），
     // 视为独立新版本，拒绝回退。这是为了避免 `claude-opus-4-7` 被错误归到旧 `claude-opus-4`。
@@ -188,6 +192,8 @@ export interface CalculateCostOptions {
    * 精确路径请在 scanner 侧按单次 event 计算并把 costUSD 上传。
    */
   requestCount?: number;
+  /** ISO usage day for an explicitly dated historical SKU. */
+  usageDate?: string;
   /** Evidence about per-request service tier and aggregation. */
   costEvidence?: import('../types.js').CostEvidence;
 }
@@ -214,8 +220,12 @@ export function calculateCost(
     tokens.outputTokens +
     reasoningTokens;
 
+  const historical = cat.providers[pricingProvider]?.[pricingProduct]?.historical_models?.[model];
+  const resolved = historical && options.usageDate && options.usageDate >= historical.effective_from
+    && options.usageDate <= historical.effective_to
+    ? { resolvedModel: model, pricing: historical, normalized: false }
+    : resolveModelPricing(cat, pricingProvider, pricingProduct, baseModel);
   if (totalTokens === 0) {
-    const resolved = resolveModelPricing(cat, pricingProvider, pricingProduct, baseModel);
     return {
       estimatedCostUsd: 0,
       costStatus: resolved?.pricing.force_estimated ? 'estimated' : 'exact',
@@ -228,7 +238,6 @@ export function calculateCost(
     };
   }
 
-  const resolved = resolveModelPricing(cat, pricingProvider, pricingProduct, baseModel);
   if (!resolved) {
     return {
       estimatedCostUsd: 0,

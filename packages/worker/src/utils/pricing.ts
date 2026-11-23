@@ -19,7 +19,7 @@ export interface IngestCostResult extends CostCalcResult {
  *    marks a per-request catalog result with disjoint token semantics.
  * 3. 其余情况统一用 shared canonical pricing 重算；版本不兼容不会混用两套结果。
  */
-export function calculateIngestBreakdownCost(breakdown: IngestBreakdown): IngestCostResult {
+export function calculateIngestBreakdownCost(breakdown: IngestBreakdown, usageDate?: string): IngestCostResult {
   const codexModelTier = breakdown.product === 'codex';
   const hasPerRequestTierEvidence = breakdown.costEvidence === 'per_request';
   const pricingModel = codexModelTier && !hasPerRequestTierEvidence
@@ -49,6 +49,7 @@ export function calculateIngestBreakdownCost(breakdown: IngestBreakdown): Ingest
         : breakdown.reasoningOutputTokens,
     },
     {
+      usageDate,
       requestCount: breakdown.eventCount,
       costEvidence: codexModelTier && !hasPerRequestTierEvidence
         ? 'assumed_standard'

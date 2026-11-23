@@ -168,6 +168,7 @@ export interface OverviewResponse {
 
 export interface CostCoveragePayload {
   totalTokens: number;
+  /** Priced plus explicitly free. Total = covered + unpriced + legacyUnknown. */
   coveredTokens: number;
   unpricedTokens: number;
   explicitFreeTokens: number;

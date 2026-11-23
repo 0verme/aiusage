@@ -82,6 +82,17 @@ describe('scanPiDates', () => {
     expect(rows.reduce((sum, row) => sum + row.eventCount, 0)).toBe(2);
   });
 
+  it('保留同一项目同一模型的不同计费路由', async () => {
+    await writeJsonl(join(tmpDir, 'session.jsonl'), ['openai-codex', 'opencode-go'].map((provider, i) => ({
+      type: 'message', id: String(i), timestamp: '2026-07-18T12:00:00Z',
+      message: { role: 'assistant', model: 'gpt-5.6-luna', provider, usage: { input: 5, output: 2, cost: i } },
+    })));
+    const rows = (await scanPiDates(['2026-07-18'], tmpDir)).get('2026-07-18')!;
+    expect(rows.map(row => [row.provider, row.eventCount, row.costUSD]).sort()).toEqual([
+      ['openai-codex', 1, 0], ['opencode-go', 1, 1],
+    ]);
+  });
+
   it('保留 Pi usage.cost 为客户端估算来源，按去重后的请求累加', async () => {
     await writeJsonl(join(tmpDir, 'project', 'session.jsonl'), [
       { type: 'session', id: 's-cost', cwd: '/tmp/project' },
